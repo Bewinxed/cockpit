@@ -3,17 +3,17 @@
  * Positions nodes in a top-to-bottom flow graph
  */
 
-import dagre from '@dagrejs/dagre';
-import { Position, type Node, type Edge } from '@xyflow/svelte';
+import dagre from "@dagrejs/dagre";
+import { type Edge, type Node, Position } from "@xyflow/svelte";
 import {
-  NODE_WIDTH,
-  getLayoutConfig,
   estimateContentHeight,
-} from './flow-constants';
-import type { LayoutOptions } from './flow-types';
+  getLayoutConfig,
+  NODE_WIDTH,
+} from "./flow-constants";
+import type { LayoutOptions } from "./flow-types";
 
 // Re-export types for convenience
-export type { ZoomMode, LayoutOptions } from './flow-types';
+export type { LayoutOptions, ZoomMode } from "./flow-types";
 
 /**
  * Apply dagre layout to position nodes hierarchically
@@ -29,10 +29,10 @@ export function layoutNodes(
   options: LayoutOptions = {}
 ): Node[] {
   // Select config based on zoom mode
-  const config = getLayoutConfig(options.zoomMode ?? 'compact');
+  const config = getLayoutConfig(options.zoomMode ?? "compact");
 
   const {
-    direction = 'TB',
+    direction = "TB",
     nodeSep = config.nodeSep,
     rankSep = config.rankSep,
     nodeWidth = NODE_WIDTH,
@@ -48,7 +48,7 @@ export function layoutNodes(
     rankdir: direction,
     nodesep: nodeSep,
     ranksep: rankSep,
-    ranker: 'tight-tree', // Use tight-tree for more compact layout
+    ranker: "tight-tree", // Use tight-tree for more compact layout
   });
 
   // Add nodes to dagre with content-based heights
@@ -72,12 +72,12 @@ export function layoutNodes(
   dagre.layout(g);
 
   // Apply calculated positions to nodes
-  return nodes.map(node => {
+  return nodes.map((node) => {
     const nodeWithPosition = g.node(node.id);
     const height = nodeHeights.get(node.id) || config.nodeHeightMin;
 
     // Set handle positions based on layout direction
-    const isHorizontal = direction === 'LR';
+    const isHorizontal = direction === "LR";
 
     return {
       ...node,
@@ -117,10 +117,13 @@ function alignForkAndMergePoints(nodes: Node[], edges: Edge[]): Node[] {
   }
 
   // Build a map of node ID to node for quick lookup
-  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
   // Helper to get all descendants of a node (for moving entire branches)
-  function getDescendants(nodeId: string, visited = new Set<string>()): string[] {
+  function getDescendants(
+    nodeId: string,
+    visited = new Set<string>()
+  ): string[] {
     const descendants: string[] = [];
     const children = nodeToChildren.get(nodeId) || [];
     for (const child of children) {
@@ -189,9 +192,9 @@ export function applyLayout(
   layoutedNodes = alignForkAndMergePoints(layoutedNodes, edges);
 
   // Return edges with consistent animation/style
-  const styledEdges = edges.map(edge => ({
+  const styledEdges = edges.map((edge) => ({
     ...edge,
-    type: edge.type || 'smoothstep',
+    type: edge.type || "smoothstep",
   }));
 
   return { nodes: layoutedNodes, edges: styledEdges };

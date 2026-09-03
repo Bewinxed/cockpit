@@ -1,17 +1,16 @@
 <script lang="ts">
-	import { RangeCalendar as RangeCalendarPrimitive } from "bits-ui";
-	import { cn } from "$lib/utils.js";
+  import { RangeCalendar as RangeCalendarPrimitive } from "bits-ui";
+  import { cn } from "$lib/utils.js";
 
-	let {
-		ref = $bindable(null),
-		class: className,
-		...restProps
-	}: RangeCalendarPrimitive.DayProps = $props();
+  let {
+    ref = $bindable(null),
+    class: className,
+    ...restProps
+  }: RangeCalendarPrimitive.DayProps = $props();
 </script>
 
 <RangeCalendarPrimitive.Day
-	bind:ref
-	class={cn(
+  class={cn(
 		"flex size-(--cell-size) flex-col items-center justify-center gap-1 rounded-(--cell-radius) p-0 leading-none font-normal whitespace-nowrap select-none",
 		"not-data-selected:hover:bg-accent/50 not-data-selected:hover:text-accent-foreground",
 		"data-[range-middle]:rounded-none [&[data-today]:not([data-selected])]:bg-accent [&[data-today]:not([data-selected])]:text-accent-foreground [&[data-today][data-disabled]]:text-muted-foreground",
@@ -32,5 +31,6 @@
 		"[&>span]:text-xs [&>span]:opacity-70",
 		className
 	)}
-	{...restProps}
+  bind:ref
+  {...restProps}
 />

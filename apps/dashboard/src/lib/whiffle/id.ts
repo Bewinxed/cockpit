@@ -16,7 +16,10 @@
  * `randomUUID` and exercise the fallback branch without a browser.
  */
 export function newId(source: Crypto = globalThis.crypto): string {
-  if (typeof source !== 'undefined' && typeof source.randomUUID === 'function') {
+  if (
+    typeof source !== "undefined" &&
+    typeof source.randomUUID === "function"
+  ) {
     return source.randomUUID();
   }
 
@@ -27,12 +30,14 @@ export function newId(source: Crypto = globalThis.crypto): string {
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
   const hex: string[] = [];
-  for (const byte of bytes) hex.push(byte.toString(16).padStart(2, '0'));
+  for (const byte of bytes) {
+    hex.push(byte.toString(16).padStart(2, "0"));
+  }
   return [
-    hex.slice(0, 4).join(''),
-    hex.slice(4, 6).join(''),
-    hex.slice(6, 8).join(''),
-    hex.slice(8, 10).join(''),
-    hex.slice(10, 16).join(''),
-  ].join('-');
+    hex.slice(0, 4).join(""),
+    hex.slice(4, 6).join(""),
+    hex.slice(6, 8).join(""),
+    hex.slice(8, 10).join(""),
+    hex.slice(10, 16).join(""),
+  ].join("-");
 }

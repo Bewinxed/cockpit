@@ -12,16 +12,32 @@
    * own words ARE the message; that case shows the output open, because hiding
    * an explanation nobody has behind a summary that says nothing is worse.
    */
-  import { toast } from 'svelte-sonner';
-  import { IconChevronDown, IconChevronRight, IconRefresh, IconWarningTriangle } from '$lib/icons';
-  import { Button } from '$lib/components/ui/button';
-  import type { Machine } from './client.svelte';
-  import { refreshPlugin, refreshSkill, syncFleet } from './fleet';
-  import { CAUSE, faultLabel, readToolchain, SCOPE_ANCHOR, SCOPE_NOUN, type FaultGroup } from './fleet-faults';
-  import { machineLabel } from './machine';
-  import OsMark from './OsMark.svelte';
+  import { toast } from "svelte-sonner";
+  import { Button } from "$lib/components/ui/button";
+  import {
+    IconChevronDown,
+    IconChevronRight,
+    IconRefresh,
+    IconWarningTriangle,
+  } from "$lib/icons";
+  import type { Machine } from "./client.svelte";
+  import { refreshPlugin, refreshSkill, syncFleet } from "./fleet";
+  import {
+    CAUSE,
+    type FaultGroup,
+    faultLabel,
+    readToolchain,
+    SCOPE_ANCHOR,
+    SCOPE_NOUN,
+  } from "./fleet-faults";
+  import { machineLabel } from "./machine";
+  import OsMark from "./OsMark.svelte";
 
-  let { group, machines, onresolved }: {
+  let {
+    group,
+    machines,
+    onresolved,
+  }: {
     group: FaultGroup;
     machines: Machine[];
     /** Called after a retry or a re-sync lands, so a list can re-read itself. */
@@ -29,8 +45,10 @@
   } = $props();
 
   const copy = $derived(CAUSE[group.cause]);
-  const machine = $derived(machines.find((one) => one.machineId === group.machineId));
-  const online = $derived(machine?.status === 'online');
+  const machine = $derived(
+    machines.find((one) => one.machineId === group.machineId)
+  );
+  const online = $derived(machine?.status === "online");
   const toolchain = $derived(readToolchain(machine?.fleet));
 
   /**
@@ -46,14 +64,19 @@
   let busy = $state(false);
   let open = $state(false);
 
-  const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+  const message = (error: unknown) =>
+    error instanceof Error ? error.message : String(error);
 
   async function resync() {
-    if (!group.machineId) return;
+    if (!group.machineId) {
+      return;
+    }
     busy = true;
     try {
       await syncFleet(group.machineId);
-      toast.success(`${machine ? machineLabel(machine.hostname) : 'That machine'} is syncing.`);
+      toast.success(
+        `${machine ? machineLabel(machine.hostname) : "That machine"} is syncing.`
+      );
       onresolved?.();
     } catch (error) {
       toast.error(message(error));
@@ -71,14 +94,24 @@
     try {
       let stillFailing = 0;
       for (const fault of group.faults) {
-        if (fault.scope === 'skills') {
-          if ((await refreshSkill(fault.key)).error) stillFailing += 1;
-        } else if (fault.scope === 'plugins') {
-          if ((await refreshPlugin(fault.key)).error) stillFailing += 1;
+        if (fault.scope === "skills") {
+          if ((await refreshSkill(fault.key)).error) {
+            stillFailing += 1;
+          }
+        } else if (
+          fault.scope === "plugins" &&
+          (await refreshPlugin(fault.key)).error
+        ) {
+          stillFailing += 1;
         }
       }
-      if (stillFailing > 0) toast.error(`${stillFailing} still would not fetch — the row says why.`);
-      else toast.success('Fetched. The machines are being sent the files.');
+      if (stillFailing > 0) {
+        toast.error(
+          `${stillFailing} still would not fetch — the row says why.`
+        );
+      } else {
+        toast.success("Fetched. The machines are being sent the files.");
+      }
       onresolved?.();
     } catch (error) {
       toast.error(message(error));
@@ -89,26 +122,28 @@
 
   /** What the button will do, said before it is pressed rather than after. */
   const actionLabel = $derived(
-    copy.action === 'resync'
-      ? 'Sync this machine'
-      : copy.action === 'refresh'
+    copy.action === "resync"
+      ? "Sync this machine"
+      : copy.action === "refresh"
         ? group.faults.length > 1
           ? `Fetch all ${group.faults.length} again`
-          : 'Fetch again'
-        : ''
+          : "Fetch again"
+        : ""
   );
   const actionHint = $derived(
-    copy.action === 'resync'
-      ? 'Applies the fleet’s setup to this machine again and reports what came of it.'
-      : copy.action === 'refresh'
-        ? 'Downloads the content at the hub, once, then hands the bytes to every machine.'
-        : ''
+    copy.action === "resync"
+      ? "Applies the fleet’s setup to this machine again and reports what came of it."
+      : copy.action === "refresh"
+        ? "Downloads the content at the hub, once, then hands the bytes to every machine."
+        : ""
   );
 </script>
 
 <div class="fault" class:hub={group.origin === 'hub'}>
   <div class="top">
-    <IconWarningTriangle class="size-4 shrink-0 {group.origin === 'hub' ? 'text-destructive' : 'text-warning'}" />
+    <IconWarningTriangle
+      class="size-4 shrink-0 {group.origin === 'hub' ? 'text-destructive' : 'text-warning'}"
+    />
     <span class="title">{copy.title}</span>
     <!-- Where, never left implicit: the whole point of the investigation this
          came out of was that a badge named no machine. -->
@@ -117,7 +152,7 @@
         <span class="tag">at the hub</span>
       {:else if machine}
         <span class="tag">
-          <OsMark os={machine.os} class="size-3.5 shrink-0" />
+          <OsMark class="size-3.5 shrink-0" os={machine.os} />
           {machineLabel(machine.hostname)}{online ? '' : ' · offline'}
         </span>
       {:else}
@@ -127,11 +162,15 @@
   </div>
 
   <p class="rows">
-    <span class="noun">{SCOPE_NOUN[group.scope]}{group.faults.length === 1 ? '' : 's'}:</span>
+    <span class="noun"
+      >{SCOPE_NOUN[group.scope]}{group.faults.length === 1 ? '' : 's'}:</span
+    >
     {#each shown as fault (fault.scope + fault.key)}
       <code>{faultLabel(fault)}</code>
     {/each}
-    {#if extra > 0}<span class="more">and {extra} more</span>{/if}
+    {#if extra > 0}
+      <span class="more">and {extra} more</span>
+    {/if}
   </p>
 
   <p class="why">{copy.why}</p>
@@ -156,8 +195,8 @@
       {/each}
       {#if toolchain.shadowed}
         <p class="shadow">
-          A newer claude is installed on this machine and is not the one PATH resolves first. Until
-          that changes, updating again will not help.
+          A newer claude is installed on this machine and is not the one PATH
+          resolves first. Until that changes, updating again will not help.
         </p>
       {/if}
     </div>
@@ -167,14 +206,25 @@
     {#if group.cause === 'unknown'}
       <pre class="said">{group.faults[0].detail}</pre>
     {:else}
-      <button type="button" class="disclose" aria-expanded={open} onclick={() => (open = !open)}>
-        {#if open}<IconChevronDown class="size-3.5 shrink-0" />{:else}<IconChevronRight class="size-3.5 shrink-0" />{/if}
+      <button
+        aria-expanded={open}
+        class="disclose"
+        onclick={() => (open = !open)}
+        type="button"
+      >
+        {#if open}
+          <IconChevronDown class="size-3.5 shrink-0" />
+        {:else}
+          <IconChevronRight class="size-3.5 shrink-0" />
+        {/if}
         What it said
       </button>
       {#if open}
         {#each shown as fault (fault.scope + fault.key)}
           {#if fault.detail}
-            <pre class="said"><span class="for">{faultLabel(fault)}</span>{fault.detail}</pre>
+            <pre
+              class="said"
+            ><span class="for">{faultLabel(fault)}</span>{fault.detail}</pre>
           {/if}
         {/each}
       {/if}
@@ -185,22 +235,36 @@
 
   <div class="acts">
     {#if copy.action === 'resync'}
-      <Button variant="outline" size="xs" disabled={busy || !online} onclick={resync}>
+      <Button
+        disabled={busy || !online}
+        onclick={resync}
+        size="xs"
+        variant="outline"
+      >
         <IconRefresh class="shrink-0" />
         {busy ? 'Syncing…' : actionLabel}
       </Button>
-      <span class="hint">{online ? actionHint : 'It syncs on its own the moment it comes back.'}</span>
+      <span class="hint"
+        >{online ? actionHint : 'It syncs on its own the moment it comes back.'}</span
+      >
     {:else if copy.action === 'refresh'}
-      <Button variant="outline" size="xs" disabled={busy} onclick={refresh}>
+      <Button disabled={busy} onclick={refresh} size="xs" variant="outline">
         <IconRefresh class="shrink-0" />
         {busy ? 'Fetching…' : actionLabel}
       </Button>
       <span class="hint">{actionHint}</span>
     {:else if copy.action === 'settle'}
-      <Button variant="outline" size="xs" href="#{SCOPE_ANCHOR[group.scope]}">Compare the two copies</Button>
-      <span class="hint">Adopt this machine’s copy into the fleet, or overwrite it with the fleet’s.</span>
+      <Button href="#{SCOPE_ANCHOR[group.scope]}" size="xs" variant="outline"
+        >Compare the two copies</Button
+      >
+      <span class="hint"
+        >Adopt this machine’s copy into the fleet, or overwrite it with the
+        fleet’s.</span
+      >
     {:else}
-      <Button variant="outline" size="xs" href="#{SCOPE_ANCHOR[group.scope]}">Open the panel</Button>
+      <Button href="#{SCOPE_ANCHOR[group.scope]}" size="xs" variant="outline"
+        >Open the panel</Button
+      >
     {/if}
   </div>
 </div>

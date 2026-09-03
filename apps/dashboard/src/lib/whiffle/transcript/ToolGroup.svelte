@@ -1,4 +1,12 @@
 <script lang="ts">
+  import {
+    describeTool,
+    type ToolDescriptor,
+    type ToolStatus,
+  } from "$lib/components/features/tool-cards/descriptors";
+  import { Badge } from "$lib/components/ui/badge";
+  import * as Collapsible from "$lib/components/ui/collapsible";
+  import { IconChevronRight } from "$lib/icons";
   /**
    * A run of tool calls as rail-led rows — never a nested card. The rail is a
    * 2px stripe; each row is a glyph, the verb, a mono argument, and whatever the
@@ -11,22 +19,18 @@
    * as Prompt.svelte's "What this touches" disclosure, so the two surfaces read
    * as one idea.
    */
-  import type { Message } from '../types';
-  import { describeTool, type ToolDescriptor, type ToolStatus } from '$lib/components/features/tool-cards/descriptors';
-  import { Badge } from '$lib/components/ui/badge';
-  import * as Collapsible from '$lib/components/ui/collapsible';
-  import { IconChevronRight } from '$lib/icons';
+  import type { Message } from "../types";
 
   let { messages }: { messages: Message[] } = $props();
 
   /** shadcn Badge, dressed on the DESIGN.md scale rather than the stock ladder. */
   const chipClass =
-    'h-auto rounded-[var(--radius-mark)] border-transparent bg-[var(--surface-sunken)] ' +
-    'px-[var(--space-2)] py-px text-[length:var(--text-xs)] font-[var(--weight-body)] ' +
-    '!text-[color:var(--ink-muted)]';
+    "h-auto rounded-[var(--radius-mark)] border-transparent bg-[var(--surface-sunken)] " +
+    "px-[var(--space-2)] py-px text-[length:var(--text-xs)] font-[var(--weight-body)] " +
+    "!text-[color:var(--ink-muted)]";
 
   const asString = (value: unknown): string | undefined =>
-    typeof value === 'string' ? value : undefined;
+    typeof value === "string" ? value : undefined;
 
   function describe(m: Message): ToolDescriptor {
     const meta = m.metadata ?? {};
@@ -34,7 +38,7 @@
       meta.toolName,
       (meta.toolInput ?? undefined) as Record<string, unknown> | undefined,
       asString(meta.toolResult),
-      (meta.toolStatus ?? 'pending') as ToolStatus
+      (meta.toolStatus ?? "pending") as ToolStatus
     );
   }
 
@@ -49,20 +53,32 @@
   }
 
   const asText = (value: unknown): string =>
-    typeof value === 'string' ? value : (JSON.stringify(value, null, 2) ?? String(value));
+    typeof value === "string"
+      ? value
+      : (JSON.stringify(value, null, 2) ?? String(value));
 
   function inputFields(raw: unknown): Field[] {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
-    return Object.entries(raw as Record<string, unknown>).map(([key, value]) => ({
-      key,
-      text: asText(value),
-    }));
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      return [];
+    }
+    return Object.entries(raw as Record<string, unknown>).map(
+      ([key, value]) => ({
+        key,
+        text: asText(value),
+      })
+    );
   }
 
-  function resultText(raw: unknown): { text: string; more: number } | undefined {
-    if (raw === undefined || raw === null) return undefined;
+  function resultText(
+    raw: unknown
+  ): { text: string; more: number } | undefined {
+    if (raw === undefined || raw === null) {
+      return undefined;
+    }
     const text = asText(raw);
-    if (!text.trim()) return undefined;
+    if (!text.trim()) {
+      return undefined;
+    }
     return text.length > RESULT_CAP
       ? { text: text.slice(0, RESULT_CAP), more: text.length - RESULT_CAP }
       : { text, more: 0 };
@@ -81,8 +97,12 @@
   const factParts = (fact: string): FactPart[] =>
     fact
       .split(/(\s+)/)
-      .filter((token) => token !== '')
-      .map((token) => ({ text: token, add: ADDED.test(token), del: REMOVED.test(token) }));
+      .filter((token) => token !== "")
+      .map((token) => ({
+        text: token,
+        add: ADDED.test(token),
+        del: REMOVED.test(token),
+      }));
 </script>
 
 <div class="tools">
@@ -95,18 +115,29 @@
     {@const hasBody = fields.length > 0 || !!result}
     {#snippet line()}
       <span class="ic" class:err={failed}><Icon /></span>
-      {#if d.label}<span class="tk">{d.label}</span>{/if}
-      <span class="arg" title={[d.object, d.detail].filter(Boolean).join(' ') || undefined}>
-        {#if d.object}{d.object}{/if}{#if d.detail}<span class="tail"> {d.detail}</span>{/if}
+      {#if d.label}
+        <span class="tk">{d.label}</span>
+      {/if}
+      <span
+        class="arg"
+        title={[d.object, d.detail].filter(Boolean).join(' ') || undefined}
+      >
+        {#if d.object}
+          {d.object}
+        {/if}
+        {#if d.detail}
+          <span class="tail"> {d.detail}</span>
+        {/if}
       </span>
-      {#if d.chip}<Badge variant="secondary" class={chipClass}>{d.chip}</Badge>{/if}
+      {#if d.chip}
+        <Badge class={chipClass} variant="secondary">{d.chip}</Badge>
+      {/if}
       {#if d.fact}
         {#if d.factTone === 'diff'}
           <span class="d"
-            >{#each factParts(d.fact) as part, i (i)}<span
-              class:add={part.add}
-              class:del={part.del}>{part.text}</span
-            >{/each}</span
+            >{#each factParts(d.fact) as part, i (i)}
+              <span class:add={part.add} class:del={part.del}>{part.text}</span>
+            {/each}</span
           >
         {:else}
           <span class="d" class:bad={d.factTone === 'error'}>{d.fact}</span>
@@ -132,7 +163,11 @@
                 <div class="field">
                   <span class="k">result</span>
                   <pre class="v">{result.text}</pre>
-                  {#if result.more}<span class="more">… {result.more.toLocaleString()} more chars</span>{/if}
+                  {#if result.more}
+                    <span class="more"
+                      >… {result.more.toLocaleString()} more chars</span
+                    >
+                  {/if}
                 </div>
               {/if}
             </div>
@@ -214,7 +249,7 @@
     color: var(--ink-muted);
     opacity: 0.7;
   }
-  .row :global([data-slot='badge']) {
+  .row :global([data-slot="badge"]) {
     flex: 0 0 auto;
   }
   /* A fact is a measurement, not a verdict: it reads in --ink-stat, the ink
@@ -249,7 +284,7 @@
     height: 14px;
     display: block;
   }
-  .row :global(.trow[data-state='open'] .chev) {
+  .row :global(.trow[data-state="open"] .chev) {
     transform: rotate(90deg);
   }
 
@@ -312,13 +347,13 @@
      the rail's one collapsible vocabulary (collapsible-lazy holds unmounting
      children for exactly this duration plus slack): entry decelerates on
      --e-in, exit accelerates on --e-out, exactly the doctrine's curves. */
-  .tools :global([data-slot='collapsible-content']) {
+  .tools :global([data-slot="collapsible-content"]) {
     overflow: hidden;
   }
-  .tools :global([data-slot='collapsible-content'][data-state='open']) {
+  .tools :global([data-slot="collapsible-content"][data-state="open"]) {
     animation: tool-down calc(var(--c-100) * 2) var(--e-in);
   }
-  .tools :global([data-slot='collapsible-content'][data-state='closed']) {
+  .tools :global([data-slot="collapsible-content"][data-state="closed"]) {
     animation: tool-up calc(var(--c-100) * 2) var(--e-out);
   }
   @keyframes tool-down {
@@ -338,8 +373,8 @@
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .tools :global([data-slot='collapsible-content'][data-state='open']),
-    .tools :global([data-slot='collapsible-content'][data-state='closed']) {
+    .tools :global([data-slot="collapsible-content"][data-state="open"]),
+    .tools :global([data-slot="collapsible-content"][data-state="closed"]) {
       animation: none;
     }
   }

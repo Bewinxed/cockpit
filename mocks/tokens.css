@@ -146,34 +146,38 @@
    -------------------------------------------------------------------------- */
 :root {
   /* surfaces — light: band 241 < field 245 < raised 253 */
-  --surface-sunken:   var(--neutral-3);
-  --surface-field:    color-mix(in oklab, var(--neutral-2), var(--neutral-3));
-  --surface-raised:   var(--neutral-1);
-  --surface-overlay:  var(--neutral-1);
+  --surface-sunken: var(--neutral-3);
+  --surface-field: color-mix(in oklab, var(--neutral-2), var(--neutral-3));
+  --surface-raised: var(--neutral-1);
+  --surface-overlay: var(--neutral-1);
 
   /* borders — graded, never flattened to one value (DW-3.14) */
-  --border-hairline:  color-mix(in oklab, var(--neutral-4) 34%, var(--neutral-3));
-  --border-divider:   color-mix(in oklab, var(--neutral-4) 72%, var(--neutral-3));
-  --border-control:   var(--neutral-4);
+  --border-hairline: color-mix(
+    in oklab,
+    var(--neutral-4) 34%,
+    var(--neutral-3)
+  );
+  --border-divider: color-mix(in oklab, var(--neutral-4) 72%, var(--neutral-3));
+  --border-control: var(--neutral-4);
 
   /* inks — a five-rung ladder inside the two tier-1 text steps */
-  --ink-strong:  var(--neutral-12);
-  --ink-row:     color-mix(in oklab, var(--neutral-12) 68%, var(--neutral-11));
-  --ink-stat:    color-mix(in oklab, var(--neutral-12) 60%, var(--neutral-11));
-  --ink-body:    color-mix(in oklab, var(--neutral-12) 46%, var(--neutral-11));
-  --ink-muted:   var(--neutral-11);
-  --ink-label:   color-mix(in oklab, var(--neutral-11) 74%, var(--neutral-12));
+  --ink-strong: var(--neutral-12);
+  --ink-row: color-mix(in oklab, var(--neutral-12) 68%, var(--neutral-11));
+  --ink-stat: color-mix(in oklab, var(--neutral-12) 60%, var(--neutral-11));
+  --ink-body: color-mix(in oklab, var(--neutral-12) 46%, var(--neutral-11));
+  --ink-muted: var(--neutral-11);
+  --ink-label: color-mix(in oklab, var(--neutral-11) 74%, var(--neutral-12));
 
   /* the non-status accent of this DNA is graphite, not a hue */
   /* the focus ring is a token because it must clear 3:1 non-text contrast in
      BOTH schemes: --accent-solid measures 2.91:1 on the dark ground, so dark
      takes the light end of the accent ramp instead. */
-  --focus-ring:  var(--accent-solid);
+  --focus-ring: var(--accent-solid);
   --brand-solid: var(--neutral-12);
-  --brand-hi:    oklch(from var(--neutral-12) calc(l + 0.075) c h);
-  --brand-lo:    oklch(from var(--neutral-12) calc(l - 0.012) c h);
-  --brand-edge:  oklch(from var(--neutral-12) calc(l - 0.045) c h);
-  --on-brand:    var(--neutral-1);
+  --brand-hi: oklch(from var(--neutral-12) calc(l + 0.075) c h);
+  --brand-lo: oklch(from var(--neutral-12) calc(l - 0.012) c h);
+  --brand-edge: oklch(from var(--neutral-12) calc(l - 0.045) c h);
+  --on-brand: var(--neutral-1);
 
   /* ---- Flexoki v2 accent swatches (user directive) ----------------------
      The functional hues — and only the functional/identity hues — are migrated
@@ -183,21 +187,21 @@
      Only the three steps the status aliases and data colours consume are
      overridden (-3 pale tint, -9 solid, -11 ink). Inks take the 850 step so the
      dark text clears 4.5:1 on the pale-100 chip, not only on white. */
-  --error-3:    oklch(88.2% .064 36.4);   /* red-100    */
-  --error-9:    oklch(50.4% .165 27.8);   /* red-600    */
-  --error-11:   oklch(31.3% .087 26.3);   /* red-850    */
-  --warning-3:  oklch(91.4% .087 93.2);   /* yellow-100 */
-  --warning-9:  oklch(63.3% .129 85.8);   /* yellow-600 */
-  --warning-11: oklch(37.0% .074 88.4);   /* yellow-850 */
+  --error-3: oklch(88.2% 0.064 36.4); /* red-100    */
+  --error-9: oklch(50.4% 0.165 27.8); /* red-600    */
+  --error-11: oklch(31.3% 0.087 26.3); /* red-850    */
+  --warning-3: oklch(91.4% 0.087 93.2); /* yellow-100 */
+  --warning-9: oklch(63.3% 0.129 85.8); /* yellow-600 */
+  --warning-11: oklch(37.0% 0.074 88.4); /* yellow-850 */
   /* done takes the 200-step green base (more chroma) rather than the 100: the
      pale yellow attn-tint and a pale green done-tint sit only 35deg apart and
      collide at pill size on the 100 step; a more saturated green clears >=12. */
-  --success-3:  oklch(81.0% .098 115.5);  /* green-200  */
-  --success-9:  oklch(55.9% .134 122.9);  /* green-600  */
-  --success-11: oklch(33.8% .076 121.9);  /* green-850  */
-  --info-3:     oklch(88.4% .029 228.1);  /* blue-100   */
-  --info-9:     oklch(48.2% .131 254.8);  /* blue-600   */
-  --info-11:    oklch(30.6% .069 253.5);  /* blue-850   */
+  --success-3: oklch(81.0% 0.098 115.5); /* green-200  */
+  --success-9: oklch(55.9% 0.134 122.9); /* green-600  */
+  --success-11: oklch(33.8% 0.076 121.9); /* green-850  */
+  --info-3: oklch(88.4% 0.029 228.1); /* blue-100   */
+  --info-9: oklch(48.2% 0.131 254.8); /* blue-600   */
+  --info-11: oklch(30.6% 0.069 253.5); /* blue-850   */
 
   /* status — four functional hues, one meaning each, plus a hueless idle.
      The step-3 tints straight off the ramp are too pale to tell apart at pill
@@ -206,16 +210,32 @@
      lifts the worst pair to 12.5 while keeping every text-on-tint pair at or
      above 4.7:1 — deepened rather than the threshold lowered. */
   --tint-depth: 76%;
-  --status-live-bg:  color-mix(in oklab, var(--info-3)    var(--tint-depth), var(--info-9));
-  --status-attn-bg:  color-mix(in oklab, var(--warning-3) var(--tint-depth), var(--warning-9));
-  --status-done-bg:  color-mix(in oklab, var(--success-3) var(--tint-depth), var(--success-9));
-  --status-fail-bg:  color-mix(in oklab, var(--error-3)   var(--tint-depth), var(--error-9));
+  --status-live-bg: color-mix(
+    in oklab,
+    var(--info-3) var(--tint-depth),
+    var(--info-9)
+  );
+  --status-attn-bg: color-mix(
+    in oklab,
+    var(--warning-3) var(--tint-depth),
+    var(--warning-9)
+  );
+  --status-done-bg: color-mix(
+    in oklab,
+    var(--success-3) var(--tint-depth),
+    var(--success-9)
+  );
+  --status-fail-bg: color-mix(
+    in oklab,
+    var(--error-3) var(--tint-depth),
+    var(--error-9)
+  );
   /* Idle carries NO fill. Measured: a hueless neutral-3 chip sits only 6.7
      CIEDE2000 from the live-blue chip in light and 6.4 in dark — a filled grey
      pill and a filled blue pill are not separable at this size. The comps solve
      it the same way (their .s-none rule is bare text), so idle is a label in muted
      ink with no pill at all: absence of a chip IS the idle state. */
-  --status-idle-bg:  transparent;
+  --status-idle-bg: transparent;
   /* Inks are pulled toward the text extreme rather than used raw. Two measured
      reasons, neither visible to a token-level contrast check:
        - painted small text never reaches its nominal ink (11.5-13px at weight
@@ -225,10 +245,26 @@
      Together those put seven pairs between 3.92:1 and 4.45:1 on the glass while
      every token-level pair read 4.7-5.5. Deepened here; the target was not moved. */
   --ink-depth: 76%;
-  --status-live-ink: color-mix(in oklab, var(--info-11)    var(--ink-depth), var(--neutral-12));
-  --status-attn-ink: color-mix(in oklab, var(--warning-11) var(--ink-depth), var(--neutral-12));
-  --status-done-ink: color-mix(in oklab, var(--success-11) var(--ink-depth), var(--neutral-12));
-  --status-fail-ink: color-mix(in oklab, var(--error-11)   var(--ink-depth), var(--neutral-12));
+  --status-live-ink: color-mix(
+    in oklab,
+    var(--info-11) var(--ink-depth),
+    var(--neutral-12)
+  );
+  --status-attn-ink: color-mix(
+    in oklab,
+    var(--warning-11) var(--ink-depth),
+    var(--neutral-12)
+  );
+  --status-done-ink: color-mix(
+    in oklab,
+    var(--success-11) var(--ink-depth),
+    var(--neutral-12)
+  );
+  --status-fail-ink: color-mix(
+    in oklab,
+    var(--error-11) var(--ink-depth),
+    var(--neutral-12)
+  );
   --status-idle-ink: var(--neutral-11);
 
   /* ---- data colour ------------------------------------------------------
@@ -237,9 +273,9 @@
      needs attention. Threshold numerals were riding the muted 11-step through
      the ink-depth correction and came out near-grey (measured rgb(94,84,64) for
      an amber value). These take the SOLID hue darkened, so chroma survives. */
-  --data-ok:   oklch(from var(--success-9) 0.46 0.125 h);
+  --data-ok: oklch(from var(--success-9) 0.46 0.125 h);
   --data-warn: oklch(from var(--warning-9) 0.46 0.125 h);
-  --data-bad:  oklch(from var(--error-9)   0.46 0.135 h);
+  --data-bad: oklch(from var(--error-9) 0.46 0.135 h);
 
   /* ---- CHART PALETTE — Okabe-Ito categorical (colour-blind safe) ---------
      Phase 6 (DW-6.9): the chart palette is chosen by DATA TYPE, NOT the brand
@@ -251,14 +287,14 @@
      hues a chart may use. Every series using them carries a redundant non-hue
      channel (pattern / direct label) so it survives deuteranopia/protanopia.
      Okabe, I. & Ito, K., "Colour Universal Design", 2008. */
-  --chart-1: oklch(0.753 0.158 76.8);   /* #E69F00 orange   */
-  --chart-2: oklch(0.735 0.117 236.2);  /* #56B4E9 sky blue */
-  --chart-3: oklch(0.620 0.130 165.5);  /* #009E73 green    */
-  --chart-4: oklch(0.902 0.172 105.0);  /* #F0E442 yellow   */
-  --chart-5: oklch(0.532 0.131 244.0);  /* #0072B2 blue     */
-  --chart-6: oklch(0.621 0.170 47.5);   /* #D55E00 vermillion */
-  --chart-7: oklch(0.679 0.118 346.3);  /* #CC79A7 purple   */
-  --chart-8: oklch(0.000 0.000 0.0);    /* #000000 black    */
+  --chart-1: oklch(0.753 0.158 76.8); /* #E69F00 orange   */
+  --chart-2: oklch(0.735 0.117 236.2); /* #56B4E9 sky blue */
+  --chart-3: oklch(0.62 0.13 165.5); /* #009E73 green    */
+  --chart-4: oklch(0.902 0.172 105); /* #F0E442 yellow   */
+  --chart-5: oklch(0.532 0.131 244); /* #0072B2 blue     */
+  --chart-6: oklch(0.621 0.17 47.5); /* #D55E00 vermillion */
+  --chart-7: oklch(0.679 0.118 346.3); /* #CC79A7 purple   */
+  --chart-8: oklch(0 0 0); /* #000000 black    */
 
   /* elevation — hue-shifted cool graphite, never rgba(0,0,0,·) */
   /* Elevation was too faint to register: at 0.055 alpha over a 1px blur the
@@ -266,16 +302,19 @@
      tint stays cool graphite (neutral-12, never pure black — DW-3.10); only the
      alpha and the spread grow, to reference-level lift — a soft drop, not a
      heavy AI-tell shadow. */
-  --shadow-tint:   oklch(from var(--neutral-12) l c h / 0.09);
+  --shadow-tint: oklch(from var(--neutral-12) l c h / 0.09);
   --shadow-tint-2: oklch(from var(--neutral-12) l c h / 0.14);
-  --shadow-tint-3: oklch(from var(--neutral-12) l c h / 0.20);
+  --shadow-tint-3: oklch(from var(--neutral-12) l c h / 0.2);
   --shadow-hairline: 0 3px 7px -2px var(--shadow-tint-2);
-  --shadow-tile:     0 2px 6px var(--shadow-tint-2), 0 0 0 .5px var(--shadow-tint);
-  --shadow-lifted:   0 6px 18px var(--shadow-tint-2), 0 1px 3px var(--shadow-tint);
-  --shadow-overlay:  0 18px 48px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint);
-  --shadow-drawer:   0 12px 40px var(--shadow-tint-3);
+  --shadow-tile: 0 2px 6px var(--shadow-tint-2), 0 0 0 0.5px var(--shadow-tint);
+  --shadow-lifted:
+    0 6px 18px var(--shadow-tint-2), 0 1px 3px var(--shadow-tint);
+  --shadow-overlay:
+    0 18px 48px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint);
+  --shadow-drawer: 0 12px 40px var(--shadow-tint-3);
   --shadow-inset-sel: inset 0 1px 1px var(--shadow-tint);
-  --shadow-action:   inset 0 -1px 0 var(--brand-edge), 0 1px 2px var(--shadow-tint-2);
+  --shadow-action:
+    inset 0 -1px 0 var(--brand-edge), 0 1px 2px var(--shadow-tint-2);
 
   /* ---- identity palette for item marks ---------------------------------
      The user's constraint names small marks as a place colour LIVES: "colour
@@ -300,22 +339,24 @@
      are too bright at their own lightness for a white glyph to clear 4.5:1, so
      each Flexoki HUE is placed on a common dark-enough lightness. The white
      glyph clears 4.5:1 on every one (measured in colorcheck / the crops). */
-  --mark-1: oklch(0.51 0.168 27.9);    /* red     */
-  --mark-2: oklch(0.53 0.150 47.4);    /* orange  */
-  --mark-3: oklch(0.50 0.115 86.8);    /* yellow  */
-  --mark-4: oklch(0.51 0.132 121.2);   /* green   */
-  --mark-5: oklch(0.51 0.093 186.7);   /* cyan    */
-  --mark-6: oklch(0.51 0.140 251.4);   /* blue    */
-  --mark-7: oklch(0.51 0.150 292.5);   /* purple  */
-  --mark-8: oklch(0.51 0.165 349.8);   /* magenta */
+  --mark-1: oklch(0.51 0.168 27.9); /* red     */
+  --mark-2: oklch(0.53 0.15 47.4); /* orange  */
+  --mark-3: oklch(0.5 0.115 86.8); /* yellow  */
+  --mark-4: oklch(0.51 0.132 121.2); /* green   */
+  --mark-5: oklch(0.51 0.093 186.7); /* cyan    */
+  --mark-6: oklch(0.51 0.14 251.4); /* blue    */
+  --mark-7: oklch(0.51 0.15 292.5); /* purple  */
+  --mark-8: oklch(0.51 0.165 349.8); /* magenta */
   --mark-glyph: oklch(from var(--neutral-1) 0.99 0 h);
 
   /* the signature move, as tokens: the action is never flat, and the item mark
      carries the same top-light/bottom-shade read at 17px */
   --gradient-action: linear-gradient(var(--brand-hi), var(--brand-lo));
-  --mark-overlay:    linear-gradient(oklch(from var(--neutral-1) l c h / 0.22),
-                                     oklch(from var(--neutral-12) l c h / 0.06));
-  --scrim:      oklch(from var(--neutral-12) l c h / 0.32);
+  --mark-overlay: linear-gradient(
+    oklch(from var(--neutral-1) l c h / 0.22),
+    oklch(from var(--neutral-12) l c h / 0.06)
+  );
+  --scrim: oklch(from var(--neutral-12) l c h / 0.32);
   --scrim-soft: oklch(from var(--neutral-12) l c h / 0.06);
 
   /* Tool/think/branch left rail. A flat 1px hairline at --border-hairline
@@ -323,51 +364,57 @@
      invisible rail. This is a vertical gradient instead: stronger at the top
      (the active end, where the group begins) and fading down, drawn from the
      muted ink at low alpha so it reads on both schemes without going heavy. */
-  --rail: linear-gradient(oklch(from var(--neutral-11) l c h / 0.58),
-                          oklch(from var(--neutral-11) l c h / 0.06));
+  --rail: linear-gradient(
+    oklch(from var(--neutral-11) l c h / 0.58),
+    oklch(from var(--neutral-11) l c h / 0.06)
+  );
 }
 
 [data-theme="dark"],
 .dark {
   /* dark is re-solved, not inverted: raised climbs the ramp instead of falling */
-  --surface-sunken:   var(--neutral-1);
-  --surface-field:    var(--neutral-2);
-  --surface-raised:   var(--neutral-3);
-  --surface-overlay:  var(--neutral-4);
+  --surface-sunken: var(--neutral-1);
+  --surface-field: var(--neutral-2);
+  --surface-raised: var(--neutral-3);
+  --surface-overlay: var(--neutral-4);
 
-  --border-hairline:  color-mix(in oklab, var(--neutral-5) 40%, var(--neutral-4));
-  --border-divider:   color-mix(in oklab, var(--neutral-5) 75%, var(--neutral-4));
-  --border-control:   var(--neutral-6);
+  --border-hairline: color-mix(
+    in oklab,
+    var(--neutral-5) 40%,
+    var(--neutral-4)
+  );
+  --border-divider: color-mix(in oklab, var(--neutral-5) 75%, var(--neutral-4));
+  --border-control: var(--neutral-6);
 
-  --ink-strong:  var(--neutral-12);
-  --ink-row:     color-mix(in oklab, var(--neutral-12) 88%, var(--neutral-11));
-  --ink-stat:    color-mix(in oklab, var(--neutral-12) 72%, var(--neutral-11));
-  --ink-body:    color-mix(in oklab, var(--neutral-12) 30%, var(--neutral-11));
-  --ink-muted:   var(--neutral-11);
-  --ink-label:   color-mix(in oklab, var(--neutral-11) 88%, var(--neutral-10));
+  --ink-strong: var(--neutral-12);
+  --ink-row: color-mix(in oklab, var(--neutral-12) 88%, var(--neutral-11));
+  --ink-stat: color-mix(in oklab, var(--neutral-12) 72%, var(--neutral-11));
+  --ink-body: color-mix(in oklab, var(--neutral-12) 30%, var(--neutral-11));
+  --ink-muted: var(--neutral-11);
+  --ink-label: color-mix(in oklab, var(--neutral-11) 88%, var(--neutral-10));
 
-  --focus-ring:  var(--accent-11);
+  --focus-ring: var(--accent-11);
   --brand-solid: var(--neutral-12);
-  --brand-hi:    oklch(from var(--neutral-12) calc(l - 0.02) c h);
-  --brand-lo:    oklch(from var(--neutral-12) calc(l + 0.02) c h);
-  --brand-edge:  oklch(from var(--neutral-12) calc(l + 0.05) c h);
-  --on-brand:    var(--neutral-1);
+  --brand-hi: oklch(from var(--neutral-12) calc(l - 0.02) c h);
+  --brand-lo: oklch(from var(--neutral-12) calc(l + 0.02) c h);
+  --brand-edge: oklch(from var(--neutral-12) calc(l + 0.05) c h);
+  --on-brand: var(--neutral-1);
 
   /* Flexoki accents, dark: the steps mirror — a deep 850 becomes the chip-fill
      base and a pale 200 becomes the ink, so the same alias formula that deepens
      the light chip lifts the dark one. Solid (-9) stays the 500 step for data. */
-  --error-3:    oklch(31.3% .087 26.3);   /* red-850    */
-  --error-9:    oklch(55.0% .168 27.9);   /* red-500    */
-  --error-11:   oklch(88.2% .064 36.4);   /* red-100    */
-  --warning-3:  oklch(37.0% .074 88.4);   /* yellow-850 */
-  --warning-9:  oklch(68.3% .138 86.8);   /* yellow-500 */
-  --warning-11: oklch(85.0% .131 92.3);   /* yellow-200 */
-  --success-3:  oklch(33.8% .076 121.9);  /* green-850  */
-  --success-9:  oklch(60.5% .132 121.2);  /* green-500  */
-  --success-11: oklch(81.0% .098 115.5);  /* green-200  */
-  --info-3:     oklch(30.6% .069 253.5);  /* blue-850   */
-  --info-9:     oklch(53.9% .121 251.4);  /* blue-500   */
-  --info-11:    oklch(78.2% .062 235.9);  /* blue-200   */
+  --error-3: oklch(31.3% 0.087 26.3); /* red-850    */
+  --error-9: oklch(55.0% 0.168 27.9); /* red-500    */
+  --error-11: oklch(88.2% 0.064 36.4); /* red-100    */
+  --warning-3: oklch(37.0% 0.074 88.4); /* yellow-850 */
+  --warning-9: oklch(68.3% 0.138 86.8); /* yellow-500 */
+  --warning-11: oklch(85.0% 0.131 92.3); /* yellow-200 */
+  --success-3: oklch(33.8% 0.076 121.9); /* green-850  */
+  --success-9: oklch(60.5% 0.132 121.2); /* green-500  */
+  --success-11: oklch(81.0% 0.098 115.5); /* green-200  */
+  --info-3: oklch(30.6% 0.069 253.5); /* blue-850   */
+  --info-9: oklch(53.9% 0.121 251.4); /* blue-500   */
+  --info-11: oklch(78.2% 0.062 235.9); /* blue-200   */
   /* dark chips mix in more solid than light: two deep 850 tints (yellow, red)
      are near-identical browns at the light scheme's depth, so the dark scheme
      carries more chroma to hold them apart while staying deep enough for the
@@ -380,47 +427,50 @@
   --status-attn-bg: color-mix(in oklab, var(--warning-3) 68%, var(--warning-9));
   --status-fail-bg: color-mix(in oklab, var(--error-3) 68%, var(--error-9));
 
-  --status-idle-bg: transparent;       --status-idle-ink: var(--neutral-11);
-  --data-ok:   oklch(from var(--success-9) 0.78 0.135 h);
-  --data-warn: oklch(from var(--warning-9) 0.80 0.130 h);
-  --data-bad:  oklch(from var(--error-9)   0.81 0.130 h);
+  --status-idle-bg: transparent;
+  --status-idle-ink: var(--neutral-11);
+  --data-ok: oklch(from var(--success-9) 0.78 0.135 h);
+  --data-warn: oklch(from var(--warning-9) 0.8 0.13 h);
+  --data-bad: oklch(from var(--error-9) 0.81 0.13 h);
 
   /* CHART PALETTE, dark — the same Okabe-Ito categorical set, re-solved so it
      reads on the dark ground. Only the foreground-weak colours change: the
      categorical "black" cannot paint on a dark field, so it becomes a light
      neutral; the mid blue is lifted a step. Hue identity is preserved so the
      CVD-safe separation holds in both schemes. */
-  --chart-1: oklch(0.780 0.160 76.8);   /* orange   */
-  --chart-2: oklch(0.770 0.120 236.2);  /* sky blue */
-  --chart-3: oklch(0.660 0.135 165.5);  /* green    */
-  --chart-4: oklch(0.920 0.150 105.0);  /* yellow   */
-  --chart-5: oklch(0.620 0.135 244.0);  /* blue     */
-  --chart-6: oklch(0.680 0.175 47.5);   /* vermillion */
-  --chart-7: oklch(0.720 0.125 346.3);  /* purple   */
-  --chart-8: oklch(0.930 0.000 0.0);    /* black -> light graphite on dark */
+  --chart-1: oklch(0.78 0.16 76.8); /* orange   */
+  --chart-2: oklch(0.77 0.12 236.2); /* sky blue */
+  --chart-3: oklch(0.66 0.135 165.5); /* green    */
+  --chart-4: oklch(0.92 0.15 105); /* yellow   */
+  --chart-5: oklch(0.62 0.135 244); /* blue     */
+  --chart-6: oklch(0.68 0.175 47.5); /* vermillion */
+  --chart-7: oklch(0.72 0.125 346.3); /* purple   */
+  --chart-8: oklch(0.93 0 0); /* black -> light graphite on dark */
 
   /* identity marks lift on a dark ground — L*0.70, one step above the deep
      status chips (L*~0.30). Four of the eight Flexoki hues (red/yellow/green/
      blue) are shared with the status chips, so the identity mark and its
      same-hue chip separate on lightness; the lift takes every mark-vs-status
      pair above 25 dE. */
-  --mark-1: oklch(0.70 0.170 27.9);    /* red     */
-  --mark-2: oklch(0.70 0.150 47.4);    /* orange  */
-  --mark-3: oklch(0.70 0.120 86.8);    /* yellow  */
-  --mark-4: oklch(0.70 0.135 121.2);   /* green   */
-  --mark-5: oklch(0.70 0.095 186.7);   /* cyan    */
-  --mark-6: oklch(0.70 0.145 251.4);   /* blue    */
-  --mark-7: oklch(0.70 0.155 292.5);   /* purple  */
-  --mark-8: oklch(0.70 0.170 349.8);   /* magenta */
+  --mark-1: oklch(0.7 0.17 27.9); /* red     */
+  --mark-2: oklch(0.7 0.15 47.4); /* orange  */
+  --mark-3: oklch(0.7 0.12 86.8); /* yellow  */
+  --mark-4: oklch(0.7 0.135 121.2); /* green   */
+  --mark-5: oklch(0.7 0.095 186.7); /* cyan    */
+  --mark-6: oklch(0.7 0.145 251.4); /* blue    */
+  --mark-7: oklch(0.7 0.155 292.5); /* purple  */
+  --mark-8: oklch(0.7 0.17 349.8); /* magenta */
 
-  --shadow-tint:   oklch(from var(--neutral-1) l c h / 0.55);
+  --shadow-tint: oklch(from var(--neutral-1) l c h / 0.55);
   --shadow-tint-2: oklch(from var(--neutral-1) l c h / 0.66);
   --shadow-tint-3: oklch(from var(--neutral-1) l c h / 0.76);
-  --scrim:      oklch(from var(--neutral-1) l c h / 0.60);
-  --scrim-soft: oklch(from var(--neutral-1) l c h / 0.30);
+  --scrim: oklch(from var(--neutral-1) l c h / 0.6);
+  --scrim-soft: oklch(from var(--neutral-1) l c h / 0.3);
   /* on the dark field the rail needs a touch more presence to stay legible */
-  --rail: linear-gradient(oklch(from var(--neutral-11) l c h / 0.55),
-                          oklch(from var(--neutral-11) l c h / 0.08));
+  --rail: linear-gradient(
+    oklch(from var(--neutral-11) l c h / 0.55),
+    oklch(from var(--neutral-11) l c h / 0.08)
+  );
 }
 
 /* ------------------------------- TIER 3 ----------------------------------
@@ -431,61 +481,63 @@
   /* type — one superfamily, two roles. Ratio 1.125 from a 13px base, the size
      the ledger-grid's dominant element (the table row name) is actually set at,
      rounded to the nearest 0.25px. */
-  --font-body:    'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body:
+    "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
   --font-display: var(--font-body);
-  --font-mono:    'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
 
   /* rem, not px. Measured: with a px scale, a user asking their browser for
      200% text moved nothing at all — the stat value stayed 23.5px. These are
      the same nine steps expressed against a 16px root, so the default render is
      unchanged to the pixel, and a text-size preference now scales the whole
      system. (WCAG 2.2 SC 1.4.4 Resize Text.) */
-  --text-xs:   0.640625rem;  /* 10.25px */
-  --text-sm:   0.71875rem;   /* 11.5px  */
-  --text-base: 0.8125rem;    /* 13px    */
-  --text-md:   0.90625rem;   /* 14.5px  */
-  --text-lg:   1.03125rem;   /* 16.5px  */
-  --text-xl:   1.15625rem;   /* 18.5px  */
-  --text-2xl:  1.296875rem;  /* 20.75px */
-  --text-3xl:  1.46875rem;   /* 23.5px  */
-  --text-4xl:  1.640625rem;  /* 26.25px */
+  --text-xs: 0.640625rem; /* 10.25px */
+  --text-sm: 0.71875rem; /* 11.5px  */
+  --text-base: 0.8125rem; /* 13px    */
+  --text-md: 0.90625rem; /* 14.5px  */
+  --text-lg: 1.03125rem; /* 16.5px  */
+  --text-xl: 1.15625rem; /* 18.5px  */
+  --text-2xl: 1.296875rem; /* 20.75px */
+  --text-3xl: 1.46875rem; /* 23.5px  */
+  --text-4xl: 1.640625rem; /* 26.25px */
 
-  --leading-tight: 1.2;    /* display, stat values */
-  --leading-body:  1.4;    /* body copy — inside the 1.2–1.4 constraint */
-  --leading-ui:    1.25;   /* single-line controls and rows */
-  --leading-numeric: 1;    /* display figures: digits carry no descender, and a
+  --leading-tight: 1.2; /* display, stat values */
+  --leading-body: 1.4; /* body copy — inside the 1.2–1.4 constraint */
+  --leading-ui: 1.25; /* single-line controls and rows */
+  --leading-numeric: 1; /* display figures: digits carry no descender, and a
                               body line box on a 23.5px value overflows the
                               measured 90px stat card and clips the KPI */
 
-  --weight-body:   400;
+  --weight-body: 400;
   --weight-medium: 450;
-  --weight-strong: 500;    /* 600 and above never appear — see ## Type */
+  --weight-strong: 500; /* 600 and above never appear — see ## Type */
 
   --track-display: -0.008em;
-  --track-body:     0em;
-  --track-caps:     0.01em;
+  --track-body: 0em;
+  --track-caps: 0.01em;
 
   /* space — measured off the comps, deliberately not a 4px multiple ladder */
-  --space-1:  4px;
-  --space-2:  7px;    /* stat-well inset */
-  --space-3: 11px;    /* table-card padding */
-  --space-4: 14px;    /* stat-card gap */
+  --space-1: 4px;
+  --space-2: 7px; /* stat-well inset */
+  --space-3: 11px; /* table-card padding */
+  --space-4: 14px; /* stat-card gap */
   --space-5: 18px;
-  --space-6: 21px;    /* content padding, right */
-  --space-7: 25px;    /* content padding, left — the asymmetry is the point */
+  --space-6: 21px; /* content padding, right */
+  --space-7: 25px; /* content padding, left — the asymmetry is the point */
   --space-8: 32px;
 
   /* shape — six measured radii, none of them shadcn's 4/6/8/12 ladder */
-  --radius:        10px;   /* the base: the stat card */
-  --radius-mark:   4.6px;
-  --radius-tile:   5.5px;
-  --radius-well:   7px;
+  --radius: 10px; /* the base: the stat card */
+  --radius-mark: 4.6px;
+  --radius-tile: 5.5px;
+  --radius-well: 7px;
   --radius-control: 8px;
-  --radius-card:   10px;
-  --radius-modal:  12px;   /* modal control groups (fields / footer buttons) */
-  --radius-panel:  14px;
-  --radius-shell:  20px;   /* floating shell surfaces (composer, modal frame) */
-  --radius-pill:   999px;
+  --radius-card: 10px;
+  --radius-modal: 12px; /* modal control groups (fields / footer buttons) */
+  --radius-panel: 14px;
+  --radius-shell: 20px; /* floating shell surfaces (composer, modal frame) */
+  --radius-pill: 999px;
 
   /* motion — the one unpinned DNA axis. Structure never moves; only the live
      channel does.
@@ -495,23 +547,33 @@
      Easings are limited to the three canonical curves (--e-in / --e-out /
      --e-toggle); instance use is var(--e-in) for entry and var(--e-out) for
      exit, with --e-toggle reserved for continuous toggles. */
-  --c-100:100ms; --c-300:300ms; --c-500:500ms;
-  --e-in:    cubic-bezier(0.16, 1, 0.3, 1);
-  --e-out:   cubic-bezier(0.7, 0, 0.84, 0);
+  --c-100: 100ms;
+  --c-300: 300ms;
+  --c-500: 500ms;
+  --e-in: cubic-bezier(0.16, 1, 0.3, 1);
+  --e-out: cubic-bezier(0.7, 0, 0.84, 0);
   --e-toggle: cubic-bezier(0.65, 0, 0.35, 1);
   --motion-instant: 0ms;
-  --motion-fast:   var(--c-100);
-  --motion-base:   var(--c-300);
-  --motion-slow:   var(--c-500);
-  --breath: calc(var(--c-500) * 4);   /* 2000ms — the running mark's breath */
-  --ease-entry:  var(--e-in);
-  --ease-exit:   var(--e-out);
+  --motion-fast: var(--c-100);
+  --motion-base: var(--c-300);
+  --motion-slow: var(--c-500);
+  --breath: calc(var(--c-500) * 4); /* 2000ms — the running mark's breath */
+  --ease-entry: var(--e-in);
+  --ease-exit: var(--e-out);
   --ease-toggle: var(--e-toggle);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root { --motion-instant: 0ms; --motion-fast: 0ms; --motion-base: 0ms; --motion-slow: 0ms; --breath: 0ms; }
-  *, *::before, *::after {
+  :root {
+    --motion-instant: 0ms;
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-slow: 0ms;
+    --breath: 0ms;
+  }
+  *,
+  *::before,
+  *::after {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;

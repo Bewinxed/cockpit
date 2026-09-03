@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { IconAgent, IconSparkles, IconSpinner } from '$lib/icons';
-  import { Handle, Position, useStore } from '@xyflow/svelte';
-  import { Markdown } from '$lib/components/ui/markdown';
-  import type { Message } from '$lib/whiffle/types';
+  import { Handle, Position, useStore } from "@xyflow/svelte";
+  import { Markdown } from "$lib/components/ui/markdown";
+  import { IconAgent, IconSparkles, IconSpinner } from "$lib/icons";
+  import type { Message } from "$lib/whiffle/types";
 
   // Props passed by SvelteFlow
   let { data } = $props<{
@@ -24,33 +24,33 @@
 
   // Semantic zoom levels
   const zoomLevel = $derived(
-    zoom < 0.5 ? 'overview' :
-    zoom < 1.0 ? 'summary' :
-    'detail'
+    zoom < 0.5 ? "overview" : zoom < 1.0 ? "summary" : "detail"
   );
 
   const isStreaming = $derived(Boolean(data?.isStreaming));
-  const streamingText = $derived(data?.streamingText ?? '');
+  const streamingText = $derived(data?.streamingText ?? "");
 
   // Display content: use streaming text if available, otherwise message content
   const displayContent = $derived(
     isStreaming && streamingText
       ? streamingText
-      : (data?.content || data?.message?.content || '') as string
+      : ((data?.content || data?.message?.content || "") as string)
   );
 
-  const firstLine = $derived(displayContent.split('\n')[0].slice(0, 80));
-  const model = $derived(data?.model || data?.message?.metadata?.model || '');
+  const firstLine = $derived(displayContent.split("\n")[0].slice(0, 80));
+  const model = $derived(data?.model || data?.message?.metadata?.model || "");
   const timestamp = $derived(
     data?.message?.timestamp
       ? new Date(data.message.timestamp).toLocaleTimeString()
-      : ''
+      : ""
   );
 </script>
 
-<Handle type="target" position={Position.Top} class="!bg-primary" />
+<Handle class="!bg-primary" position={Position.Top} type="target" />
 
-<div class="assistant-message-node rounded-[var(--radius-card)] shadow-sm {isStreaming ? 'animate-pulse' : ''} bg-card p-3 w-[320px]">
+<div
+  class="assistant-message-node rounded-[var(--radius-card)] shadow-sm {isStreaming ? 'animate-pulse' : ''} bg-card p-3 w-[320px]"
+>
   {#if zoomLevel === 'overview'}
     <div class="flex items-center justify-center gap-2">
       <div class="rounded-full bg-primary/20 text-primary p-2">
@@ -63,9 +63,13 @@
   {:else if zoomLevel === 'summary'}
     <div class="flex items-center gap-2">
       <IconAgent class="h-4 w-4 text-primary shrink-0" />
-      <span class="text-sm truncate text-foreground">{firstLine}{firstLine.length >= 80 ? '...' : ''}</span>
+      <span class="text-sm truncate text-foreground"
+        >{firstLine}{firstLine.length >= 80 ? '...' : ''}</span
+      >
       {#if isStreaming}
-        <IconSpinner class="h-3 w-3 text-primary animate-spin ml-auto shrink-0" />
+        <IconSpinner
+          class="h-3 w-3 text-primary animate-spin ml-auto shrink-0"
+        />
       {/if}
     </div>
   {:else}
@@ -75,13 +79,18 @@
         <div class="flex items-center gap-2 mb-1">
           <span class="text-xs text-muted-foreground">Claude</span>
           {#if model}
-            <span class="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary text-primary">{model}</span>
+            <span
+              class="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary"
+              >{model}</span
+            >
           {/if}
         </div>
         <div class="text-sm">
           <Markdown source={displayContent} />
           {#if isStreaming}
-            <span class="inline-block w-0.5 h-4 bg-primary text-primary-foreground ml-0.5 animate-pulse"></span>
+            <span
+              class="inline-block w-0.5 h-4 bg-primary text-primary-foreground ml-0.5 animate-pulse"
+            ></span>
           {/if}
         </div>
         {#if timestamp && !isStreaming}
@@ -92,4 +101,4 @@
   {/if}
 </div>
 
-<Handle type="source" position={Position.Bottom} class="!bg-primary" />
+<Handle class="!bg-primary" position={Position.Bottom} type="source" />

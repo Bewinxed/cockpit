@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { existsSync } from "node:fs";
 /**
  * Builds the one thing a user installs.
  *
@@ -19,32 +20,37 @@
  * carries the hub's websocket through it (`serve.js`), because the board
  * without its socket is a page that loads and never connects.
  */
-import { mkdir, rm, cp, writeFile, readFile, chmod } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { chmod, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
-const ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
-const OUT = join(ROOT, 'release');
+const ROOT = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
+const OUT = join(ROOT, "release");
 const say = (line) => console.log(`build-release: ${line}`);
 
 /** Everything that is genuinely somebody else's, kept external. */
 const externals = async () => {
   const names = new Set();
-  for (const pkg of ['cli', 'agent', 'hub', 'core', 'auth', 'sessiond']) {
-    const path = join(ROOT, 'packages', pkg, 'package.json');
-    if (!existsSync(path)) continue;
-    const json = JSON.parse(await readFile(path, 'utf8'));
+  for (const pkg of ["cli", "agent", "hub", "core", "auth", "sessiond"]) {
+    const path = join(ROOT, "packages", pkg, "package.json");
+    if (!existsSync(path)) {
+      continue;
+    }
+    const json = JSON.parse(await readFile(path, "utf8"));
     for (const dep of Object.keys(json.dependencies ?? {})) {
-      if (!dep.startsWith('@whiffle/')) names.add(dep);
+      if (!dep.startsWith("@whiffle/")) {
+        names.add(dep);
+      }
     }
   }
   return [...names].sort();
 };
 
 const run = async (cmd, cwd = ROOT) => {
-  const proc = Bun.spawn(cmd, { cwd, stdout: 'inherit', stderr: 'inherit' });
+  const proc = Bun.spawn(cmd, { cwd, stdout: "inherit", stderr: "inherit" });
   const code = await proc.exited;
-  if (code !== 0) throw new Error(`${cmd.join(' ')} exited ${code}`);
+  if (code !== 0) {
+    throw new Error(`${cmd.join(" ")} exited ${code}`);
+  }
 };
 
 await rm(OUT, { recursive: true, force: true });
@@ -54,27 +60,42 @@ const external = await externals();
 say(`${external.length} dependencies stay external`);
 
 // 1. The CLI, with every @whiffle/* package folded in.
-say('bundling the cli');
-const cliPkgEarly = JSON.parse(await readFile(join(ROOT, 'packages/cli/package.json'), 'utf8'));
+say("bundling the cli");
+const cliPkgEarly = JSON.parse(
+  await readFile(join(ROOT, "packages/cli/package.json"), "utf8")
+);
 await run([
-  'bun', 'build', join(ROOT, 'packages/cli/src/cli.ts'),
-  '--target', 'bun',
-  '--outfile', join(OUT, 'cli.js'),
+  "bun",
+  "build",
+  join(ROOT, "packages/cli/src/cli.ts"),
+  "--target",
+  "bun",
+  "--outfile",
+  join(OUT, "cli.js"),
   // The binary reports the manifest's version, so `whiffle --version` and the
   // published package can never disagree about what this is.
-  '--define', `__WHIFFLE_VERSION__=${JSON.stringify(cliPkgEarly.version)}`,
-  ...external.flatMap((name) => ['--external', name]),
+  "--define",
+  `__WHIFFLE_VERSION__=${JSON.stringify(cliPkgEarly.version)}`,
+  ...external.flatMap((name) => ["--external", name]),
 ]);
-const cli = await readFile(join(OUT, 'cli.js'), 'utf8');
-await writeFile(join(OUT, 'cli.js'), `#!/usr/bin/env bun\n${cli.replace(/^#!.*\n/, '')}`);
-await chmod(join(OUT, 'cli.js'), 0o755);
+const cli = await readFile(join(OUT, "cli.js"), "utf8");
+await writeFile(
+  join(OUT, "cli.js"),
+  `#!/usr/bin/env bun\n${cli.replace(/^#!.*\n/, "")}`
+);
+await chmod(join(OUT, "cli.js"), 0o755);
 
 // 2. The dashboard, built and carried whole.
-say('building the dashboard');
-await run(['bun', 'run', '--filter', '@whiffle/dashboard', 'build']);
-await mkdir(join(OUT, 'dashboard'), { recursive: true });
-await cp(join(ROOT, 'apps/dashboard/build'), join(OUT, 'dashboard/build'), { recursive: true });
-await cp(join(ROOT, 'apps/dashboard/serve.js'), join(OUT, 'dashboard/serve.js'));
+say("building the dashboard");
+await run(["bun", "run", "--filter", "@whiffle/dashboard", "build"]);
+await mkdir(join(OUT, "dashboard"), { recursive: true });
+await cp(join(ROOT, "apps/dashboard/build"), join(OUT, "dashboard/build"), {
+  recursive: true,
+});
+await cp(
+  join(ROOT, "apps/dashboard/serve.js"),
+  join(OUT, "dashboard/serve.js")
+);
 
 // 3. The manifest a user installs.
 /**
@@ -86,20 +107,26 @@ await cp(join(ROOT, 'apps/dashboard/serve.js'), join(OUT, 'dashboard/serve.js'))
  * pins what this build was actually tested against.
  */
 const resolved = async (name, asked) => {
-  if (/^[\^~]?\d/.test(asked)) return asked;
+  if (/^[\^~]?\d/.test(asked)) {
+    return asked;
+  }
   // Asked of the resolver rather than looked for on disk, because a bun store
   // can hold several versions of the same package and the answer that matters
   // is the one the code actually loads.
-  for (const from of ['packages/hub', 'packages/agent', 'packages/cli', '.']) {
+  for (const from of ["packages/hub", "packages/agent", "packages/cli", "."]) {
     try {
       const entry = Bun.resolveSync(name, join(ROOT, from));
       let dir = entry;
       for (let up = 0; up < 8; up += 1) {
-        dir = join(dir, '..');
-        const manifest = join(dir, 'package.json');
-        if (!existsSync(manifest)) continue;
-        const json = JSON.parse(await readFile(manifest, 'utf8'));
-        if (json.name === name && typeof json.version === 'string') return json.version;
+        dir = join(dir, "..");
+        const manifest = join(dir, "package.json");
+        if (!existsSync(manifest)) {
+          continue;
+        }
+        const json = JSON.parse(await readFile(manifest, "utf8"));
+        if (json.name === name && typeof json.version === "string") {
+          return json.version;
+        }
       }
     } catch {
       // Try the next vantage point.
@@ -109,32 +136,40 @@ const resolved = async (name, asked) => {
   return asked;
 };
 
-const root = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'));
-const cliPkg = JSON.parse(await readFile(join(ROOT, 'packages/cli/package.json'), 'utf8'));
+const root = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8"));
+const cliPkg = JSON.parse(
+  await readFile(join(ROOT, "packages/cli/package.json"), "utf8")
+);
 const deps = {};
-for (const pkg of ['cli', 'agent', 'hub', 'core', 'auth', 'sessiond']) {
-  const path = join(ROOT, 'packages', pkg, 'package.json');
-  if (!existsSync(path)) continue;
-  const json = JSON.parse(await readFile(path, 'utf8'));
+for (const pkg of ["cli", "agent", "hub", "core", "auth", "sessiond"]) {
+  const path = join(ROOT, "packages", pkg, "package.json");
+  if (!existsSync(path)) {
+    continue;
+  }
+  const json = JSON.parse(await readFile(path, "utf8"));
   for (const [name, range] of Object.entries(json.dependencies ?? {})) {
-    if (!name.startsWith('@whiffle/')) deps[name] = await resolved(name, range);
+    if (!name.startsWith("@whiffle/")) {
+      deps[name] = await resolved(name, range);
+    }
   }
 }
 await writeFile(
-  join(OUT, 'package.json'),
+  join(OUT, "package.json"),
   `${JSON.stringify(
     {
-      name: 'whiffle',
+      name: "whiffle",
       version: cliPkg.version,
-      description: 'Self-hosted fleet control plane for AI coding agents',
-      license: root.license ?? 'MIT',
-      repository: root.repository ?? 'https://github.com/Bewinxed/whiffle',
-      type: 'module',
-      bin: { whiffle: './cli.js' },
-      files: ['cli.js', 'dashboard'],
-      engines: { bun: '>=1.4.0' },
-      dependencies: Object.fromEntries(Object.entries(deps).sort(([a], [b]) => a.localeCompare(b))),
-      publishConfig: { access: 'public', provenance: true },
+      description: "Self-hosted fleet control plane for AI coding agents",
+      license: root.license ?? "MIT",
+      repository: root.repository ?? "https://github.com/Bewinxed/whiffle",
+      type: "module",
+      bin: { whiffle: "./cli.js" },
+      files: ["cli.js", "dashboard"],
+      engines: { bun: ">=1.4.0" },
+      dependencies: Object.fromEntries(
+        Object.entries(deps).sort(([a], [b]) => a.localeCompare(b))
+      ),
+      publishConfig: { access: "public", provenance: true },
     },
     null,
     2

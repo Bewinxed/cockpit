@@ -15,30 +15,36 @@ import type {
   SessionPulse,
   SlashCommand,
   UserQuestionResult,
-} from '@whiffle/core';
-import { MESSAGE_DEQUEUED, MESSAGE_QUEUED } from '@whiffle/core';
-import type { SubagentState } from '$lib/utils/flow-types';
-import { getToolGlance } from '$lib/utils/tool-display';
-import type { DelegateEvent, JsonValue, Message, MessageMetadata, MessageType } from './types';
-import { newId } from './id';
+} from "@whiffle/core";
+import { MESSAGE_DEQUEUED, MESSAGE_QUEUED } from "@whiffle/core";
+import type { SubagentState } from "$lib/utils/flow-types";
+import { getToolGlance } from "$lib/utils/tool-display";
+import { newId } from "./id";
+import type {
+  DelegateEvent,
+  JsonValue,
+  Message,
+  MessageMetadata,
+  MessageType,
+} from "./types";
 
-type AssistantBlock = SDKAssistantMessage['message']['content'][number];
+type AssistantBlock = SDKAssistantMessage["message"]["content"][number];
 
 /** A tool result to fold into the `tool.use` message that opened it. */
 export interface ToolResult {
-  toolId: string;
-  result: string;
   isError: boolean;
-  structuredContent?: Record<string, unknown>;
   /** The answer payload of an `AskUserQuestion`, normalised by the harness adapter. */
   questionResult?: UserQuestionResult;
+  result: string;
+  structuredContent?: Record<string, unknown>;
+  toolId: string;
 }
 
 /** The tool a session is running right now — the fleet view's glance line. */
 export interface ToolGlance {
-  toolId: string;
-  name: string;
   glance: string;
+  name: string;
+  toolId: string;
 }
 
 /**
@@ -48,30 +54,63 @@ export interface ToolGlance {
  * a `task_id` instead, so a branch remembers both.
  */
 export interface BranchEvent {
-  toolUseId?: string;
-  taskId?: string;
-  subagentType?: string;
   description?: string;
-  status?: SubagentState['status'];
-  /** `agentProgressSummaries`' present-tense line, when enabled. */
-  summary?: string;
   lastToolName?: string;
-  result?: string;
   /** Requested alias from the spawn input, or the wire id an assistant frame answered with. */
   model?: string;
+  result?: string;
+  status?: SubagentState["status"];
+  subagentType?: string;
+  /** `agentProgressSummaries`' present-tense line, when enabled. */
+  summary?: string;
+  taskId?: string;
+  toolUseId?: string;
 }
 
 export interface FrameMapping {
-  /** Appended to the transcript, in order. */
-  messages: Message[];
-  toolResults: ToolResult[];
   /**
    * The subagent branch `messages` and `toolResults` belong to. Absent means the
    * main transcript.
    */
   agentId?: string;
+  /**
+   * Which kind of content block the main loop just opened, from the partials —
+   * the only evidence there is of what the model is doing *while* it does it.
+   * A `thinking` start covers the redacted variant too: it streams no deltas,
+   * and a block whose reasoning is withheld is still a block being reasoned in.
+   */
+  blockStart?: "thinking" | "text" | "tool";
+  /** The open block closed. */
+  blockStop?: boolean;
   /** A subagent branch's lifecycle, moved by this frame. */
   branch?: BranchEvent;
+  /** The streaming buffer has been superseded by a final message. */
+  clearsStream: boolean;
+  /**
+   * The whole `/` menu again, pushed when what is on disk changed mid-session.
+   * The SDK sends the full list, so it replaces the cache rather than adding to
+   * it — a skill that was deleted has to leave the menu too.
+   */
+  commands?: SlashCommand[];
+  /** How a compaction ended, on the `status` frame that closes it. */
+  compaction?: { result: "success" | "failed"; error?: string };
+  /**
+   * The cumulative cost a `result` frame reported, in dollars. Carried on every
+   * result regardless of subtype, because only error results push a transcript
+   * line and the session needs the number from a successful turn too.
+   */
+  cost?: number;
+  /** The tool that just went in flight on the main loop. */
+  currentTool?: ToolGlance;
+  /** Text to append to the instance's streaming buffer. */
+  delta: string;
+  /**
+   * The id of a queue entry that is no longer waiting: the session pulled it.
+   * Its real turn arrives a moment later carrying the same id on
+   * {@link FrameMapping.echo} — either retires the row, because a dequeue frame
+   * can be raced by the turn it announces, or lost with a dropped subscription.
+   */
+  dequeued?: string;
   /**
    * The main loop's own user turn, which the local copy already renders. The
    * copy is pushed without an SDK uuid — this is that uuid, so the store can
@@ -79,6 +118,15 @@ export interface FrameMapping {
    * instead of waiting for a transcript re-read.
    */
   echo?: { uuid: string; text: string; queueId?: string };
+  /** The turn is over — the session is idle again. */
+  endsTurn: boolean;
+  /**
+   * The turn the `result` frame closes answered with an error, whatever its
+   * subtype claims. The SDK's own flag — not a reading of what was said.
+   */
+  failedTurn?: boolean;
+  /** Appended to the transcript, in order. */
+  messages: Message[];
   /**
    * A message the session took but was too busy to start — the daemon's own
    * word on its input queue, which used to be private to the harness. The
@@ -87,30 +135,20 @@ export interface FrameMapping {
    */
   queued?: QueuedMessage;
   /**
-   * The id of a queue entry that is no longer waiting: the session pulled it.
-   * Its real turn arrives a moment later carrying the same id on
-   * {@link FrameMapping.echo} — either retires the row, because a dequeue frame
-   * can be raced by the turn it announces, or lost with a dropped subscription.
+   * What the session says it is doing right now: `compacting` while it rewrites
+   * its own context, `requesting` while it waits on the model, `null` when it
+   * has stopped saying. The only live word on a compaction — `compact_boundary`
+   * arrives once the work is already done.
    */
-  dequeued?: string;
-  /** The tool that just went in flight on the main loop. */
-  currentTool?: ToolGlance;
-  /**
-   * Which kind of content block the main loop just opened, from the partials —
-   * the only evidence there is of what the model is doing *while* it does it.
-   * A `thinking` start covers the redacted variant too: it streams no deltas,
-   * and a block whose reasoning is withheld is still a block being reasoned in.
-   */
-  blockStart?: 'thinking' | 'text' | 'tool';
-  /** Reasoning the open thinking block just streamed. */
-  thinkingDelta?: string;
+  status?: SDKStatus;
   /**
    * The SDK signing the open thinking block — its own word that the reasoning
    * is wrapping up, rather than a guess made from how long it has been going.
    */
   thinkingClosing?: boolean;
-  /** The open block closed. */
-  blockStop?: boolean;
+  /** Reasoning the open thinking block just streamed. */
+  thinkingDelta?: string;
+  toolResults: ToolResult[];
   /**
    * A tool call the model has started writing, before any frame carries its
    * input. The glance is empty on purpose: the arguments are still arriving a
@@ -118,48 +156,16 @@ export interface FrameMapping {
    * one.
    */
   toolStarting?: ToolGlance;
-  /** Text to append to the instance's streaming buffer. */
-  delta: string;
-  /** The streaming buffer has been superseded by a final message. */
-  clearsStream: boolean;
-  /** The turn is over — the session is idle again. */
-  endsTurn: boolean;
-  /**
-   * What the session says it is doing right now: `compacting` while it rewrites
-   * its own context, `requesting` while it waits on the model, `null` when it
-   * has stopped saying. The only live word on a compaction — `compact_boundary`
-   * arrives once the work is already done.
-   */
-  status?: SDKStatus;
-  /** How a compaction ended, on the `status` frame that closes it. */
-  compaction?: { result: 'success' | 'failed'; error?: string };
-  /**
-   * The whole `/` menu again, pushed when what is on disk changed mid-session.
-   * The SDK sends the full list, so it replaces the cache rather than adding to
-   * it — a skill that was deleted has to leave the menu too.
-   */
-  commands?: SlashCommand[];
-  /**
-   * The turn the `result` frame closes answered with an error, whatever its
-   * subtype claims. The SDK's own flag — not a reading of what was said.
-   */
-  failedTurn?: boolean;
-  /**
-   * The cumulative cost a `result` frame reported, in dollars. Carried on every
-   * result regardless of subtype, because only error results push a transcript
-   * line and the session needs the number from a successful turn too.
-   */
-  cost?: number;
 }
 
 /** `task_updated`'s wire statuses, in the vocabulary the branch card renders. */
-const TASK_STATUS: Record<string, SubagentState['status']> = {
-  pending: 'starting',
-  running: 'running',
-  paused: 'running',
-  completed: 'complete',
-  failed: 'error',
-  killed: 'error',
+const TASK_STATUS: Record<string, SubagentState["status"]> = {
+  pending: "starting",
+  running: "running",
+  paused: "running",
+  completed: "complete",
+  failed: "error",
+  killed: "error",
 };
 
 /**
@@ -168,15 +174,15 @@ const TASK_STATUS: Record<string, SubagentState['status']> = {
  * degrades to a generic system line rather than disappearing silently.
  */
 const QUIET = new Set([
-  'tool_progress',
-  'control_request_progress',
-  'thinking_tokens',
-  'session_state_changed',
-  'background_tasks_changed',
-  'files_persisted',
-  'rate_limit_event',
+  "tool_progress",
+  "control_request_progress",
+  "thinking_tokens",
+  "session_state_changed",
+  "background_tasks_changed",
+  "files_persisted",
+  "rate_limit_event",
   // MCP server auth plumbing — the MCP status panel shows failures.
-  'auth_status',
+  "auth_status",
   // The input queue moving. Both are session STATE, drawn as a pending row
   // after the live tail — a transcript line for each would narrate the reader's
   // own send back at them, twice.
@@ -193,12 +199,22 @@ const QUIET = new Set([
 const modelFallback = (sdk: {
   subtype: string;
 }): { content: string; model: string } | null => {
-  const frame = sdk as { subtype: string; content?: unknown; fallback_model?: unknown };
-  if (frame.subtype !== 'model_fallback') return null;
-  if (typeof frame.content !== 'string' || typeof frame.fallback_model !== 'string') return null;
+  const frame = sdk as {
+    subtype: string;
+    content?: unknown;
+    fallback_model?: unknown;
+  };
+  if (frame.subtype !== "model_fallback") {
+    return null;
+  }
+  if (
+    typeof frame.content !== "string" ||
+    typeof frame.fallback_model !== "string"
+  ) {
+    return null;
+  }
   return { content: frame.content, model: frame.fallback_model };
 };
-
 
 /**
  * What a partial says about the phase of the turn, beyond the text delta that
@@ -220,45 +236,70 @@ export function streamPhase(
   event: { type: string; content_block?: unknown; delta?: unknown },
   agentId?: string
 ): Partial<FrameMapping> | null {
-  if (agentId) return null;
-  if (event.type === 'content_block_stop') return { blockStop: true };
+  if (agentId) {
+    return null;
+  }
+  if (event.type === "content_block_stop") {
+    return { blockStop: true };
+  }
 
-  if (event.type === 'content_block_start') {
-    if (typeof event.content_block !== 'object' || event.content_block === null) return null;
-    const block = event.content_block as { type?: unknown; id?: unknown; name?: unknown };
-    // Redacted reasoning streams no deltas at all, and is still reasoning.
-    if (block.type === 'thinking' || block.type === 'redacted_thinking') {
-      return { blockStart: 'thinking' };
+  if (event.type === "content_block_start") {
+    if (
+      typeof event.content_block !== "object" ||
+      event.content_block === null
+    ) {
+      return null;
     }
-    if (block.type === 'text') return { blockStart: 'text' };
-    if (block.type === 'tool_use' && typeof block.id === 'string' && typeof block.name === 'string') {
+    const block = event.content_block as {
+      type?: unknown;
+      id?: unknown;
+      name?: unknown;
+    };
+    // Redacted reasoning streams no deltas at all, and is still reasoning.
+    if (block.type === "thinking" || block.type === "redacted_thinking") {
+      return { blockStart: "thinking" };
+    }
+    if (block.type === "text") {
+      return { blockStart: "text" };
+    }
+    if (
+      block.type === "tool_use" &&
+      typeof block.id === "string" &&
+      typeof block.name === "string"
+    ) {
       return {
-        blockStart: 'tool',
-        toolStarting: { toolId: block.id, name: block.name, glance: '' },
+        blockStart: "tool",
+        toolStarting: { toolId: block.id, name: block.name, glance: "" },
       };
     }
     return null;
   }
 
-  if (event.type !== 'content_block_delta') return null;
-  if (typeof event.delta !== 'object' || event.delta === null) return null;
+  if (event.type !== "content_block_delta") {
+    return null;
+  }
+  if (typeof event.delta !== "object" || event.delta === null) {
+    return null;
+  }
   const delta = event.delta as { type?: unknown; thinking?: unknown };
-  if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
+  if (delta.type === "thinking_delta" && typeof delta.thinking === "string") {
     return { thinkingDelta: delta.thinking };
   }
-  if (delta.type === 'signature_delta') return { thinkingClosing: true };
+  if (delta.type === "signature_delta") {
+    return { thinkingClosing: true };
+  }
   return null;
 }
 
 /** The fleet tools whose calls are shown as hand-offs rather than tool cards. */
-const HANDOFF_TOOLS: Record<string, 'handoff' | 'start' | 'delegate'> = {
-  mcp__whiffle__handoff: 'handoff',
-  mcp__whiffle__start_session: 'start',
-  mcp__whiffle__delegate: 'delegate',
+const HANDOFF_TOOLS: Record<string, "handoff" | "start" | "delegate"> = {
+  mcp__whiffle__handoff: "handoff",
+  mcp__whiffle__start_session: "start",
+  mcp__whiffle__delegate: "delegate",
   // pi registers the same tools under bare names (no MCP namespace).
-  handoff: 'handoff',
-  start_session: 'start',
-  delegate: 'delegate',
+  handoff: "handoff",
+  start_session: "start",
+  delegate: "delegate",
 };
 
 /**
@@ -269,92 +310,114 @@ const HANDOFF_TOOLS: Record<string, 'handoff' | 'start' | 'delegate'> = {
  * needs no store type and stays testable on its own.
  */
 export function routedToParent(request: { routedTo?: string }): boolean {
-  return request.routedTo === 'parent';
+  return request.routedTo === "parent";
 }
 
 const empty = (): FrameMapping => ({
   messages: [],
   toolResults: [],
-  delta: '',
+  delta: "",
   clearsStream: false,
   endsTurn: false,
 });
 
-const uuidOf = (sdk: SDKMessage): string | undefined => ('uuid' in sdk ? sdk.uuid : undefined);
+const uuidOf = (sdk: SDKMessage): string | undefined =>
+  "uuid" in sdk ? sdk.uuid : undefined;
 
 const parentOf = (sdk: SDKMessage): string | undefined =>
-  'parent_tool_use_id' in sdk ? (sdk.parent_tool_use_id ?? undefined) : undefined;
+  "parent_tool_use_id" in sdk
+    ? (sdk.parent_tool_use_id ?? undefined)
+    : undefined;
 
 /** Tool results arrive as text blocks far more often than as a plain string. */
 function resultText(content: unknown): string {
-  if (typeof content === 'string') return content;
+  if (typeof content === "string") {
+    return content;
+  }
   if (Array.isArray(content)) {
     return content
       .map((block: unknown) =>
-        typeof block === 'object' && block !== null && 'text' in block ? String(block.text) : ''
+        typeof block === "object" && block !== null && "text" in block
+          ? String(block.text)
+          : ""
       )
       .filter(Boolean)
-      .join('\n');
+      .join("\n");
   }
-  return content === undefined || content === null ? '' : JSON.stringify(content);
+  return content === undefined || content === null
+    ? ""
+    : JSON.stringify(content);
 }
 
 function blockToMessage(
   block: AssistantBlock,
-  base: Omit<Message, 'type' | 'content'>
+  base: Omit<Message, "type" | "content">
 ): Message | null {
   switch (block.type) {
-    case 'text':
-      return { ...base, type: 'assistant', content: block.text };
-    case 'thinking':
+    case "text":
+      return { ...base, type: "assistant", content: block.text };
+    case "thinking":
       // Signature-only blocks carry no reasoning to show.
-      if (!block.thinking) return null;
+      if (!block.thinking) {
+        return null;
+      }
       return {
         ...base,
-        type: 'thinking',
+        type: "thinking",
         content: block.thinking,
-        metadata: { thinking: block.thinking, thinkingSignature: block.signature },
+        metadata: {
+          thinking: block.thinking,
+          thinkingSignature: block.signature,
+        },
       };
-    case 'redacted_thinking':
+    case "redacted_thinking":
       return {
         ...base,
-        type: 'thinking',
-        content: '',
+        type: "thinking",
+        content: "",
         metadata: { isRedactedThinking: true },
       };
-    case 'tool_use': {
+    case "tool_use": {
       // A hand-off is not a tool call to read like the others: it is this
       // session addressing another one, and the sender needs to see that it
       // left. Recognised by the tool's name — structured, not by its text.
       const handoff = HANDOFF_TOOLS[block.name];
       if (handoff) {
-        const input = (block.input ?? {}) as { target?: unknown; cwd?: unknown; prompt?: unknown };
+        const input = (block.input ?? {}) as {
+          target?: unknown;
+          cwd?: unknown;
+          prompt?: unknown;
+        };
         return {
           ...base,
-          type: 'tool.handoff',
-          content: String(input.target ?? input.cwd ?? ''),
+          type: "tool.handoff",
+          content: String(input.target ?? input.cwd ?? ""),
           toolCallId: block.id,
           metadata: {
             toolId: block.id,
             toolName: block.name,
-            toolInput: block.input as MessageMetadata['toolInput'],
-            toolStatus: 'pending',
+            toolInput: block.input as MessageMetadata["toolInput"],
+            toolStatus: "pending",
             handoffKind: handoff,
-            handoffBrief: String(input.prompt ?? (block.input as { message?: unknown })?.message ?? ''),
+            handoffBrief: String(
+              input.prompt ??
+                (block.input as { message?: unknown })?.message ??
+                ""
+            ),
           },
         };
       }
       const spawn = subagentSpawn(block.input);
       return {
         ...base,
-        type: 'tool.use',
+        type: "tool.use",
         content: block.name,
         toolCallId: block.id,
         metadata: {
           toolId: block.id,
           toolName: block.name,
-          toolInput: block.input as MessageMetadata['toolInput'],
-          toolStatus: 'pending',
+          toolInput: block.input as MessageMetadata["toolInput"],
+          toolStatus: "pending",
           subagentType: spawn?.subagentType,
           subagentDescription: spawn?.description,
           subagentModel: spawn?.model,
@@ -374,13 +437,21 @@ function blockToMessage(
 function subagentSpawn(
   input: unknown
 ): { subagentType: string; description?: string; model?: string } | null {
-  if (typeof input !== 'object' || input === null) return null;
-  const { subagent_type: type, description, model } = input as Record<string, unknown>;
-  if (typeof type !== 'string') return null;
+  if (typeof input !== "object" || input === null) {
+    return null;
+  }
+  const {
+    subagent_type: type,
+    description,
+    model,
+  } = input as Record<string, unknown>;
+  if (typeof type !== "string") {
+    return null;
+  }
   return {
     subagentType: type,
-    description: typeof description === 'string' ? description : undefined,
-    model: typeof model === 'string' ? model : undefined,
+    description: typeof description === "string" ? description : undefined,
+    model: typeof model === "string" ? model : undefined,
   };
 }
 
@@ -395,13 +466,17 @@ function subagentSpawn(
  */
 function subagentLaunch(result: string): boolean {
   const head = result.trimStart().slice(0, 200);
-  if (head.startsWith('Async agent launched')) return true;
-  if (head.startsWith('(This tool result is internal metadata')) return true;
-  return result.includes('agentId:') && result.includes('output_file:');
+  if (head.startsWith("Async agent launched")) {
+    return true;
+  }
+  if (head.startsWith("(This tool result is internal metadata")) {
+    return true;
+  }
+  return result.includes("agentId:") && result.includes("output_file:");
 }
 
 function systemLine(
-  base: Omit<Message, 'type' | 'content'>,
+  base: Omit<Message, "type" | "content">,
   type: MessageType,
   content: string,
   metadata?: MessageMetadata
@@ -412,8 +487,12 @@ function systemLine(
 /** A task summary folded into the ~200-char line metadata. */
 const TASK_SUMMARY_LIMIT = 200;
 function truncateSummary(summary: string | undefined): string {
-  if (!summary) return '';
-  return summary.length > TASK_SUMMARY_LIMIT ? `${summary.slice(0, TASK_SUMMARY_LIMIT)}…` : summary;
+  if (!summary) {
+    return "";
+  }
+  return summary.length > TASK_SUMMARY_LIMIT
+    ? `${summary.slice(0, TASK_SUMMARY_LIMIT)}…`
+    : summary;
 }
 
 /** What one SDK frame does to an instance's UI state. */
@@ -425,7 +504,7 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
   // attribution the tree is built from — not `parent_agent_id`, which only ever
   // names a *grandparent* and is always null at the SDK's depth cap of 1.
   const agentId = parentOf(sdk);
-  const base: Omit<Message, 'type' | 'content'> = {
+  const base: Omit<Message, "type" | "content"> = {
     id: uuid ?? newId(),
     instanceId,
     timestamp: new Date(),
@@ -435,11 +514,18 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
   mapping.agentId = agentId;
 
   switch (sdk.type) {
-    case 'assistant': {
+    case "assistant": {
       sdk.message.content.forEach((block, index) => {
-        const message = blockToMessage(block, { ...base, id: `${base.id}:${index}` });
-        if (message) mapping.messages.push(message);
-        if (block.type !== 'tool_use' || agentId) return;
+        const message = blockToMessage(block, {
+          ...base,
+          id: `${base.id}:${index}`,
+        });
+        if (message) {
+          mapping.messages.push(message);
+        }
+        if (block.type !== "tool_use" || agentId) {
+          return;
+        }
         mapping.currentTool = {
           toolId: block.id,
           name: block.name,
@@ -447,12 +533,16 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
         };
         const spawn = subagentSpawn(block.input);
         if (spawn) {
-          mapping.branch = { toolUseId: block.id, ...spawn, status: 'starting' };
+          mapping.branch = {
+            toolUseId: block.id,
+            ...spawn,
+            status: "starting",
+          };
         }
       });
       // The forwarded frame names the model that actually answered — ground truth
       // over whatever alias the spawn input asked for.
-      if (agentId && typeof sdk.message.model === 'string') {
+      if (agentId && typeof sdk.message.model === "string") {
         mapping.branch = { toolUseId: agentId, model: sdk.message.model };
       }
       // The final message supersedes whatever the partials painted.
@@ -460,7 +550,7 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       break;
     }
 
-    case 'user': {
+    case "user": {
       const content = sdk.message.content;
       // A subagent's opening prompt has no local copy to render from, and it is
       // the first thing its branch should say. The main loop's own text does
@@ -474,17 +564,22 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       // is no local copy — and it must not read as the reader's own sentence.
       // It borrows the peer machinery for exactly that reason, minus the
       // session ids, so no delegate branch tries to claim it as its own.
-      const rule = 'origin' in sdk && sdk.origin?.kind === 'system' ? sdk.origin : null;
+      const rule =
+        "origin" in sdk && sdk.origin?.kind === "system" ? sdk.origin : null;
       if (rule && text) {
         mapping.messages.push({
           ...base,
-          type: 'user.peer',
+          type: "user.peer",
           content: text,
-          metadata: { peerName: ruleLabel(rule.name), ruleName: ruleLabel(rule.name) },
+          metadata: {
+            peerName: ruleLabel(rule.name),
+            ruleName: ruleLabel(rule.name),
+          },
         });
         break;
       }
-      const peer = 'origin' in sdk && sdk.origin?.kind === 'peer' ? sdk.origin : null;
+      const peer =
+        "origin" in sdk && sdk.origin?.kind === "peer" ? sdk.origin : null;
       if (peer && text) {
         // A delegate's routed ask is peer-origin too, but it is plumbing rather
         // than speech: the marker carries the delegate's ids, and the body is
@@ -494,7 +589,7 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
         if (ask) {
           mapping.messages.push({
             ...base,
-            type: 'user.delegate_ask',
+            type: "user.delegate_ask",
             content: ask.body,
             metadata: {
               peerFrom: peer.from,
@@ -512,20 +607,20 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
         if (report) {
           mapping.messages.push({
             ...base,
-            type: 'user.peer',
+            type: "user.peer",
             content: report.body,
             metadata: {
               peerFrom: peer.from,
               peerName: `${report.name}#${report.short}`,
               peerSession: peer.fromSession ?? report.short,
-              reportKind: report.failed ? 'failed' : 'report',
+              reportKind: report.failed ? "failed" : "report",
             },
           });
           break;
         }
         mapping.messages.push({
           ...base,
-          type: 'user.peer',
+          type: "user.peer",
           content: peer.body ?? text,
           metadata: {
             peerFrom: peer.from,
@@ -548,7 +643,7 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
           if (ask) {
             mapping.messages.push({
               ...base,
-              type: 'user.delegate_ask',
+              type: "user.delegate_ask",
               content: ask.body,
               metadata: {
                 peerSession: ask.instance,
@@ -562,12 +657,12 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
           if (report) {
             mapping.messages.push({
               ...base,
-              type: 'user.peer',
+              type: "user.peer",
               content: report.body,
               metadata: {
                 peerName: `${report.name}#${report.short}`,
                 peerSession: report.short,
-                reportKind: report.failed ? 'failed' : 'report',
+                reportKind: report.failed ? "failed" : "report",
               },
             });
             break;
@@ -576,7 +671,7 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
           if (peerName) {
             mapping.messages.push({
               ...base,
-              type: 'user.peer',
+              type: "user.peer",
               content: inner,
               metadata: { peerName },
             });
@@ -590,26 +685,36 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       // this one is pushed rather than echoed. The id rides along on `echo`
       // too: retiring the row is what the store does with it, and it happens
       // whether or not the `message_dequeued` frame arrived first.
-      const queueId = 'queueId' in sdk ? sdk.queueId : undefined;
+      const queueId = "queueId" in sdk ? sdk.queueId : undefined;
       if (text && (agentId || systemNote(text))) {
-        mapping.messages.push({ ...base, ...userBody(text, transcriptUserImages(sdk.message)) });
+        mapping.messages.push({
+          ...base,
+          ...userBody(text, transcriptUserImages(sdk.message)),
+        });
       } else if (text && uuid && !agentId && queueId) {
-        mapping.messages.push({ ...base, ...userBody(text, transcriptUserImages(sdk.message)) });
+        mapping.messages.push({
+          ...base,
+          ...userBody(text, transcriptUserImages(sdk.message)),
+        });
         mapping.echo = { uuid, text, queueId };
       } else if (text && uuid && !agentId) {
         // The human's own turn: rendered by the local copy, so nothing is
         // pushed — but the copy has no SDK uuid until now.
         mapping.echo = { uuid, text };
       }
-      if (typeof content === 'string') break;
+      if (typeof content === "string") {
+        break;
+      }
       for (const block of content) {
-        if (block.type !== 'tool_result') continue;
+        if (block.type !== "tool_result") {
+          continue;
+        }
         const text = resultText(block.content);
         // A launch is not a report. It says the delegate started, so that is all
         // it does here: the branch moves to running and the metadata stops —
         // it never reaches a `result`, a message, or the card.
         if (subagentLaunch(text)) {
-          mapping.branch = { toolUseId: block.tool_use_id, status: 'running' };
+          mapping.branch = { toolUseId: block.tool_use_id, status: "running" };
           continue;
         }
         mapping.toolResults.push({
@@ -623,19 +728,24 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       break;
     }
 
-    case 'stream_event': {
+    case "stream_event": {
       const event = sdk.event;
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+      if (
+        event.type === "content_block_delta" &&
+        event.delta.type === "text_delta"
+      ) {
         mapping.delta = event.delta.text;
-      } else if (event.type === 'message_stop') {
+      } else if (event.type === "message_stop") {
         mapping.clearsStream = true;
       }
       const phase = streamPhase(event, agentId);
-      if (phase) Object.assign(mapping, phase);
+      if (phase) {
+        Object.assign(mapping, phase);
+      }
       break;
     }
 
-    case 'result': {
+    case "result": {
       mapping.clearsStream = true;
       mapping.endsTurn = true;
       // `subtype` is how the *run* ended; `is_error` is whether the turn did.
@@ -648,11 +758,13 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       // is the common one, and it reports cost too. `total_cost_usd` is
       // cumulative, so the session overwrites rather than accumulates.
       mapping.cost = sdk.total_cost_usd;
-      if (sdk.subtype === 'success') break;
+      if (sdk.subtype === "success") {
+        break;
+      }
       mapping.messages.push(
-        systemLine(base, 'result.error', sdk.subtype.replace(/_/g, ' '), {
+        systemLine(base, "result.error", sdk.subtype.replace(/_/g, " "), {
           resultSubtype: sdk.subtype,
-          resultErrors: 'errors' in sdk ? sdk.errors : undefined,
+          resultErrors: "errors" in sdk ? sdk.errors : undefined,
           totalCost: sdk.total_cost_usd,
           numTurns: sdk.num_turns,
         })
@@ -660,22 +772,22 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       break;
     }
 
-    case 'system': {
+    case "system": {
       const fallback = modelFallback(sdk);
       if (fallback) {
         mapping.messages.push(
-          systemLine(base, 'system.model_fallback', fallback.content, {
-            subtype: 'model_fallback',
+          systemLine(base, "system.model_fallback", fallback.content, {
+            subtype: "model_fallback",
             model: fallback.model,
           })
         );
         break;
       }
       switch (sdk.subtype) {
-        case 'init':
+        case "init":
           mapping.messages.push(
-            systemLine(base, 'system.init', `Session started · ${sdk.model}`, {
-              subtype: 'init',
+            systemLine(base, "system.init", `Session started · ${sdk.model}`, {
+              subtype: "init",
               model: sdk.model,
               permissionMode: sdk.permissionMode,
               cwd: sdk.cwd,
@@ -690,7 +802,7 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
             })
           );
           break;
-        case 'commands_changed':
+        case "commands_changed":
           mapping.commands = sdk.commands;
           break;
         // The harness's input queue, made observable. Read defensively: a
@@ -698,25 +810,30 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
         // half-formed announcement should move nothing rather than draw a row
         // with no words in it.
         case MESSAGE_QUEUED:
-          if (sdk.queueId && typeof sdk.text === 'string' && sdk.timestamp) {
+          if (sdk.queueId && typeof sdk.text === "string" && sdk.timestamp) {
             mapping.queued = {
               queueId: sdk.queueId,
               text: sdk.text,
               timestamp: sdk.timestamp,
-              ...(typeof sdk.images === 'number' ? { images: sdk.images } : {}),
+              ...(typeof sdk.images === "number" ? { images: sdk.images } : {}),
             };
           }
           break;
         case MESSAGE_DEQUEUED:
-          if (sdk.queueId) mapping.dequeued = sdk.queueId;
-          break;
-        case 'status':
-          mapping.status = sdk.status as SDKStatus | undefined;
-          if (sdk.compact_result) {
-            mapping.compaction = { result: sdk.compact_result, error: sdk.compact_error };
+          if (sdk.queueId) {
+            mapping.dequeued = sdk.queueId;
           }
           break;
-        case 'task_started':
+        case "status":
+          mapping.status = sdk.status as SDKStatus | undefined;
+          if (sdk.compact_result) {
+            mapping.compaction = {
+              result: sdk.compact_result,
+              error: sdk.compact_error,
+            };
+          }
+          break;
+        case "task_started":
           // `subagent_type` is what separates a real Task/Agent subagent's frames
           // from a plain tool task's: the SDK sets it only for the former
           // (measured 0.3.220 — `local_bash` carries none, `local_agent` carries
@@ -728,25 +845,25 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
               taskId: sdk.task_id,
               subagentType: sdk.subagent_type,
               description: sdk.description,
-              status: 'running',
+              status: "running",
             };
           }
           break;
-        case 'task_progress':
+        case "task_progress":
           if (sdk.subagent_type) {
             mapping.branch = {
               toolUseId: sdk.tool_use_id,
               taskId: sdk.task_id,
               subagentType: sdk.subagent_type,
               description: sdk.description,
-              status: 'running',
+              status: "running",
               summary: sdk.summary,
               lastToolName: sdk.last_tool_name,
             };
           }
           break;
-        case 'task_notification': {
-          const done = sdk.status === 'completed';
+        case "task_notification": {
+          const done = sdk.status === "completed";
           // `task_notification` carries no `subagent_type` at all (the SDK type
           // has none), so a plain tool task and a real subagent look identical
           // here — only a branch that already exists tells them apart, which is
@@ -761,23 +878,28 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
           // only place its completion ever shows — emitting nothing made those
           // tasks finish invisibly.
           mapping.messages.push(
-            systemLine(base, 'system.task', done ? 'task done' : 'task failed', {
-              result: truncateSummary(sdk.summary),
-              // Named so the fold can drop this line when the harness ALSO
-              // delivers its richer XML notification for the same task.
-              taskId: sdk.task_id,
-            })
+            systemLine(
+              base,
+              "system.task",
+              done ? "task done" : "task failed",
+              {
+                result: truncateSummary(sdk.summary),
+                // Named so the fold can drop this line when the harness ALSO
+                // delivers its richer XML notification for the same task.
+                taskId: sdk.task_id,
+              }
+            )
           );
           mapping.branch = {
             toolUseId: sdk.tool_use_id,
             taskId: sdk.task_id,
-            status: done ? 'complete' : 'error',
+            status: done ? "complete" : "error",
             summary: sdk.summary,
             result: sdk.summary,
           };
           break;
         }
-        case 'task_updated': {
+        case "task_updated": {
           const patch = sdk.patch;
           mapping.branch = {
             taskId: sdk.task_id,
@@ -787,27 +909,32 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
           };
           break;
         }
-        case 'compact_boundary':
+        case "compact_boundary":
           mapping.messages.push(
-            systemLine(base, 'system.compact_boundary', 'Context compacted', {
-              subtype: 'compact_boundary',
+            systemLine(base, "system.compact_boundary", "Context compacted", {
+              subtype: "compact_boundary",
               preTokens: sdk.compact_metadata?.pre_tokens,
               trigger: sdk.compact_metadata?.trigger,
             })
           );
           break;
-        case 'hook_response':
+        case "hook_response":
           mapping.messages.push(
-            systemLine(base, `system.hook_response`, sdk.subtype.replace(/_/g, ' '), {
-              subtype: 'hook_response',
-              hookName: sdk.hook_name,
-              exitCode: sdk.exit_code,
-              stdout: sdk.stdout,
-              stderr: sdk.stderr,
-            })
+            systemLine(
+              base,
+              "system.hook_response",
+              sdk.subtype.replace(/_/g, " "),
+              {
+                subtype: "hook_response",
+                hookName: sdk.hook_name,
+                exitCode: sdk.exit_code,
+                stdout: sdk.stdout,
+                stderr: sdk.stderr,
+              }
+            )
           );
           break;
-        case 'permission_denied': {
+        case "permission_denied": {
           // The SDK short-circuited a tool call without ever surfacing a
           // `canUseTool` ask — a sandbox override in bypass mode, a deny rule,
           // an auto-mode classifier. Nothing else renders it, so name the tool
@@ -819,17 +946,20 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
             decision_reason?: string;
             message?: string;
           };
-          const tool = denied.tool_name ?? 'a tool';
-          const reason = denied.decision_reason ?? denied.message ?? 'no reason given';
-          const reasonType = denied.decision_reason_type ? ` (${denied.decision_reason_type})` : '';
+          const tool = denied.tool_name ?? "a tool";
+          const reason =
+            denied.decision_reason ?? denied.message ?? "no reason given";
+          const reasonType = denied.decision_reason_type
+            ? ` (${denied.decision_reason_type})`
+            : "";
           mapping.messages.push(
             systemLine(
               base,
-              'ui.system_note',
+              "ui.system_note",
               `The SDK denied ${tool} without asking${reasonType}: ${reason}`,
               {
-                subtype: 'permission_denied',
-                noteKind: 'Permission denied',
+                subtype: "permission_denied",
+                noteKind: "Permission denied",
                 noteTitle: tool,
               }
             )
@@ -843,9 +973,14 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
               // say: harnesses put their own words in `content` (a provider's
               // retry notice, a quota message), and losing them here is how a
               // real error once hid behind a generic label.
-              systemLine(base, `system.${sdk.subtype}`, sdk.content ?? sdk.subtype.replace(/_/g, ' '), {
-                subtype: sdk.subtype,
-              })
+              systemLine(
+                base,
+                `system.${sdk.subtype}`,
+                sdk.content ?? sdk.subtype.replace(/_/g, " "),
+                {
+                  subtype: sdk.subtype,
+                }
+              )
             );
           }
       }
@@ -858,24 +993,31 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       // tells the operator nothing (the anonymous-line class again) — the
       // INNER message's own type at least names what arrived, and any words
       // it carries are shown behind a fold rather than lost.
-      if ((sdk.type as string) === 'raw') {
-        const inner = (sdk as unknown as { message?: { type?: unknown; content?: unknown; message?: unknown } })
-          .message;
-        const innerType = typeof inner?.type === 'string' ? inner.type : '';
+      if ((sdk.type as string) === "raw") {
+        const inner = (
+          sdk as unknown as {
+            message?: { type?: unknown; content?: unknown; message?: unknown };
+          }
+        ).message;
+        const innerType = typeof inner?.type === "string" ? inner.type : "";
         const text = [inner?.content, inner?.message].find(
-          (value): value is string => typeof value === 'string'
+          (value): value is string => typeof value === "string"
         );
-        if (!innerType && !text) break;
+        if (!(innerType || text)) {
+          break;
+        }
         mapping.messages.push(
-          systemLine(base, 'ui.system_note', text ?? '', {
-            noteKind: 'Unrecognised frame',
-            noteTitle: (innerType || 'unrecognised frame').replace(/_/g, ' '),
+          systemLine(base, "ui.system_note", text ?? "", {
+            noteKind: "Unrecognised frame",
+            noteTitle: (innerType || "unrecognised frame").replace(/_/g, " "),
           })
         );
         break;
       }
       if (!QUIET.has(sdk.type)) {
-        mapping.messages.push(systemLine(base, `system.${sdk.type}`, sdk.type.replace(/_/g, ' ')));
+        mapping.messages.push(
+          systemLine(base, `system.${sdk.type}`, sdk.type.replace(/_/g, " "))
+        );
       }
   }
 
@@ -894,16 +1036,18 @@ export function branchFor(
   toolUseId: string
 ): SubagentState {
   const existing = branches[toolUseId];
-  if (existing) return existing;
+  if (existing) {
+    return existing;
+  }
 
   branches[toolUseId] = {
     toolUseId,
     instanceId,
-    subagentType: 'subagent',
-    status: 'starting',
+    subagentType: "subagent",
+    status: "starting",
     startedAt: new Date(),
     messages: [],
-    streaming: '',
+    streaming: "",
   };
   return branches[toolUseId];
 }
@@ -917,8 +1061,11 @@ export function applyBranchEvent(
   // `task_updated` names only the task, so an already-known branch answers for it.
   const key =
     event.toolUseId ??
-    Object.values(branches).find((branch) => branch.taskId === event.taskId)?.toolUseId;
-  if (!key) return;
+    Object.values(branches).find((branch) => branch.taskId === event.taskId)
+      ?.toolUseId;
+  if (!key) {
+    return;
+  }
 
   // A terminal-status event that names no existing branch and carries no real
   // `subagent_type` is a plain tool task's `task_notification` (a foreground or
@@ -926,27 +1073,49 @@ export function applyBranchEvent(
   // into a generic "subagent" card — its tool card already tells that story, so
   // nothing is created here.
   const existing = branches[key];
-  const terminal = event.status === 'complete' || event.status === 'error';
-  if (!existing && !event.subagentType && terminal) return;
+  const terminal = event.status === "complete" || event.status === "error";
+  if (!(existing || event.subagentType) && terminal) {
+    return;
+  }
 
   const branch = branchFor(branches, instanceId, key);
   branch.lastEventAt = new Date();
-  if (event.taskId) branch.taskId = event.taskId;
-  if (event.subagentType) branch.subagentType = event.subagentType;
-  if (event.description) branch.description = event.description;
-  if (event.summary) branch.summary = event.summary;
-  if (event.lastToolName) branch.lastToolName = event.lastToolName;
-  if (event.model) branch.model = event.model;
-  if (event.result) branch.result = event.result;
+  if (event.taskId) {
+    branch.taskId = event.taskId;
+  }
+  if (event.subagentType) {
+    branch.subagentType = event.subagentType;
+  }
+  if (event.description) {
+    branch.description = event.description;
+  }
+  if (event.summary) {
+    branch.summary = event.summary;
+  }
+  if (event.lastToolName) {
+    branch.lastToolName = event.lastToolName;
+  }
+  if (event.model) {
+    branch.model = event.model;
+  }
+  if (event.result) {
+    branch.result = event.result;
+  }
   // Finished is final. A branch that has reported `complete` or `error` is done,
   // and the progress frames still in flight behind it would otherwise put it
   // back to `running` — leaving every subagent reading "working" forever, long
   // after it answered.
-  const settled = branch.status === 'complete' || branch.status === 'error';
+  const settled = branch.status === "complete" || branch.status === "error";
   // A late `starting` must not walk a running branch backwards.
-  if (event.status && !settled && !(event.status === 'starting' && branch.status !== 'starting')) {
+  if (
+    event.status &&
+    !settled &&
+    !(event.status === "starting" && branch.status !== "starting")
+  ) {
     branch.status = event.status;
-    if (event.status === 'complete' || event.status === 'error') branch.completedAt = new Date();
+    if (event.status === "complete" || event.status === "error") {
+      branch.completedAt = new Date();
+    }
   }
 }
 
@@ -963,7 +1132,9 @@ export function suppressesTaskLine(
   message: Message,
   toolUseId: string | undefined
 ): boolean {
-  if (message.type !== 'system.task') return false;
+  if (message.type !== "system.task") {
+    return false;
+  }
   return Boolean(toolUseId && branches[toolUseId]);
 }
 
@@ -975,12 +1146,12 @@ export function suppressesTaskLine(
  * the live line either way.
  */
 export interface SubagentView {
-  /** Whether the branch is still working. */
-  running: boolean;
   /** Present tense, what it is doing NOW. Empty once the branch has settled. */
   currentStep: string;
   /** Its final report: the Task result, or the last thing it said. */
   report: string;
+  /** Whether the branch is still working. */
+  running: boolean;
   /** Tool calls it has made — what the status pill counts. */
   steps: number;
 }
@@ -990,29 +1161,31 @@ export interface SubagentView {
  * listed says its own name, which reads as a step already (`WebSearch whiffle`).
  */
 const STEP_VERB: Record<string, string> = {
-  Read: 'Reading',
-  Write: 'Writing',
-  Edit: 'Editing',
-  NotebookEdit: 'Editing',
-  Bash: 'Running',
-  Grep: 'Searching',
-  Glob: 'Globbing',
-  WebFetch: 'Fetching',
-  WebSearch: 'Searching the web',
-  Task: 'Delegating',
-  TodoWrite: 'Updating its plan',
+  Read: "Reading",
+  Write: "Writing",
+  Edit: "Editing",
+  NotebookEdit: "Editing",
+  Bash: "Running",
+  Grep: "Searching",
+  Glob: "Globbing",
+  WebFetch: "Fetching",
+  WebSearch: "Searching the web",
+  Task: "Delegating",
+  TodoWrite: "Updating its plan",
 };
 
 /** An MCP tool's own name, out of the `mcp__<server>__<tool>` it is called by. */
 const stepVerb = (name: string): string => {
-  const tool = name.split('__').pop() ?? name;
+  const tool = name.split("__").pop() ?? name;
   return STEP_VERB[tool] ?? tool;
 };
 
 const stepLine = (message: Message): string => {
   const verb = stepVerb(message.metadata?.toolName ?? message.content);
   const glance = getToolGlance(
-    (message.metadata?.toolInput ?? undefined) as Record<string, unknown> | undefined
+    (message.metadata?.toolInput ?? undefined) as
+      | Record<string, unknown>
+      | undefined
   );
   return glance ? `${verb} ${glance}` : verb;
 };
@@ -1024,29 +1197,41 @@ const stepLine = (message: Message): string => {
  * is none.
  */
 function currentStep(branch: SubagentState, tools: Message[]): string {
-  const inFlight = [...tools].reverse().find((m) => m.metadata?.toolStatus === 'pending');
-  if (inFlight) return stepLine(inFlight);
-  if (branch.summary) return branch.summary;
-  const writing = branch.streaming.trim().split('\n').filter(Boolean).pop();
-  if (writing) return writing;
+  const inFlight = [...tools]
+    .reverse()
+    .find((m) => m.metadata?.toolStatus === "pending");
+  if (inFlight) {
+    return stepLine(inFlight);
+  }
+  if (branch.summary) {
+    return branch.summary;
+  }
+  const writing = branch.streaming.trim().split("\n").filter(Boolean).pop();
+  if (writing) {
+    return writing;
+  }
   const last = tools[tools.length - 1];
-  if (last) return stepLine(last);
-  if (branch.lastToolName) return stepVerb(branch.lastToolName);
-  return branch.description ?? 'Working';
+  if (last) {
+    return stepLine(last);
+  }
+  if (branch.lastToolName) {
+    return stepVerb(branch.lastToolName);
+  }
+  return branch.description ?? "Working";
 }
 
 /** {@link SubagentView} for a branch, recomputed as its frames arrive. */
 export function subagentView(branch: SubagentState): SubagentView {
-  const running = branch.status === 'starting' || branch.status === 'running';
-  const tools = branch.messages.filter((m) => m.type === 'tool.use');
+  const running = branch.status === "starting" || branch.status === "running";
+  const tools = branch.messages.filter((m) => m.type === "tool.use");
   const said = [...branch.messages]
     .reverse()
-    .find((m) => m.type === 'assistant' && m.content.trim());
+    .find((m) => m.type === "assistant" && m.content.trim());
   return {
     running,
     steps: tools.length,
-    currentStep: running ? currentStep(branch, tools) : '',
-    report: branch.result?.trim() || said?.content.trim() || '',
+    currentStep: running ? currentStep(branch, tools) : "",
+    report: branch.result?.trim() || said?.content.trim() || "",
   };
 }
 
@@ -1070,19 +1255,32 @@ const THINKING_MIN_MS = 100;
  * that follows a thinking block is in its turn. The gap to a *user* message is
  * the reader's own time and is refused.
  */
-export function thinkingDurationMs(messages: Message[], index: number): number | null {
+export function thinkingDurationMs(
+  messages: Message[],
+  index: number
+): number | null {
   const message = messages[index];
   const next = messages[index + 1];
-  if (!message || !next) return null;
-  if (next.type === 'user' || next.type.startsWith('user.')) return null;
+  if (!(message && next)) {
+    return null;
+  }
+  if (next.type === "user" || next.type.startsWith("user.")) {
+    return null;
+  }
   // A stored transcript carries no timestamps at all (see `Message.timestamp`),
   // so "missing" is the ordinary case here, not the exceptional one.
-  if (!message.timestamp || !next.timestamp) return null;
+  if (!(message.timestamp && next.timestamp)) {
+    return null;
+  }
   const from = new Date(message.timestamp).getTime();
   const to = new Date(next.timestamp).getTime();
-  if (!Number.isFinite(from) || !Number.isFinite(to)) return null;
+  if (!(Number.isFinite(from) && Number.isFinite(to))) {
+    return null;
+  }
   const elapsed = to - from;
-  if (elapsed < THINKING_MIN_MS || elapsed > THINKING_MAX_MS) return null;
+  if (elapsed < THINKING_MIN_MS || elapsed > THINKING_MAX_MS) {
+    return null;
+  }
   return elapsed;
 }
 
@@ -1091,14 +1289,20 @@ export function thinkingDurationMs(messages: Message[], index: number): number |
  * but a stored transcript is the only source of.
  */
 function transcriptUserText(message: unknown): string | null {
-  if (typeof message !== 'object' || message === null) return null;
+  if (typeof message !== "object" || message === null) {
+    return null;
+  }
   const content = (message as { content?: unknown }).content;
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return null;
+  if (typeof content === "string") {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return null;
+  }
   const text = content
-    .filter((block: unknown) => (block as { type?: string })?.type === 'text')
-    .map((block: unknown) => String((block as { text?: unknown }).text ?? ''))
-    .join('\n');
+    .filter((block: unknown) => (block as { type?: string })?.type === "text")
+    .map((block: unknown) => String((block as { text?: unknown }).text ?? ""))
+    .join("\n");
   return text || null;
 }
 
@@ -1107,17 +1311,23 @@ function transcriptUserText(message: unknown): string | null {
  * data and all, so the bubble can show what was actually sent; a block sourced
  * from a URL has nothing to inline and is left for the placeholder to name.
  */
-function transcriptUserImages(message: unknown): MessageMetadata['images'] {
+function transcriptUserImages(message: unknown): MessageMetadata["images"] {
   const content = (message as { content?: unknown } | null)?.content;
-  if (!Array.isArray(content)) return undefined;
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
   const images = content
-    .filter((block: unknown) => (block as { type?: string })?.type === 'image')
+    .filter((block: unknown) => (block as { type?: string })?.type === "image")
     .map((block: unknown) => {
-      const source = (block as { source?: { media_type?: string; data?: string } }).source;
-      const mediaType = source?.media_type ?? 'image/png';
+      const source = (
+        block as { source?: { media_type?: string; data?: string } }
+      ).source;
+      const mediaType = source?.media_type ?? "image/png";
       return {
         mediaType,
-        dataUri: source?.data ? `data:${mediaType};base64,${source.data}` : undefined,
+        dataUri: source?.data
+          ? `data:${mediaType};base64,${source.data}`
+          : undefined,
       };
     });
   return images.length ? images : undefined;
@@ -1131,7 +1341,9 @@ function transcriptUserImages(message: unknown): MessageMetadata['images'] {
  * reader opened the session.
  */
 function storedAt(entry: SessionMessage): Date | undefined {
-  if (!entry.timestamp) return undefined;
+  if (!entry.timestamp) {
+    return undefined;
+  }
   const at = new Date(entry.timestamp);
   return Number.isNaN(at.getTime()) ? undefined : at;
 }
@@ -1143,12 +1355,18 @@ function storedAt(entry: SessionMessage): Date | undefined {
  */
 function userBody(
   text: string,
-  images?: MessageMetadata['images']
-): Pick<Message, 'type' | 'content' | 'metadata'> {
+  images?: MessageMetadata["images"]
+): Pick<Message, "type" | "content" | "metadata"> {
   const note = systemNote(text);
-  if (!note) return { type: 'user', content: text, metadata: images ? { images } : undefined };
+  if (!note) {
+    return {
+      type: "user",
+      content: text,
+      metadata: images ? { images } : undefined,
+    };
+  }
   return {
-    type: 'ui.system_note',
+    type: "ui.system_note",
     content: text,
     metadata: {
       noteKind: note.kind,
@@ -1159,20 +1377,25 @@ function userBody(
 }
 
 /** Harness-injected content arrives with role "user" but is not the human. */
-function systemNote(text: string): { kind: string; title: string; taskToolId?: string } | null {
+function systemNote(
+  text: string
+): { kind: string; title: string; taskToolId?: string } | null {
   const head = text.trimStart().slice(0, 200);
   // Anchored, not `includes`: an operator who merely TYPES the tag mid-sentence
   // ("fix the <task-notification> renderer") must keep their own voice — only a
   // message the block itself opens is the harness speaking. Matches the
   // anchoring `rows.ts`'s `isHarnessNote` uses, so the two layers agree.
-  if (head.startsWith('[SYSTEM NOTIFICATION') || head.startsWith('<task-notification>')) {
+  if (
+    head.startsWith("[SYSTEM NOTIFICATION") ||
+    head.startsWith("<task-notification>")
+  ) {
     const summary = /<summary>([\s\S]*?)<\/summary>/.exec(text)?.[1]?.trim();
     // The tool-use id names the Task call this notification echoes. When that
     // call's branch is in the transcript, the branch already shows the same
     // report — the renderer folds this note away on it.
     const taskToolId = /<tool-use-id>(\S+?)<\/tool-use-id>/.exec(text)?.[1];
     return {
-      kind: 'Task notification',
+      kind: "Task notification",
       title: summary ?? firstPlainLine(text),
       ...(taskToolId ? { taskToolId } : {}),
     };
@@ -1181,18 +1404,27 @@ function systemNote(text: string): { kind: string; title: string; taskToolId?: s
   // `<local-command-stdout>`): the harness's bookkeeping, not the human's words
   // — raw XML in a user bubble otherwise.
   if (
-    head.startsWith('<local-command-caveat>') ||
-    head.startsWith('<command-name>') ||
-    head.startsWith('<local-command-stdout>')
+    head.startsWith("<local-command-caveat>") ||
+    head.startsWith("<command-name>") ||
+    head.startsWith("<local-command-stdout>")
   ) {
-    const command = /<command-name>([\s\S]*?)<\/command-name>/.exec(text)?.[1]?.trim();
-    return { kind: 'Local command', title: command ?? firstPlainLine(text) };
+    const command = /<command-name>([\s\S]*?)<\/command-name>/
+      .exec(text)?.[1]
+      ?.trim();
+    return { kind: "Local command", title: command ?? firstPlainLine(text) };
   }
-  if (head.startsWith('<system-reminder>')) {
-    return { kind: 'System reminder', title: firstPlainLine(text) };
+  if (head.startsWith("<system-reminder>")) {
+    return { kind: "System reminder", title: firstPlainLine(text) };
   }
-  if (head.startsWith('This session is being continued from a previous conversation')) {
-    return { kind: 'Session continued', title: 'Compacted conversation summary' };
+  if (
+    head.startsWith(
+      "This session is being continued from a previous conversation"
+    )
+  ) {
+    return {
+      kind: "Session continued",
+      title: "Compacted conversation summary",
+    };
   }
   return null;
 }
@@ -1200,13 +1432,15 @@ function systemNote(text: string): { kind: string; title: string; taskToolId?: s
 /** A note's opening line, with the markup that wraps it taken back out. */
 function firstPlainLine(text: string): string {
   const plain = text
-    .replace(/<[^>]+>/g, '')
-    .replace('[SYSTEM NOTIFICATION - NOT USER INPUT]', '');
+    .replace(/<[^>]+>/g, "")
+    .replace("[SYSTEM NOTIFICATION - NOT USER INPUT]", "");
   const line = plain
-    .split('\n')
+    .split("\n")
     .map((each) => each.trim())
     .find(Boolean);
-  if (!line) return '';
+  if (!line) {
+    return "";
+  }
   return line.length > 80 ? `${line.slice(0, 79)}…` : line;
 }
 
@@ -1231,22 +1465,30 @@ export interface Transcript {
  * Falls back to something honest rather than empty when a hub predates the naming.
  */
 const ruleLabel = (name?: string): string => {
-  if (!name) return 'a rule';
-  if (name.startsWith('supervisor:')) {
-    const tail = name.slice('supervisor:'.length).trim();
-    return tail === 'autopilot' ? 'Autopilot' : `Supervisor — ${tail || 'a rule'}`;
+  if (!name) {
+    return "a rule";
   }
-  return name.replace(/^rule:/, '').trim() || 'a rule';
+  if (name.startsWith("supervisor:")) {
+    const tail = name.slice("supervisor:".length).trim();
+    return tail === "autopilot"
+      ? "Autopilot"
+      : `Supervisor — ${tail || "a rule"}`;
+  }
+  return name.replace(/^rule:/, "").trim() || "a rule";
 };
 
 export function turnStart(
   entry: SessionMessage
-): { text: string; images?: MessageMetadata['images'] } | null {
-  if (entry.type !== 'user' || entry.parent_tool_use_id) return null;
+): { text: string; images?: MessageMetadata["images"] } | null {
+  if (entry.type !== "user" || entry.parent_tool_use_id) {
+    return null;
+  }
   const text = transcriptUserText(entry.message);
   const images = transcriptUserImages(entry.message);
-  if (text === null && !images) return null;
-  return { text: text ?? '', images };
+  if (text === null && !images) {
+    return null;
+  }
+  return { text: text ?? "", images };
 }
 
 /**
@@ -1257,10 +1499,12 @@ export function turnStart(
  * turn. Reading the sender name back out of it is what lets a stored copy
  * render as `user.peer` instead of as the reader's own words.
  */
-const HANDOFF_MARKER = '[Hand-off from the ';
+const HANDOFF_MARKER = "[Hand-off from the ";
 
 function handoffFrom(text: string): string | null {
-  if (!text.startsWith(HANDOFF_MARKER)) return null;
+  if (!text.startsWith(HANDOFF_MARKER)) {
+    return null;
+  }
   const name = /^\[Hand-off from the (.*?) session/.exec(text)?.[1]?.trim();
   return name || null;
 }
@@ -1279,7 +1523,8 @@ function handoffFrom(text: string): string | null {
  * sits strictly between the opening line and the marker line.
  */
 const DELEGATE_ASK_OPENING = /^\[Delegate ask from (.+?)\]\n/;
-const DELEGATE_ASK_MARKER = /\n\[delegate-ask instance=([0-9a-f-]{36}) request=(\S+)\]/;
+const DELEGATE_ASK_MARKER =
+  /\n\[delegate-ask instance=([0-9a-f-]{36}) request=(\S+)\]/;
 
 function delegateAsk(text: string): {
   label: string;
@@ -1288,9 +1533,13 @@ function delegateAsk(text: string): {
   body: string;
 } | null {
   const opening = DELEGATE_ASK_OPENING.exec(text);
-  if (!opening) return null;
+  if (!opening) {
+    return null;
+  }
   const marker = DELEGATE_ASK_MARKER.exec(text);
-  if (!marker) return null;
+  if (!marker) {
+    return null;
+  }
   return {
     label: opening[1].trim(),
     instance: marker[1],
@@ -1315,11 +1564,13 @@ function delegateReport(
   text: string
 ): { name: string; short: string; failed: boolean; body: string } | null {
   const marker = DELEGATE_REPORT_MARKER.exec(text);
-  if (!marker) return null;
+  if (!marker) {
+    return null;
+  }
   return {
     name: marker[1],
     short: marker[2],
-    failed: marker[3] === 'failed',
+    failed: marker[3] === "failed",
     body: text.slice(marker[0].length).trim(),
   };
 }
@@ -1333,13 +1584,15 @@ function delegateReport(
  * (isDelegateReport), so ordinary prose cannot impersonate peer traffic.
  */
 const MID_TURN_PREFIXES = [
-  'The user sent a new message while you were working:\n',
-  'Another Claude session sent a message while you were working:\n',
+  "The user sent a new message while you were working:\n",
+  "Another Claude session sent a message while you were working:\n",
 ];
-const MID_TURN_SUFFIX_START = '\nThis is how Claude Code surfaces';
+const MID_TURN_SUFFIX_START = "\nThis is how Claude Code surfaces";
 export function unwrapMidTurn(text: string): string | null {
   const prefix = MID_TURN_PREFIXES.find((p) => text.startsWith(p));
-  if (!prefix) return null;
+  if (!prefix) {
+    return null;
+  }
   const inner = text.slice(prefix.length);
   const cut = inner.lastIndexOf(MID_TURN_SUFFIX_START);
   return (cut === -1 ? inner : inner.slice(0, cut)).trim();
@@ -1351,9 +1604,17 @@ export function unwrapMidTurn(text: string): string | null {
  * exact or by prefix, and never on anything shorter than 8 characters. Legacy
  * with the markers it reads: `delegate_events` rows name the session outright.
  */
-export function matchesSession(peerSession: string | undefined, id: string): boolean {
-  if (!peerSession) return false;
-  return peerSession === id || (peerSession.length >= 8 && id.startsWith(peerSession));
+export function matchesSession(
+  peerSession: string | undefined,
+  id: string
+): boolean {
+  if (!peerSession) {
+    return false;
+  }
+  return (
+    peerSession === id ||
+    (peerSession.length >= 8 && id.startsWith(peerSession))
+  );
 }
 
 /**
@@ -1368,10 +1629,18 @@ export function askBodyParts(
   body: string
 ): { tool: string; input: Record<string, JsonValue> } | null {
   const match = /^([A-Za-z_][\w-]*) — (\{.*\})$/s.exec(body);
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
   try {
     const parsed: unknown = JSON.parse(match[2]);
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      return null;
+    }
     return { tool: match[1], input: parsed as Record<string, JsonValue> };
   } catch {
     return null;
@@ -1385,23 +1654,29 @@ export function askBodyParts(
  */
 function questionBlocks(input: Record<string, JsonValue>): string[] {
   const questions = input.questions;
-  if (!Array.isArray(questions)) return [];
+  if (!Array.isArray(questions)) {
+    return [];
+  }
   return questions.map((entry, index) => {
     const question =
-      typeof entry === 'object' && entry !== null && !Array.isArray(entry) ? entry : {};
-    const text = typeof question.question === 'string' ? question.question : '';
+      typeof entry === "object" && entry !== null && !Array.isArray(entry)
+        ? entry
+        : {};
+    const text = typeof question.question === "string" ? question.question : "";
     const options = Array.isArray(question.options)
       ? question.options
           .map((option) =>
-            typeof option === 'object' && option !== null && !Array.isArray(option)
+            typeof option === "object" &&
+            option !== null &&
+            !Array.isArray(option)
               ? option.label
               : null
           )
-          .filter((label): label is string => typeof label === 'string')
+          .filter((label): label is string => typeof label === "string")
           .map((label) => `- ${label}`)
-          .join('\n')
-      : '';
-    return `Q${index + 1}: ${text}${options ? `\n${options}` : ''}`;
+          .join("\n")
+      : "";
+    return `Q${index + 1}: ${text}${options ? `\n${options}` : ""}`;
   });
 }
 
@@ -1410,15 +1685,22 @@ function questionBlocks(input: Record<string, JsonValue>): string[] {
  * JSON — the first question where the ask is a question. The tool name is what
  * the hub recorded, and an ask that never named one still reads as an ask.
  */
-export function askShortOf(toolName: string | null, input: Record<string, JsonValue>): string {
+export function askShortOf(
+  toolName: string | null,
+  input: Record<string, JsonValue>
+): string {
   const questions = questionBlocks(input);
-  if (questions.length > 0) return questions[0].split('\n')[0];
-  const tool = toolName ?? 'ask';
-  const filepath = input.filepath ?? input.filePath ?? input.path;
-  if (typeof filepath === 'string') {
-    return `${tool} ${filepath.split('/').filter(Boolean).pop() ?? filepath}`;
+  if (questions.length > 0) {
+    return questions[0].split("\n")[0];
   }
-  if (typeof input.command === 'string') return `${tool} ${input.command.slice(0, 80)}`;
+  const tool = toolName ?? "ask";
+  const filepath = input.filepath ?? input.filePath ?? input.path;
+  if (typeof filepath === "string") {
+    return `${tool} ${filepath.split("/").filter(Boolean).pop() ?? filepath}`;
+  }
+  if (typeof input.command === "string") {
+    return `${tool} ${input.command.slice(0, 80)}`;
+  }
   return tool;
 }
 
@@ -1427,14 +1709,21 @@ export function askShortOf(toolName: string | null, input: Record<string, JsonVa
  * command as the command, a question ask as its questions and their options,
  * anything else as formatted JSON.
  */
-export function askDetailOf(toolName: string | null, input: Record<string, JsonValue>): string {
+export function askDetailOf(
+  toolName: string | null,
+  input: Record<string, JsonValue>
+): string {
   const questions = questionBlocks(input);
-  if (questions.length > 0) return questions.join('\n');
-  if (typeof input.diff === 'string') {
-    const filepath = input.filepath ?? input.filePath ?? input.path;
-    return (typeof filepath === 'string' ? `${filepath}\n\n` : '') + input.diff;
+  if (questions.length > 0) {
+    return questions.join("\n");
   }
-  if (typeof input.command === 'string') return input.command;
+  if (typeof input.diff === "string") {
+    const filepath = input.filepath ?? input.filePath ?? input.path;
+    return (typeof filepath === "string" ? `${filepath}\n\n` : "") + input.diff;
+  }
+  if (typeof input.command === "string") {
+    return input.command;
+  }
   return JSON.stringify(input, null, 2);
 }
 
@@ -1444,14 +1733,18 @@ export function askDetailOf(toolName: string | null, input: Record<string, JsonV
  */
 export function askShort(body: string): string {
   const parts = askBodyParts(body);
-  if (!parts) return body.split('\n')[0];
+  if (!parts) {
+    return body.split("\n")[0];
+  }
   return askShortOf(parts.tool, parts.input);
 }
 
 /** {@link askDetailOf} for a transcript-derived ask; an unparsed body is itself. */
 export function askDetail(body: string): string {
   const parts = askBodyParts(body);
-  if (!parts) return body;
+  if (!parts) {
+    return body;
+  }
   return askDetailOf(parts.tool, parts.input);
 }
 
@@ -1461,17 +1754,31 @@ export function askDetail(body: string): string {
  * re-broadcast, so a reader watching the exchange live has only this to learn
  * the verdict from — the next fresh read carries it on the ask itself.
  */
-export function foldDelegateEvent(list: DelegateEvent[], event: DelegateEvent): void {
+export function foldDelegateEvent(
+  list: DelegateEvent[],
+  event: DelegateEvent
+): void {
   // Both sources deliver the same rows — the read on arrival and the pushes
   // that follow it overlap by however long the read was out.
-  if (list.some((row) => row.id === event.id)) return;
+  if (list.some((row) => row.id === event.id)) {
+    return;
+  }
   const after = list.findIndex((row) => row.id > event.id);
-  if (after === -1) list.push(event);
-  else list.splice(after, 0, event);
+  if (after === -1) {
+    list.push(event);
+  } else {
+    list.splice(after, 0, event);
+  }
 
-  if (event.kind !== 'answer' || !event.requestId) return;
-  const ask = list.find((row) => row.kind === 'ask' && row.requestId === event.requestId);
-  if (ask) ask.status = event.payload.behavior === 'deny' ? 'denied' : 'answered';
+  if (event.kind !== "answer" || !event.requestId) {
+    return;
+  }
+  const ask = list.find(
+    (row) => row.kind === "ask" && row.requestId === event.requestId
+  );
+  if (ask) {
+    ask.status = event.payload.behavior === "deny" ? "denied" : "answered";
+  }
 }
 
 /**
@@ -1480,23 +1787,36 @@ export function foldDelegateEvent(list: DelegateEvent[], event: DelegateEvent): 
  * with no requestId rather than a crash.
  */
 export function answerVerdict(toolInput: JsonValue | undefined): {
-  verb: 'Approved' | 'Denied' | 'Answered';
+  verb: "Approved" | "Denied" | "Answered";
   requestId: string | null;
   answers: Array<{ question: string; choice: string }>;
 } {
-  if (typeof toolInput !== 'object' || toolInput === null || Array.isArray(toolInput)) {
-    return { verb: 'Approved', requestId: null, answers: [] };
+  if (
+    typeof toolInput !== "object" ||
+    toolInput === null ||
+    Array.isArray(toolInput)
+  ) {
+    return { verb: "Approved", requestId: null, answers: [] };
   }
-  const requestId = typeof toolInput.requestId === 'string' ? toolInput.requestId : null;
-  if (toolInput.deny === true) return { verb: 'Denied', requestId, answers: [] };
+  const requestId =
+    typeof toolInput.requestId === "string" ? toolInput.requestId : null;
+  if (toolInput.deny === true) {
+    return { verb: "Denied", requestId, answers: [] };
+  }
   const answers: Array<{ question: string; choice: string }> = [];
   const raw = toolInput.answers;
-  if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+  if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
     for (const [question, choice] of Object.entries(raw)) {
-      if (typeof choice === 'string') answers.push({ question, choice });
+      if (typeof choice === "string") {
+        answers.push({ question, choice });
+      }
     }
   }
-  return { verb: answers.length > 0 ? 'Answered' : 'Approved', requestId, answers };
+  return {
+    verb: answers.length > 0 ? "Answered" : "Approved",
+    requestId,
+    answers,
+  };
 }
 
 /**
@@ -1508,13 +1828,23 @@ export function answerVerdict(toolInput: JsonValue | undefined): {
 export function delegateOf(
   target: string,
   parentInstanceId: string,
-  instances: ReadonlyArray<{ id: string; cwd: string; parentInstanceId?: string | null }>
+  instances: ReadonlyArray<{
+    id: string;
+    cwd: string;
+    parentInstanceId?: string | null;
+  }>
 ): { id: string; cwd: string } | null {
   const needle = target.trim().toLowerCase();
-  if (!needle) return null;
+  if (!needle) {
+    return null;
+  }
   for (const row of instances) {
-    if (row.parentInstanceId !== parentInstanceId) continue;
-    const leafName = (row.cwd.split('/').filter(Boolean).pop() ?? row.cwd).toLowerCase();
+    if (row.parentInstanceId !== parentInstanceId) {
+      continue;
+    }
+    const leafName = (
+      row.cwd.split("/").filter(Boolean).pop() ?? row.cwd
+    ).toLowerCase();
     if (
       row.id === needle ||
       (needle.length >= 8 && row.id.startsWith(needle)) ||
@@ -1539,19 +1869,33 @@ function spannedByToolCalls(transcript: SessionMessage[]): Int32Array {
 
   transcript.forEach((entry, index) => {
     const content = (entry.message as { content?: unknown } | null)?.content;
-    if (!Array.isArray(content)) return;
-    for (const block of content as { type?: string; id?: string; tool_use_id?: string }[]) {
-      if (block.type === 'tool_use' && block.id) open.set(block.id, index);
-      if (block.type !== 'tool_result' || !block.tool_use_id) continue;
+    if (!Array.isArray(content)) {
+      return;
+    }
+    for (const block of content as {
+      type?: string;
+      id?: string;
+      tool_use_id?: string;
+    }[]) {
+      if (block.type === "tool_use" && block.id) {
+        open.set(block.id, index);
+      }
+      if (block.type !== "tool_result" || !block.tool_use_id) {
+        continue;
+      }
       const from = open.get(block.tool_use_id);
-      if (from === undefined) continue;
+      if (from === undefined) {
+        continue;
+      }
       open.delete(block.tool_use_id);
       depth[from + 1]++;
       depth[index]--;
     }
   });
 
-  for (let index = 1; index < depth.length; index++) depth[index] += depth[index - 1];
+  for (let index = 1; index < depth.length; index++) {
+    depth[index] += depth[index - 1];
+  }
   return depth;
 }
 
@@ -1561,18 +1905,28 @@ function spannedByToolCalls(transcript: SessionMessage[]): Int32Array {
  * it landed in, so mapping any `[boundary, next boundary)` slice on its own
  * gives what mapping the whole would have given for that stretch.
  */
-export function turnBoundaries(transcript: SessionMessage[], size: number): number[] {
-  if (transcript.length <= size) return [0];
+export function turnBoundaries(
+  transcript: SessionMessage[],
+  size: number
+): number[] {
+  if (transcript.length <= size) {
+    return [0];
+  }
   const spanned = spannedByToolCalls(transcript);
-  const cuttable = (index: number) => !spanned[index] && turnStart(transcript[index]) !== null;
+  const cuttable = (index: number) =>
+    !spanned[index] && turnStart(transcript[index]) !== null;
 
   const boundaries = [0];
   for (let cursor = size; cursor < transcript.length; cursor += size) {
     let index = cursor;
-    while (index > 0 && !cuttable(index)) index--;
+    while (index > 0 && !cuttable(index)) {
+      index--;
+    }
     // A turn longer than one chunk snaps onto the boundary already taken, and
     // stays one chunk rather than being cut where the pairs would not survive.
-    if (index > boundaries[boundaries.length - 1]) boundaries.push(index);
+    if (index > boundaries[boundaries.length - 1]) {
+      boundaries.push(index);
+    }
   }
   return boundaries;
 }
@@ -1582,7 +1936,10 @@ export function turnBoundaries(transcript: SessionMessage[], size: number): numb
  * is the raw SDK message, so the live mapping does the work — only user text,
  * which live sessions render from the local copy, is handled here.
  */
-export function mapTranscript(instanceId: string, transcript: SessionMessage[]): Transcript {
+export function mapTranscript(
+  instanceId: string,
+  transcript: SessionMessage[]
+): Transcript {
   const messages: Message[] = [];
   const subagents: Record<string, SubagentState> = {};
 
@@ -1590,9 +1947,11 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
     // System messages have no transcript lines, but the `task_*` subtypes
     // carry branch lifecycle data that stored transcripts would otherwise lose
     // (subagentType, description, result summary).
-    if (entry.type === 'system') {
+    if (entry.type === "system") {
       const mapping = mapFrame(instanceId, entry as unknown as SDKMessage);
-      if (mapping.branch) applyBranchEvent(subagents, instanceId, mapping.branch);
+      if (mapping.branch) {
+        applyBranchEvent(subagents, instanceId, mapping.branch);
+      }
       continue;
     }
 
@@ -1606,10 +1965,11 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
     // `mapFrame` below knows the difference; let it have them.
     // Anything whiffle injected — another session's hand-off, or a rule — is not
     // the reader opening a turn, and claiming it as one renders it as their own.
-    const injectedKind = 'origin' in entry
-      ? (entry as { origin?: { kind?: string } }).origin?.kind
-      : undefined;
-    const fromPeer = injectedKind === 'peer' || injectedKind === 'system';
+    const injectedKind =
+      "origin" in entry
+        ? (entry as { origin?: { kind?: string } }).origin?.kind
+        : undefined;
+    const fromPeer = injectedKind === "peer" || injectedKind === "system";
     const opening = fromPeer ? null : turnStart(entry);
     if (opening) {
       // A stored ask's marker is all that survives storage — the `[delegate-ask
@@ -1628,11 +1988,15 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
         messages.push({
           id: entry.uuid,
           instanceId,
-          type: 'user.delegate_ask',
+          type: "user.delegate_ask",
           content: ask.body,
           ...(recorded ? { timestamp: recorded } : {}),
           sdkUuid: entry.uuid,
-          metadata: { peerSession: ask.instance, askRequestId: ask.request, askLabel: ask.label },
+          metadata: {
+            peerSession: ask.instance,
+            askRequestId: ask.request,
+            askLabel: ask.label,
+          },
         });
         continue;
       }
@@ -1643,14 +2007,14 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
         messages.push({
           id: entry.uuid,
           instanceId,
-          type: 'user.peer',
+          type: "user.peer",
           content: report.body,
           ...(recorded ? { timestamp: recorded } : {}),
           sdkUuid: entry.uuid,
           metadata: {
             peerName: `${report.name}#${report.short}`,
             peerSession: report.short,
-            reportKind: report.failed ? 'failed' : 'report',
+            reportKind: report.failed ? "failed" : "report",
           },
         });
         continue;
@@ -1666,7 +2030,7 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
           ? {
               id: entry.uuid,
               instanceId,
-              type: 'user.peer',
+              type: "user.peer",
               content: text,
               ...(recorded ? { timestamp: recorded } : {}),
               sdkUuid: entry.uuid,
@@ -1684,7 +2048,9 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
     }
 
     const mapping = mapFrame(instanceId, entry as unknown as SDKMessage);
-    if (mapping.branch) applyBranchEvent(subagents, instanceId, mapping.branch);
+    if (mapping.branch) {
+      applyBranchEvent(subagents, instanceId, mapping.branch);
+    }
 
     // `mapFrame` stamps the client's clock, which is the truth for a frame
     // arriving live and a fiction for one read back off disk — it would date
@@ -1693,8 +2059,11 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
     // where it did not (an older daemon, or a harness with no source for it)
     // the message carries none and renders none.
     for (const message of mapping.messages) {
-      if (recorded) message.timestamp = recorded;
-      else delete message.timestamp;
+      if (recorded) {
+        message.timestamp = recorded;
+      } else {
+        delete message.timestamp;
+      }
     }
 
     const sink = mapping.agentId
@@ -1706,18 +2075,25 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
       // The Task call's own tool_result is the authoritative end of its branch,
       // mirroring what the live path does in client.svelte.ts.
       const branch = subagents[result.toolId];
-      if (!branch) continue;
-      branch.status = result.isError ? 'error' : 'complete';
+      if (!branch) {
+        continue;
+      }
+      branch.status = result.isError ? "error" : "complete";
       branch.completedAt ??= new Date();
-      if (result.isError) branch.error ??= result.result;
-      else branch.result ??= result.result;
+      if (result.isError) {
+        branch.error ??= result.result;
+      } else {
+        branch.result ??= result.result;
+      }
     }
   }
 
   // Nothing further will arrive for a stored session; anything still open ended
   // with the session rather than being live.
   for (const branch of Object.values(subagents)) {
-    if (branch.status !== 'error' && branch.status !== 'complete') branch.status = 'complete';
+    if (branch.status !== "error" && branch.status !== "complete") {
+      branch.status = "complete";
+    }
   }
 
   return { messages, subagents };
@@ -1727,20 +2103,23 @@ export function mapTranscript(instanceId: string, transcript: SessionMessage[]):
 export function localUserMessage(
   instanceId: string,
   text: string,
-  { attachments, images }: Pick<SendPayload, 'attachments' | 'images'> = {}
+  { attachments, images }: Pick<SendPayload, "attachments" | "images"> = {}
 ): Message {
   const carried = Boolean(attachments?.length || images?.length);
   return {
     id: newId(),
     instanceId,
-    type: 'user',
+    type: "user",
     content: text,
     timestamp: new Date(),
     // Thumbnails come from the same base64 that went out: nothing comes back to
     // build them from, since the live path never echoes the user's own turn.
     metadata: carried
       ? {
-          attachments: attachments?.map(({ name, content }) => ({ name, chars: content.length })),
+          attachments: attachments?.map(({ name, content }) => ({
+            name,
+            chars: content.length,
+          })),
           images: images?.map(({ mediaType, data }) => ({
             mediaType,
             dataUri: `data:${mediaType};base64,${data}`,
@@ -1755,21 +2134,24 @@ export function errorMessage(instanceId: string, text: string): Message {
   return {
     id: newId(),
     instanceId,
-    type: 'ui.error',
+    type: "ui.error",
     content: text,
     timestamp: new Date(),
   };
 }
 
 /** A session that died before it said anything — the registry row is all there is. */
-export function sessionFailedMessage(instanceId: string, reason: string): Message {
+export function sessionFailedMessage(
+  instanceId: string,
+  reason: string
+): Message {
   return {
     id: `${instanceId}:failed`,
     instanceId,
-    type: 'ui.session_error',
+    type: "ui.session_error",
     content: reason,
     timestamp: new Date(),
-    metadata: { errorTitle: 'Session failed to start' },
+    metadata: { errorTitle: "Session failed to start" },
   };
 }
 
@@ -1785,26 +2167,39 @@ export function sessionFailedMessage(instanceId: string, reason: string): Messag
  * exact content. Returns true when the message was folded in and must not be
  * appended.
  */
-export function mergePeerMessage(messages: Message[], incoming: Message): boolean {
-  if (incoming.type === 'user.delegate_ask') {
+export function mergePeerMessage(
+  messages: Message[],
+  incoming: Message
+): boolean {
+  if (incoming.type === "user.delegate_ask") {
     const requestId = incoming.metadata?.askRequestId;
-    if (!requestId) return false;
+    if (!requestId) {
+      return false;
+    }
     const existing = messages.find(
       (message) =>
-        message.type === 'user.delegate_ask' && message.metadata?.askRequestId === requestId
+        message.type === "user.delegate_ask" &&
+        message.metadata?.askRequestId === requestId
     );
-    if (!existing) return false;
+    if (!existing) {
+      return false;
+    }
     if (!existing.sdkUuid && incoming.sdkUuid) {
       existing.sdkUuid = incoming.sdkUuid;
       existing.id = incoming.id;
     }
     return true;
   }
-  if (incoming.type !== 'user.peer' && incoming.type !== 'user') return false;
+  if (incoming.type !== "user.peer" && incoming.type !== "user") {
+    return false;
+  }
   const existing = messages.find(
-    (message) => message.type === 'user.peer' && message.content === incoming.content
+    (message) =>
+      message.type === "user.peer" && message.content === incoming.content
   );
-  if (!existing) return false;
+  if (!existing) {
+    return false;
+  }
   if (!existing.sdkUuid && incoming.sdkUuid) {
     existing.sdkUuid = incoming.sdkUuid;
     existing.id = incoming.id;
@@ -1824,11 +2219,17 @@ export function isDelegateReport(
   parentInstanceId: string,
   instances: ReadonlyArray<{ id: string; parentInstanceId?: string | null }>
 ): boolean {
-  if (message.type !== 'user.peer') return false;
+  if (message.type !== "user.peer") {
+    return false;
+  }
   const peerSession = message.metadata?.peerSession;
-  if (!peerSession) return false;
+  if (!peerSession) {
+    return false;
+  }
   return instances.some(
-    (row) => matchesSession(peerSession, row.id) && row.parentInstanceId === parentInstanceId
+    (row) =>
+      matchesSession(peerSession, row.id) &&
+      row.parentInstanceId === parentInstanceId
   );
 }
 
@@ -1840,9 +2241,13 @@ export function applyToolResult(
   // `tool.handoff` is a tool call too — it just renders as a receipt. Matching
   // only `tool.use` left it stuck on "sending…" with the answer never applied.
   const target = messages.find(
-    (m) => (m.type === 'tool.use' || m.type === 'tool.handoff') && m.metadata?.toolId === toolId
+    (m) =>
+      (m.type === "tool.use" || m.type === "tool.handoff") &&
+      m.metadata?.toolId === toolId
   );
-  if (!target) return;
+  if (!target) {
+    return;
+  }
 
   let delegateInstanceId: string | undefined;
   let delegateTitle: string | undefined;
@@ -1851,23 +2256,29 @@ export function applyToolResult(
   // replayed transcript has no `structuredContent` field and the payload rides as
   // a JSON string in `result` instead. Parse it back out when it is one.
   let sc = structuredContent;
-  if (!sc && typeof result === 'string') {
+  if (!sc && typeof result === "string") {
     try {
       const parsed: unknown = JSON.parse(result);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         sc = parsed as Record<string, unknown>;
       }
     } catch {
       // Most tool results are not JSON; there is no structured payload to read.
     }
   }
-  if (target.type === 'tool.handoff' && !isError && sc) {
-    if (target.metadata?.handoffKind === 'delegate' && typeof sc.delegateInstanceId === 'string') {
+  if (target.type === "tool.handoff" && !isError && sc) {
+    if (
+      target.metadata?.handoffKind === "delegate" &&
+      typeof sc.delegateInstanceId === "string"
+    ) {
       delegateInstanceId = sc.delegateInstanceId;
-    } else if (target.metadata?.handoffKind === 'start' && typeof sc.instanceId === 'string') {
+    } else if (
+      target.metadata?.handoffKind === "start" &&
+      typeof sc.instanceId === "string"
+    ) {
       delegateInstanceId = sc.instanceId;
     }
-    if (typeof sc.title === 'string') {
+    if (typeof sc.title === "string") {
       delegateTitle = sc.title;
     }
   }
@@ -1875,7 +2286,7 @@ export function applyToolResult(
   target.metadata = {
     ...target.metadata,
     toolResult: result,
-    toolStatus: isError ? 'error' : 'success',
+    toolStatus: isError ? "error" : "success",
     ...(questionResult ? { toolUseResult: questionResult } : {}),
     ...(delegateInstanceId ? { delegateInstanceId } : {}),
     ...(delegateTitle ? { delegateTitle } : {}),
@@ -1899,11 +2310,15 @@ export function mergePulses(
   current: Record<string, SessionPulse>,
   incoming: Record<string, SessionPulse> | undefined
 ): Record<string, SessionPulse> {
-  if (!incoming) return current;
+  if (!incoming) {
+    return current;
+  }
   const next = { ...current };
   for (const [instanceId, pulse] of Object.entries(incoming)) {
     const existing = next[instanceId];
-    if (!existing || pulse.at >= existing.at) next[instanceId] = pulse;
+    if (!existing || pulse.at >= existing.at) {
+      next[instanceId] = pulse;
+    }
   }
   return next;
 }

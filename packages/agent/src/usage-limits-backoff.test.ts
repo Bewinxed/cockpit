@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, expect, setSystemTime, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fetchClaudeLimits } from '@whiffle/core/usage/limits';
+import { afterEach, beforeEach, expect, setSystemTime, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fetchClaudeLimits } from "@whiffle/core/usage/limits";
 
 /**
  * Backoff & stale retention for `fetchClaudeLimits` (USAGE-SPEC.md §4.5).
@@ -12,7 +12,7 @@ import { fetchClaudeLimits } from '@whiffle/core/usage/limits';
  * any success has set `lastGood` (bun runs tests in declaration order).
  */
 
-const BASE = Date.parse('2026-01-01T00:00:00Z');
+const BASE = Date.parse("2026-01-01T00:00:00Z");
 const MIN = 60_000;
 
 let dir: string;
@@ -53,15 +53,27 @@ function mockFetch(response: () => Response): void {
 }
 
 const okBody = () => ({
-  limits: [{ kind: 'session', group: 'session', percent: 42, severity: 'normal', resets_at: null, is_active: false }],
+  limits: [
+    {
+      kind: "session",
+      group: "session",
+      percent: 42,
+      severity: "normal",
+      resets_at: null,
+      is_active: false,
+    },
+  ],
 });
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'limits-'));
+  dir = mkdtempSync(join(tmpdir(), "limits-"));
   writeFileSync(
-    join(dir, '.credentials.json'),
+    join(dir, ".credentials.json"),
     JSON.stringify({
-      claudeAiOauth: { accessToken: 'tok', expiresAt: Date.parse('2030-01-01T00:00:00Z') },
+      claudeAiOauth: {
+        accessToken: "tok",
+        expiresAt: Date.parse("2030-01-01T00:00:00Z"),
+      },
     })
   );
   setNow(clock);
@@ -73,26 +85,28 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
-test('first failure with no prior reading returns empty windows, not stale', async () => {
-  mockFetch(() => new Response('{}', { status: 429 }));
+test("first failure with no prior reading returns empty windows, not stale", async () => {
+  mockFetch(() => new Response("{}", { status: 429 }));
   const result = await fetchClaudeLimits({ configDir: dir });
 
-  expect(result.error).toBe('HTTP 429');
+  expect(result.error).toBe("HTTP 429");
   expect(result.windows).toEqual([]);
   expect(result.stale).toBeUndefined();
 });
 
-test('429 with a Retry-After header is honoured and cached', async () => {
+test("429 with a Retry-After header is honoured and cached", async () => {
   await toCleanState();
-  mockFetch(() => new Response('{}', { status: 429, headers: { 'retry-after': '120' } }));
+  mockFetch(
+    () => new Response("{}", { status: 429, headers: { "retry-after": "120" } })
+  );
 
   const first = await fetchClaudeLimits({ configDir: dir });
   expect(first.stale).toBe(true);
-  expect(first.error).toBe('HTTP 429');
+  expect(first.error).toBe("HTTP 429");
   expect(first.windows.length).toBeGreaterThan(0);
   expect(fetchCalls).toBe(1);
 
-  advance(1_000);
+  advance(1000);
   await fetchClaudeLimits({ configDir: dir });
   expect(fetchCalls).toBe(1); // still inside the 120s window: no re-fetch
 
@@ -101,9 +115,9 @@ test('429 with a Retry-After header is honoured and cached', async () => {
   expect(fetchCalls).toBe(2); // window expired: fetch again
 });
 
-test('429 without Retry-After escalates 5m -> 15m -> 60m', async () => {
+test("429 without Retry-After escalates 5m -> 15m -> 60m", async () => {
   await toCleanState();
-  mockFetch(() => new Response('{}', { status: 429 }));
+  mockFetch(() => new Response("{}", { status: 429 }));
 
   await fetchClaudeLimits({ configDir: dir }); // streak 1 -> 5m
   expect(fetchCalls).toBe(1);
@@ -112,7 +126,7 @@ test('429 without Retry-After escalates 5m -> 15m -> 60m', async () => {
   await fetchClaudeLimits({ configDir: dir });
   expect(fetchCalls).toBe(1); // within 5m
 
-  advance(4 * MIN + 1_000);
+  advance(4 * MIN + 1000);
   await fetchClaudeLimits({ configDir: dir });
   expect(fetchCalls).toBe(2); // 5m expired, streak 2 -> 15m
 
@@ -120,25 +134,25 @@ test('429 without Retry-After escalates 5m -> 15m -> 60m', async () => {
   await fetchClaudeLimits({ configDir: dir });
   expect(fetchCalls).toBe(2); // within 15m
 
-  advance(10 * MIN + 1_000);
+  advance(10 * MIN + 1000);
   await fetchClaudeLimits({ configDir: dir });
   expect(fetchCalls).toBe(3); // 15m expired, streak 3 -> 60m
 });
 
-test('a success resets the failure streak', async () => {
+test("a success resets the failure streak", async () => {
   await toCleanState();
-  mockFetch(() => new Response('{}', { status: 429 }));
+  mockFetch(() => new Response("{}", { status: 429 }));
   await fetchClaudeLimits({ configDir: dir }); // streak 1
   expect(fetchCalls).toBe(1);
 
-  advance(5 * MIN + 1_000); // let the backoff expire
+  advance(5 * MIN + 1000); // let the backoff expire
   mockFetch(() => new Response(JSON.stringify(okBody()), { status: 200 }));
   const good = await fetchClaudeLimits({ configDir: dir });
   expect(good.error).toBe(null);
   expect(good.stale).toBeUndefined();
 
   advance(61_000); // expire the success cache
-  mockFetch(() => new Response('{}', { status: 429 }));
+  mockFetch(() => new Response("{}", { status: 429 }));
   await fetchClaudeLimits({ configDir: dir }); // streak is 1 again -> 5m, not 15m
   expect(fetchCalls).toBe(1);
 
@@ -147,9 +161,9 @@ test('a success resets the failure streak', async () => {
   expect(fetchCalls).toBe(2); // 5m backoff (reset) expired; a 15m one would not have
 });
 
-test('non-429 failures cool down a fixed 2m', async () => {
+test("non-429 failures cool down a fixed 2m", async () => {
   await toCleanState();
-  mockFetch(() => new Response('{}', { status: 500 }));
+  mockFetch(() => new Response("{}", { status: 500 }));
 
   await fetchClaudeLimits({ configDir: dir });
   expect(fetchCalls).toBe(1);
@@ -158,7 +172,7 @@ test('non-429 failures cool down a fixed 2m', async () => {
   await fetchClaudeLimits({ configDir: dir });
   expect(fetchCalls).toBe(1); // within 2m
 
-  advance(2 * MIN + 1_000);
+  advance(2 * MIN + 1000);
   await fetchClaudeLimits({ configDir: dir });
   expect(fetchCalls).toBe(2);
 });

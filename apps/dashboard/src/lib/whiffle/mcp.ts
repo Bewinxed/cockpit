@@ -1,4 +1,4 @@
-import type { McpServerStatus } from '@whiffle/core';
+import type { McpServerStatus } from "@whiffle/core";
 
 /**
  * The hostname a server's favicon can be fetched for: HTTP, SSE and claude.ai
@@ -7,7 +7,9 @@ import type { McpServerStatus } from '@whiffle/core';
  */
 export function mcpHost(server: McpServerStatus): string | null {
   const config = server.config;
-  if (!config || !('url' in config) || typeof config.url !== 'string') return null;
+  if (!(config && "url" in config) || typeof config.url !== "string") {
+    return null;
+  }
   try {
     return new URL(config.url).hostname;
   } catch {
@@ -21,14 +23,16 @@ export function mcpHost(server: McpServerStatus): string | null {
  * generic second-level label under a two-letter country TLD (`foo.co.uk`).
  * A bare host (localhost, an IP) is its own root.
  */
-const GENERIC_SLD = new Set(['co', 'com', 'net', 'org', 'gov', 'edu', 'ac']);
+const GENERIC_SLD = new Set(["co", "com", "net", "org", "gov", "edu", "ac"]);
 
 export function rootDomain(host: string): string {
-  const parts = host.split('.');
-  if (parts.length <= 2) return host;
+  const parts = host.split(".");
+  if (parts.length <= 2) {
+    return host;
+  }
   const [sld, tld] = parts.slice(-2);
   const take = GENERIC_SLD.has(sld) && tld.length === 2 ? 3 : 2;
-  return parts.slice(-take).join('.');
+  return parts.slice(-take).join(".");
 }
 
 /**

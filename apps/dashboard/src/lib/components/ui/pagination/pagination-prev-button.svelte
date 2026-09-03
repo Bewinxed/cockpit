@@ -1,32 +1,36 @@
 <script lang="ts">
-	import { Pagination as PaginationPrimitive } from "bits-ui";
-	import { HugeiconsIcon } from "@hugeicons/svelte"
-	import { ArrowLeftIcon } from '@hugeicons/core-free-icons';
-	import { cn } from "$lib/utils.js";
-	import { buttonVariants } from "../button/index.js";
+  import { ArrowLeftIcon } from "@hugeicons/core-free-icons";
+  import { HugeiconsIcon } from "@hugeicons/svelte";
+  import { Pagination as PaginationPrimitive } from "bits-ui";
+  import { cn } from "$lib/utils.js";
+  import { buttonVariants } from "../button/index.js";
 
-	let {
-		ref = $bindable(null),
-		class: className,
-		children,
-		...restProps
-	}: PaginationPrimitive.PrevButtonProps = $props();
+  let {
+    ref = $bindable(null),
+    class: className,
+    children,
+    ...restProps
+  }: PaginationPrimitive.PrevButtonProps = $props();
 </script>
 
 {#snippet Fallback()}
-	<HugeiconsIcon icon={ArrowLeftIcon} strokeWidth={2} class={cn("size-4", className)} />
-	<span>Previous</span>
+  <HugeiconsIcon
+    class={cn("size-4", className)}
+    icon={ArrowLeftIcon}
+    strokeWidth={2}
+  />
+  <span>Previous</span>
 {/snippet}
 
 <PaginationPrimitive.PrevButton
-	bind:ref
-	aria-label="Go to previous page"
-	class={cn(buttonVariants({ variant: "ghost" }), "pl-2!", className)}
-	{...restProps}
+  aria-label="Go to previous page"
+  class={cn(buttonVariants({ variant: "ghost" }), "pl-2!", className)}
+  bind:ref
+  {...restProps}
 >
-	{#if children}
-		{@render children?.()}
-	{:else}
-		{@render Fallback()}
-	{/if}
+  {#if children}
+    {@render children?.()}
+  {:else}
+    {@render Fallback()}
+  {/if}
 </PaginationPrimitive.PrevButton>

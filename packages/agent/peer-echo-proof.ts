@@ -21,11 +21,12 @@
  *
  * Run with `bun peer-echo-proof.ts`. Prints a DIAG line per peer-mappable frame.
  */
-import { claudeHarness } from './src/harnesses/claude';
-import type { HarnessContext, HarnessSession } from './src/harness';
-import type { NeutralMessage } from '@whiffle/core';
 
-const PROOF_DIR = '/tmp/peer-echo-proof';
+import type { NeutralMessage } from "@whiffle/core";
+import type { HarnessContext, HarnessSession } from "./src/harness";
+import { claudeHarness } from "./src/harnesses/claude";
+
+const PROOF_DIR = "/tmp/peer-echo-proof";
 
 await Bun.$`rm -rf ${PROOF_DIR}`.quiet().nothrow();
 await Bun.$`mkdir -p ${PROOF_DIR}`.quiet();
@@ -36,14 +37,14 @@ let session: HarnessSession | null = null;
 const failures: string[] = [];
 
 const ctx: HarnessContext = {
-  instanceId: 'peer-echo-proof',
+  instanceId: "peer-echo-proof",
   cwd: PROOF_DIR,
   frame: (message) => {
     frames.push(message);
   },
   permission: (request) => {
     setTimeout(() => {
-      session?.resolvePermission(request.requestId, { behavior: 'allow' });
+      session?.resolvePermission(request.requestId, { behavior: "allow" });
     }, 100);
   },
   busy: () => {},
@@ -56,15 +57,18 @@ const ctx: HarnessContext = {
 };
 
 const PEER = {
-  kind: 'peer',
-  from: 'parent-1',
-  name: 'parent',
-  fromSession: 'parent-1',
+  kind: "peer",
+  from: "parent-1",
+  name: "parent",
+  fromSession: "parent-1",
 } as const;
 
-const peerMessage = (content: string, extra: { shouldQuery?: boolean } = {}) => ({
-  type: 'user' as const,
-  message: { role: 'user' as const, content },
+const peerMessage = (
+  content: string,
+  extra: { shouldQuery?: boolean } = {}
+) => ({
+  type: "user" as const,
+  message: { role: "user" as const, content },
   parent_tool_use_id: null,
   origin: { ...PEER },
   ...extra,
@@ -72,19 +76,23 @@ const peerMessage = (content: string, extra: { shouldQuery?: boolean } = {}) => 
 
 /** The dashboard's structural peer test, mirrored here. */
 function peerText(m: NeutralMessage): string | null {
-  if (m.type !== 'user') return null;
+  if (m.type !== "user") {
+    return null;
+  }
   const origin = (m as { origin?: { kind?: string } }).origin;
-  if (origin?.kind !== 'peer') return null;
+  if (origin?.kind !== "peer") {
+    return null;
+  }
   const content = m.message.content;
   const text =
-    typeof content === 'string'
+    typeof content === "string"
       ? content
       : Array.isArray(content)
         ? content
-            .filter((b) => (b as { type?: string }).type === 'text')
-            .map((b) => String((b as { text?: unknown }).text ?? ''))
-            .join('\n')
-        : '';
+            .filter((b) => (b as { type?: string }).type === "text")
+            .map((b) => String((b as { text?: unknown }).text ?? ""))
+            .join("\n")
+        : "";
   return text.trim() ? text : null;
 }
 
@@ -102,8 +110,8 @@ function diag(label: string, from: number): number {
       origin?: { kind?: string; from?: string; name?: string };
     };
     console.log(
-      `DIAG ${label} frame: uuid=${shape.uuid ?? '<none>'} isReplay=${shape.isReplay ?? false} ` +
-        `origin=${JSON.stringify(shape.origin)} text=${JSON.stringify((peerText(f) ?? '').slice(0, 50))}`
+      `DIAG ${label} frame: uuid=${shape.uuid ?? "<none>"} isReplay=${shape.isReplay ?? false} ` +
+        `origin=${JSON.stringify(shape.origin)} text=${JSON.stringify((peerText(f) ?? "").slice(0, 50))}`
     );
   }
   return peers.length;
@@ -120,21 +128,31 @@ function dumpAll(label: string, from: number): void {
       origin?: { kind?: string };
       message?: { type?: string; role?: string };
     };
-    const inner = shape.type === 'raw' ? ` raw.inner.type=${shape.message?.type ?? '?'}` : '';
+    const inner =
+      shape.type === "raw"
+        ? ` raw.inner.type=${shape.message?.type ?? "?"}`
+        : "";
     console.log(
-      `DIAG ${label} frame: type=${shape.type} subtype=${shape.subtype ?? '-'} ` +
-        `uuid=${shape.uuid ?? '<none>'} isReplay=${shape.isReplay ?? false} ` +
+      `DIAG ${label} frame: type=${shape.type} subtype=${shape.subtype ?? "-"} ` +
+        `uuid=${shape.uuid ?? "<none>"} isReplay=${shape.isReplay ?? false} ` +
         `origin=${JSON.stringify(shape.origin)}${inner}`
     );
   }
 }
 
-function waitForResult(sinceIndex: number, timeoutMs: number): Promise<boolean> {
+function waitForResult(
+  sinceIndex: number,
+  timeoutMs: number
+): Promise<boolean> {
   const started = Date.now();
   return new Promise((resolve) => {
     const tick = () => {
-      if (frames.slice(sinceIndex).some((f) => f.type === 'result')) return resolve(true);
-      if (Date.now() - started >= timeoutMs) return resolve(false);
+      if (frames.slice(sinceIndex).some((f) => f.type === "result")) {
+        return resolve(true);
+      }
+      if (Date.now() - started >= timeoutMs) {
+        return resolve(false);
+      }
       setTimeout(tick, 200);
     };
     tick();
@@ -149,8 +167,12 @@ function waitForFrame(
   const started = Date.now();
   return new Promise((resolve) => {
     const tick = () => {
-      if (predicate(frames.slice(sinceIndex))) return resolve(true);
-      if (Date.now() - started >= timeoutMs) return resolve(false);
+      if (predicate(frames.slice(sinceIndex))) {
+        return resolve(true);
+      }
+      if (Date.now() - started >= timeoutMs) {
+        return resolve(false);
+      }
       setTimeout(tick, 200);
     };
     tick();
@@ -160,11 +182,11 @@ function waitForFrame(
 const TIMEOUT = 180_000;
 
 const spawned = await claudeHarness.spawn(
-  { instanceId: 'peer-echo-proof', cwd: PROOF_DIR, persistSession: false },
+  { instanceId: "peer-echo-proof", cwd: PROOF_DIR, persistSession: false },
   ctx
 );
 if (!spawned) {
-  console.error('spawn returned no session');
+  console.error("spawn returned no session");
   process.exit(2);
 }
 session = spawned;
@@ -174,68 +196,106 @@ const counts: Record<string, number> = {};
 // ---- A: querying opening prompt (delegate spawn) ----
 {
   const start = frames.length;
-  session.send(peerMessage('PEER-OPENING: reply with exactly OPENING-ACK and nothing else.'), {});
+  session.send(
+    peerMessage(
+      "PEER-OPENING: reply with exactly OPENING-ACK and nothing else."
+    ),
+    {}
+  );
   const got = await waitForResult(start, TIMEOUT);
   console.log(`DIAG A: result frame arrived = ${got}`);
-  dumpAll('A', start);
-  counts.A = diag('A-querying-opening', start);
-  if (failures.length) console.log(`DIAG A failed(): ${failures.join(' | ')}`);
+  dumpAll("A", start);
+  counts.A = diag("A-querying-opening", start);
+  if (failures.length) {
+    console.log(`DIAG A failed(): ${failures.join(" | ")}`);
+  }
 }
 
 // ---- B: queued hand-off while IDLE (wake path) ----
 {
   const start = frames.length;
   session.send(
-    peerMessage('PEER-QUEUED-IDLE: reply with exactly QUEUED-ACK and nothing else.', {
-      shouldQuery: false,
-    }),
+    peerMessage(
+      "PEER-QUEUED-IDLE: reply with exactly QUEUED-ACK and nothing else.",
+      {
+        shouldQuery: false,
+      }
+    ),
     {}
   );
   const got = await waitForResult(start, TIMEOUT);
   console.log(`DIAG B: result frame arrived = ${got}`);
-  dumpAll('B', start);
-  counts.B = diag('B-queued-idle', start);
+  dumpAll("B", start);
+  counts.B = diag("B-queued-idle", start);
 }
 
 // ---- C: urgent peer message injected mid-turn (A2 probe) ----
 {
   const start = frames.length;
   session.send(
-    { type: 'user', message: { role: 'user', content: 'Count from 1 to 400 in English words, one per line.' } },
+    {
+      type: "user",
+      message: {
+        role: "user",
+        content: "Count from 1 to 400 in English words, one per line.",
+      },
+    },
     {}
   );
-  const busy = await waitForFrame(start, (slice) => slice.some((f) => f.type === 'stream_event'), 60_000);
+  const busy = await waitForFrame(
+    start,
+    (slice) => slice.some((f) => f.type === "stream_event"),
+    60_000
+  );
   console.log(`DIAG C: busy turn streaming = ${busy}`);
   const startU = frames.length;
   session.send(
-    peerMessage('PEER-URGENT: stop counting and reply with exactly URGENT-ACK.'),
+    peerMessage(
+      "PEER-URGENT: stop counting and reply with exactly URGENT-ACK."
+    ),
     { urgent: true }
   );
   const got = await waitForResult(startU, TIMEOUT);
   console.log(`DIAG C: result frame arrived = ${got}`);
-  dumpAll('C', startU);
-  counts.C = diag('C-urgent', startU);
+  dumpAll("C", startU);
+  counts.C = diag("C-urgent", startU);
 }
 
 // ---- D: queued hand-off while BUSY (the case the daemon echo is for) ----
 {
   const start = frames.length;
   session.send(
-    { type: 'user', message: { role: 'user', content: 'Count from 1 to 400 in English words, one per line.' } },
+    {
+      type: "user",
+      message: {
+        role: "user",
+        content: "Count from 1 to 400 in English words, one per line.",
+      },
+    },
     {}
   );
-  const busy = await waitForFrame(start, (slice) => slice.some((f) => f.type === 'stream_event'), 60_000);
+  const busy = await waitForFrame(
+    start,
+    (slice) => slice.some((f) => f.type === "stream_event"),
+    60_000
+  );
   console.log(`DIAG D: busy turn streaming = ${busy}`);
   const startQ = frames.length;
   session.send(
-    peerMessage('PEER-QUEUED-BUSY: this must not start a turn of its own.', { shouldQuery: false }),
+    peerMessage("PEER-QUEUED-BUSY: this must not start a turn of its own.", {
+      shouldQuery: false,
+    }),
     {}
   );
   // The queued append is silent on the SDK side; wait briefly for any echo frame.
-  const echoed = await waitForFrame(startQ, (slice) => peerFrames(startQ).length > 0, 10_000);
+  const echoed = await waitForFrame(
+    startQ,
+    (slice) => peerFrames(startQ).length > 0,
+    10_000
+  );
   console.log(`DIAG D: queued echo observed = ${echoed}`);
-  dumpAll('D', startQ);
-  counts.D = diag('D-queued-busy', startQ);
+  dumpAll("D", startQ);
+  counts.D = diag("D-queued-busy", startQ);
   await session.interrupt().catch(() => {});
   await waitForResult(startQ, 60_000);
 }
@@ -245,9 +305,13 @@ console.log(`COUNTS ${JSON.stringify(counts)}`);
 const assertCount = (label: string, expected: number): void => {
   const actual = counts[label];
   const ok = actual === expected;
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${label}: expected ${expected}, got ${actual}`);
+  console.log(
+    `${ok ? "PASS" : "FAIL"} ${label}: expected ${expected}, got ${actual}`
+  );
   if (!ok) {
-    console.log(`DIAG ${JSON.stringify({ assertion: label, expected, actual })}`);
+    console.log(
+      `DIAG ${JSON.stringify({ assertion: label, expected, actual })}`
+    );
     failures.push(`${label}: expected ${expected}, got ${actual}`);
   }
 };
@@ -256,17 +320,17 @@ const assertCount = (label: string, expected: number): void => {
 // each produce exactly one peer bubble (the daemon echo). Gating the echo on
 // "SDK stays silent" would drop the frame for A and B — there is no SDK replay
 // to fall back on — so the invariant asserted here is one, not zero.
-assertCount('A', 1);
-assertCount('B', 1);
-assertCount('D', 1);
+assertCount("A", 1);
+assertCount("B", 1);
+assertCount("D", 1);
 // C is reported, not gated: its expectation follows from the A2 measurement.
 console.log(`DIAG ${JSON.stringify({ urgentCount: counts.C })}`);
 
 await session.stop().catch(() => {});
 
 if (failures.length) {
-  console.log(`peer-echo-proof: FAIL ${failures.join('; ')}`);
+  console.log(`peer-echo-proof: FAIL ${failures.join("; ")}`);
   process.exit(1);
 }
-console.log('peer-echo-proof: all PASS');
+console.log("peer-echo-proof: all PASS");
 process.exit(0);

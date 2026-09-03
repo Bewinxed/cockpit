@@ -1,5 +1,5 @@
-import type { UsageBucket, UsageTokens } from './types';
-import { totalTokens } from './tokens';
+import { totalTokens } from "./tokens";
+import type { UsageBucket, UsageTokens } from "./types";
 
 /**
  * 5-hour billing blocks (USAGE-SPEC.md §4.4), a port of ccusage
@@ -14,40 +14,45 @@ const MINUTE_MS = 60 * 1000;
 
 /** ccusage blocks.rs:38-43. `tokensPerMinuteForIndicator` excludes cache reads/writes. */
 export interface BurnRate {
+  costPerHour: number;
   tokensPerMinute: number;
   tokensPerMinuteForIndicator: number;
-  costPerHour: number;
 }
 
 /** ccusage blocks.rs:45-51. */
 export interface Projection {
-  totalTokens: number;
-  totalCost: number;
   remainingMinutes: number;
+  totalCost: number;
+  totalTokens: number;
 }
 
 export interface UsageBlock {
-  id: string; // ISO(startTime)
-  startTime: number; // ms epoch, hour-floored
-  endTime: number; // startTime + 5h
   actualEndTime: number | null; // last bucket's lastTs; null for a gap block
+  burnRate: BurnRate | null;
+  costUsd: number;
+  endTime: number; // startTime + 5h
+  firstTs: number; // earliest record in the block (block start for a gap)
+  id: string; // ISO(startTime)
   isActive: boolean;
   isGap: boolean;
-  firstTs: number; // earliest record in the block (block start for a gap)
   lastTs: number; // latest record in the block (block end for a gap)
-  tokens: UsageTokens;
-  costUsd: number;
   models: string[];
-  burnRate: BurnRate | null;
   projection: Projection | null;
+  startTime: number; // ms epoch, hour-floored
+  tokens: UsageTokens;
 }
 
 export function floorToHour(ts: number): number {
   return Math.floor(ts / HOUR_MS) * HOUR_MS;
 }
 
-export function identifyBlocks(buckets: UsageBucket[], now: number): UsageBlock[] {
-  if (buckets.length === 0) return [];
+export function identifyBlocks(
+  buckets: UsageBucket[],
+  now: number
+): UsageBlock[] {
+  if (buckets.length === 0) {
+    return [];
+  }
 
   const sorted = [...buckets].sort((a, b) => a.firstTs - b.firstTs);
   const blocks: UsageBlock[] = [];
@@ -74,13 +79,23 @@ export function identifyBlocks(buckets: UsageBucket[], now: number): UsageBlock[
   return blocks;
 }
 
-function createBlock(start: number, buckets: UsageBucket[], now: number): UsageBlock {
+function createBlock(
+  start: number,
+  buckets: UsageBucket[],
+  now: number
+): UsageBlock {
   const end = start + SESSION_DURATION_MS;
   const firstTs = buckets[0].firstTs;
   const lastTs = buckets[buckets.length - 1].lastTs;
   const isActive = now - lastTs < SESSION_DURATION_MS && now < end;
 
-  const tokens: UsageTokens = { input: 0, output: 0, cacheCreation: 0, cacheRead: 0, reasoning: 0 };
+  const tokens: UsageTokens = {
+    input: 0,
+    output: 0,
+    cacheCreation: 0,
+    cacheRead: 0,
+    reasoning: 0,
+  };
   let costUsd = 0;
   const models: string[] = [];
   const seen = new Set<string>();
@@ -129,7 +144,13 @@ function createGapBlock(prevLastTs: number, nextFirstTs: number): UsageBlock {
     isGap: true,
     firstTs: start,
     lastTs: nextFirstTs,
-    tokens: { input: 0, output: 0, cacheCreation: 0, cacheRead: 0, reasoning: 0 },
+    tokens: {
+      input: 0,
+      output: 0,
+      cacheCreation: 0,
+      cacheRead: 0,
+      reasoning: 0,
+    },
     costUsd: 0,
     models: [],
     burnRate: null,
@@ -142,9 +163,13 @@ function createGapBlock(prevLastTs: number, nextFirstTs: number): UsageBlock {
  * `tokensPerMinuteForIndicator` excludes cache tokens (input + output only).
  */
 export function calculateBurnRate(block: UsageBlock): BurnRate | null {
-  if (block.isGap) return null;
+  if (block.isGap) {
+    return null;
+  }
   const durationMinutes = (block.lastTs - block.firstTs) / MINUTE_MS;
-  if (durationMinutes <= 0) return null;
+  if (durationMinutes <= 0) {
+    return null;
+  }
   const total = totalTokens(block.tokens);
   const nonCache = block.tokens.input + block.tokens.output;
   return {
@@ -155,14 +180,29 @@ export function calculateBurnRate(block: UsageBlock): BurnRate | null {
 }
 
 /** ccusage blocks.rs:586-601. Only the active, non-gap block projects. */
-export function projectUsage(block: UsageBlock, now: number): Projection | null {
-  if (!block.isActive || block.isGap) return null;
+export function projectUsage(
+  block: UsageBlock,
+  now: number
+): Projection | null {
+  if (!block.isActive || block.isGap) {
+    return null;
+  }
   const burn = calculateBurnRate(block);
-  if (!burn) return null;
+  if (!burn) {
+    return null;
+  }
   const remainingMinutes = Math.round((block.endTime - now) / MINUTE_MS);
   const total = totalTokens(block.tokens);
-  const projectedTokens = Math.round(total + burn.tokensPerMinute * remainingMinutes);
+  const projectedTokens = Math.round(
+    total + burn.tokensPerMinute * remainingMinutes
+  );
   const projectedCost =
-    Math.round((block.costUsd + (burn.costPerHour / 60) * remainingMinutes) * 100) / 100;
-  return { totalTokens: projectedTokens, totalCost: projectedCost, remainingMinutes };
+    Math.round(
+      (block.costUsd + (burn.costPerHour / 60) * remainingMinutes) * 100
+    ) / 100;
+  return {
+    totalTokens: projectedTokens,
+    totalCost: projectedCost,
+    remainingMinutes,
+  };
 }

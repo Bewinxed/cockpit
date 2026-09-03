@@ -1,12 +1,23 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Whiffle — Agent surface (v5, compact)</title>
-<link rel="preload" href="./fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="./fonts/geist.css">
-<link rel="stylesheet" href="./tokens.css">
-<style>
-/* =============================================================================
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+      name="viewport"
+    >
+    <title>Whiffle — Agent surface (v5, compact)</title>
+    <link
+      as="font"
+      crossorigin
+      href="./fonts/geist-latin-wght-normal.woff2"
+      rel="preload"
+      type="font/woff2"
+    >
+    <link href="./fonts/geist.css" rel="stylesheet">
+    <link href="./tokens.css" rel="stylesheet">
+    <style>
+      /* =============================================================================
    WHIFFLE — PHASE 5 "AGENT SURFACE" (compact density)
    The transcript, composer + fixed anchors, approval & question cards, subagent
    tree (delegates are separate sessions, folded as subagent branches), assistant
@@ -30,191 +41,712 @@
 
    ========================================================================== */
 
-:root{
-  /* ---- component dimension ramp — COMPACT (fine-pointer only) --------------- */
-  --a-row:26px;          /* tool / step / delegate row pitch */
-  --a-row-gap:4px;
-  --a-pad:12px;          /* transcript horizontal padding */
-  --a-card-pad:13px;     /* hitl card padding */
-  --a-btn-h:34px;        /* approve/deny / composer control height */
-  --a-btn-pad:12px;
-  --a-gap:6px;
-  --a-input-h:34px;
-  --a-input-fs:16px;     /* >=16px so iOS never zooms at any width */
-  --a-stack-gap:6px;
-  --a-transcript-b:96px; /* bottom clearance for the floating composer */
-}
+      :root {
+        /* ---- component dimension ramp — COMPACT (fine-pointer only) --------------- */
+        --a-row: 26px; /* tool / step / delegate row pitch */
+        --a-row-gap: 4px;
+        --a-pad: 12px; /* transcript horizontal padding */
+        --a-card-pad: 13px; /* hitl card padding */
+        --a-btn-h: 34px; /* approve/deny / composer control height */
+        --a-btn-pad: 12px;
+        --a-gap: 6px;
+        --a-input-h: 34px;
+        --a-input-fs: 16px; /* >=16px so iOS never zooms at any width */
+        --a-stack-gap: 6px;
+        --a-transcript-b: 96px; /* bottom clearance for the floating composer */
+      }
 
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{
-  font-family:var(--font-body);
-  font-size:var(--text-base);
-  line-height:var(--leading-body);
-  color:var(--ink-strong);
-  background:var(--surface-field);
-  -webkit-font-smoothing:antialiased;
-  display:grid;
-  grid-template-columns:228px minmax(0,1fr);
-  min-height:100vh;
-  width:100%;
-}
-.mono{font-family:var(--font-mono);font-size:var(--text-sm)}
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        color: var(--ink-strong);
+        background: var(--surface-field);
+        -webkit-font-smoothing: antialiased;
+        display: grid;
+        grid-template-columns: 228px minmax(0, 1fr);
+        min-height: 100vh;
+        width: 100%;
+      }
+      .mono {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+      }
 
-/* ============================== SIDEBAR ================================== */
-aside{background:var(--surface-raised);border-right:1px solid var(--border-hairline);
-  display:flex;flex-direction:column;overflow:hidden}
-.brand{height:57px;display:flex;align-items:center;gap:9px;padding:0 14px;flex-shrink:0}
-.logo{width:26px;height:26px;border-radius:var(--radius-tile);background:var(--brand-solid);
-  background-image:var(--gradient-action);box-shadow:var(--shadow-action);color:var(--on-brand);
-  display:grid;place-items:center;font-size:var(--text-base);font-weight:var(--weight-strong)}
-.logo svg{width:15px;height:15px;display:block}
-.brand b{font-size:var(--text-md);font-weight:var(--weight-strong);letter-spacing:var(--track-display)}
-.brand .home{margin-left:auto;width:44px;height:44px;border:1px solid var(--border-control);
-  border-radius:var(--radius-control);background:var(--surface-raised);color:var(--ink-muted);
-  display:grid;place-items:center;cursor:pointer;flex:0 0 auto}
-.brand .home svg{width:18px;height:18px}
-@media (hover:hover) and (pointer:fine){.brand .home:hover{background:var(--surface-hover);color:var(--ink-body)}}
-.brand .home:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      /* ============================== SIDEBAR ================================== */
+      aside {
+        background: var(--surface-raised);
+        border-right: 1px solid var(--border-hairline);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .brand {
+        height: 57px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 14px;
+        flex-shrink: 0;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: var(--radius-tile);
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        display: grid;
+        place-items: center;
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+      }
+      .logo svg {
+        width: 15px;
+        height: 15px;
+        display: block;
+      }
+      .brand b {
+        font-size: var(--text-md);
+        font-weight: var(--weight-strong);
+        letter-spacing: var(--track-display);
+      }
+      .brand .home {
+        margin-left: auto;
+        width: 44px;
+        height: 44px;
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-control);
+        background: var(--surface-raised);
+        color: var(--ink-muted);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        flex: 0 0 auto;
+      }
+      .brand .home svg {
+        width: 18px;
+        height: 18px;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .brand .home:hover {
+          background: var(--surface-hover);
+          color: var(--ink-body);
+        }
+      }
+      .brand .home:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-.sec{font-size:var(--text-xs);color:var(--ink-muted);font-weight:var(--weight-strong);
-  text-transform:uppercase;letter-spacing:var(--track-caps);padding:0 20px;margin:16px 0 7px}
-nav{padding:0 10px;display:flex;flex-direction:column;gap:1px}
-.nav-i{height:30px;border-radius:var(--radius-control);display:flex;align-items:center;gap:10px;
-  padding:0 10px;font-size:var(--text-md);color:var(--ink-body);font-weight:var(--weight-medium)}
-.nav-i .ic{width:17px;text-align:center;color:var(--ink-muted);flex:0 0 auto}
-.nav-i .ic svg{width:16px;height:16px;display:block}
-.nav-i .cnt{margin-left:auto;font-size:var(--text-sm);font-weight:var(--weight-strong);line-height:1;
-  padding:3px 7px;border-radius:var(--radius-pill);background:var(--status-attn-bg);color:var(--status-attn-ink)}
-.nav-i.on{background:var(--surface-raised);color:var(--ink-strong);box-shadow:var(--shadow-tile);
-  font-weight:var(--weight-strong)}
-.nav-i.on .ic{color:var(--ink-body)}
-@media (hover:hover) and (pointer:fine){.nav-i:hover{background:var(--surface-hover)}}
-.nav-i:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:var(--radius-control)}
+      .sec {
+        font-size: var(--text-xs);
+        color: var(--ink-muted);
+        font-weight: var(--weight-strong);
+        text-transform: uppercase;
+        letter-spacing: var(--track-caps);
+        padding: 0 20px;
+        margin: 16px 0 7px;
+      }
+      nav {
+        padding: 0 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .nav-i {
+        height: 30px;
+        border-radius: var(--radius-control);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 10px;
+        font-size: var(--text-md);
+        color: var(--ink-body);
+        font-weight: var(--weight-medium);
+      }
+      .nav-i .ic {
+        width: 17px;
+        text-align: center;
+        color: var(--ink-muted);
+        flex: 0 0 auto;
+      }
+      .nav-i .ic svg {
+        width: 16px;
+        height: 16px;
+        display: block;
+      }
+      .nav-i .cnt {
+        margin-left: auto;
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        line-height: 1;
+        padding: 3px 7px;
+        border-radius: var(--radius-pill);
+        background: var(--status-attn-bg);
+        color: var(--status-attn-ink);
+      }
+      .nav-i.on {
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        box-shadow: var(--shadow-tile);
+        font-weight: var(--weight-strong);
+      }
+      .nav-i.on .ic {
+        color: var(--ink-body);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .nav-i:hover {
+          background: var(--surface-hover);
+        }
+      }
+      .nav-i:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+        border-radius: var(--radius-control);
+      }
 
-.runs{padding:0 10px;display:flex;flex-direction:column;gap:1px}
-.run-i{height:26px;border-radius:var(--radius-tile);display:flex;align-items:center;gap:9px;
-  padding:0 10px;font-size:var(--text-base);color:var(--ink-body);font-weight:var(--weight-medium);text-decoration:none}
-.run-i .mark{width:17px;height:17px;border-radius:var(--radius-mark);flex-shrink:0;display:grid;place-items:center;
-  background-image:var(--mark-overlay);background-color:var(--mark-1)}
-.run-i .mark svg{width:10px;height:10px;display:block;stroke:var(--mark-glyph);stroke-width:1.8}
-.run-i.on{background:var(--surface-raised);color:var(--ink-strong);font-weight:var(--weight-strong);box-shadow:var(--shadow-tile)}
-.run-i .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 auto}
-.run-i .st{font-size:var(--text-sm);color:var(--ink-muted);flex:0 0 auto}
-@media (hover:hover) and (pointer:fine){.run-i:hover{background:var(--surface-hover)}}
-.run-i:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      .runs {
+        padding: 0 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .run-i {
+        height: 26px;
+        border-radius: var(--radius-tile);
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 10px;
+        font-size: var(--text-base);
+        color: var(--ink-body);
+        font-weight: var(--weight-medium);
+        text-decoration: none;
+      }
+      .run-i .mark {
+        width: 17px;
+        height: 17px;
+        border-radius: var(--radius-mark);
+        flex-shrink: 0;
+        display: grid;
+        place-items: center;
+        background-image: var(--mark-overlay);
+        background-color: var(--mark-1);
+      }
+      .run-i .mark svg {
+        width: 10px;
+        height: 10px;
+        display: block;
+        stroke: var(--mark-glyph);
+        stroke-width: 1.8;
+      }
+      .run-i.on {
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        font-weight: var(--weight-strong);
+        box-shadow: var(--shadow-tile);
+      }
+      .run-i .nm {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .run-i .st {
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        flex: 0 0 auto;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .run-i:hover {
+          background: var(--surface-hover);
+        }
+      }
+      .run-i:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-.quota{margin:auto 10px 12px;background:var(--surface-field);border:1px solid var(--border-hairline);
-  border-radius:var(--radius-panel);padding:13px}
-.quota .n{font-size:var(--text-md);font-weight:var(--weight-strong);display:flex;align-items:center;gap:6px}
-.quota .n svg{width:15px;height:15px;flex:0 0 auto;color:var(--status-attn-ink)}
-.quota .s{font-size:var(--text-sm);color:var(--ink-muted);margin:2px 0 8px}
-.quota button{width:100%;height:var(--a-btn-h);border:0;border-radius:var(--radius-control);
-  background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);
-  color:var(--on-brand);font-family:var(--font-body);font-size:var(--text-base);font-weight:var(--weight-strong);cursor:pointer}
-.quota button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      .quota {
+        margin: auto 10px 12px;
+        background: var(--surface-field);
+        border: 1px solid var(--border-hairline);
+        border-radius: var(--radius-panel);
+        padding: 13px;
+      }
+      .quota .n {
+        font-size: var(--text-md);
+        font-weight: var(--weight-strong);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .quota .n svg {
+        width: 15px;
+        height: 15px;
+        flex: 0 0 auto;
+        color: var(--status-attn-ink);
+      }
+      .quota .s {
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        margin: 2px 0 8px;
+      }
+      .quota button {
+        width: 100%;
+        height: var(--a-btn-h);
+        border: 0;
+        border-radius: var(--radius-control);
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+        cursor: pointer;
+      }
+      .quota button:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-/* ============================== MAIN / SESSION =========================== */
-main{display:flex;flex-direction:column;overflow:hidden;min-width:0;position:relative}
+      /* ============================== MAIN / SESSION =========================== */
+      main {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        min-width: 0;
+        position: relative;
+      }
 
-/* session header — the fixed identity of the run (Home anchor sits in .shead) */
-.shead{height:57px;border-bottom:1px solid var(--border-hairline);background:var(--surface-raised);
-  display:flex;align-items:center;gap:10px;padding:0 21px 0 25px;flex-shrink:0}
-.shead .back{width:44px;height:44px;border:1px solid var(--border-control);background:var(--surface-raised);
-  border-radius:var(--radius-control);display:grid;place-items:center;color:var(--ink-body);flex:0 0 auto;cursor:pointer}
-.shead .back svg{width:18px;height:18px}
-@media (hover:hover) and (pointer:fine){.shead .back:hover{background:var(--surface-hover)}}
-.shead .back:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-.shead .mark{width:17px;height:17px;border-radius:var(--radius-mark);flex:0 0 auto;display:grid;place-items:center;
-  background-image:var(--mark-overlay);background-color:var(--mark-1)}
-.shead .mark svg{width:10px;height:10px;display:block;stroke:var(--mark-glyph);stroke-width:1.8}
-.shead h1{font-size:var(--text-md);font-weight:var(--weight-strong);letter-spacing:var(--track-display);white-space:nowrap}
-.shead .path{font-family:var(--font-mono);font-size:var(--text-sm);color:var(--ink-muted);white-space:nowrap}
-.shead .meta{margin-left:auto;display:flex;align-items:center;gap:14px;font-size:var(--text-sm);color:var(--ink-muted);flex:0 0 auto}
-.shead .meta b{font-weight:var(--weight-strong);color:var(--ink-body);font-variant-numeric:tabular-nums}
+      /* session header — the fixed identity of the run (Home anchor sits in .shead) */
+      .shead {
+        height: 57px;
+        border-bottom: 1px solid var(--border-hairline);
+        background: var(--surface-raised);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 21px 0 25px;
+        flex-shrink: 0;
+      }
+      .shead .back {
+        width: 44px;
+        height: 44px;
+        border: 1px solid var(--border-control);
+        background: var(--surface-raised);
+        border-radius: var(--radius-control);
+        display: grid;
+        place-items: center;
+        color: var(--ink-body);
+        flex: 0 0 auto;
+        cursor: pointer;
+      }
+      .shead .back svg {
+        width: 18px;
+        height: 18px;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .shead .back:hover {
+          background: var(--surface-hover);
+        }
+      }
+      .shead .back:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      .shead .mark {
+        width: 17px;
+        height: 17px;
+        border-radius: var(--radius-mark);
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        background-image: var(--mark-overlay);
+        background-color: var(--mark-1);
+      }
+      .shead .mark svg {
+        width: 10px;
+        height: 10px;
+        display: block;
+        stroke: var(--mark-glyph);
+        stroke-width: 1.8;
+      }
+      .shead h1 {
+        font-size: var(--text-md);
+        font-weight: var(--weight-strong);
+        letter-spacing: var(--track-display);
+        white-space: nowrap;
+      }
+      .shead .path {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        white-space: nowrap;
+      }
+      .shead .meta {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        flex: 0 0 auto;
+      }
+      .shead .meta b {
+        font-weight: var(--weight-strong);
+        color: var(--ink-body);
+        font-variant-numeric: tabular-nums;
+      }
 
-/* status pill — glyph-led, four functional hues + hueless idle */
-.pill{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 9px;border-radius:var(--radius-pill);
-  font-size:var(--text-sm);font-weight:var(--weight-strong);white-space:nowrap}
-.pill svg{width:9px;height:9px;flex:0 0 auto;display:block}
-.pill.live{background:var(--status-live-bg);color:var(--status-live-ink)}
-.pill.attn{background:var(--status-attn-bg);color:var(--status-attn-ink)}
-.pill.done{background:var(--status-done-bg);color:var(--status-done-ink)}
-.pill.fail{background:var(--status-fail-bg);color:var(--status-fail-ink)}
-.pill.idle{background:var(--status-idle-bg);color:var(--status-idle-ink);padding:0;font-weight:var(--weight-medium)}
-.pill:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      /* status pill — glyph-led, four functional hues + hueless idle */
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 20px;
+        padding: 0 9px;
+        border-radius: var(--radius-pill);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        white-space: nowrap;
+      }
+      .pill svg {
+        width: 9px;
+        height: 9px;
+        flex: 0 0 auto;
+        display: block;
+      }
+      .pill.live {
+        background: var(--status-live-bg);
+        color: var(--status-live-ink);
+      }
+      .pill.attn {
+        background: var(--status-attn-bg);
+        color: var(--status-attn-ink);
+      }
+      .pill.done {
+        background: var(--status-done-bg);
+        color: var(--status-done-ink);
+      }
+      .pill.fail {
+        background: var(--status-fail-bg);
+        color: var(--status-fail-ink);
+      }
+      .pill.idle {
+        background: var(--status-idle-bg);
+        color: var(--status-idle-ink);
+        padding: 0;
+        font-weight: var(--weight-medium);
+      }
+      .pill:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-/* ============================== TRANSCRIPT =============================== */
-.tr{flex:1 1 auto;overflow-y:auto;padding:14px 21px var(--a-transcript-b) 25px;min-height:0;position:relative}
-/* heading structure (DW-5.12): the transcript exposes an <h2> per turn, and the
+      /* ============================== TRANSCRIPT =============================== */
+      .tr {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding: 14px 21px var(--a-transcript-b) 25px;
+        min-height: 0;
+        position: relative;
+      }
+      /* heading structure (DW-5.12): the transcript exposes an <h2> per turn, and the
    live region (role=log aria-live=polite) announces blocked-on-you events. */
-.tr h2,.who h3{font-size:var(--text-sm);font-weight:var(--weight-strong)}
-.who{display:flex;align-items:center;gap:7px;font-size:var(--text-sm);color:var(--ink-muted);
-  font-weight:var(--weight-medium);margin-bottom:4px}
-.who .dot{width:14px;height:14px;border-radius:var(--radius-mark);display:grid;place-items:center;flex:0 0 auto}
-.who .dot.u{background:var(--surface-sunken);color:var(--ink-body)}
-.who .dot.a{background:var(--brand-lo);color:var(--on-brand)}
-.who .dot svg{width:9px;height:9px}
-.role{font-size:var(--text-sm);font-weight:var(--weight-strong);color:var(--ink-strong)}
-.turn{margin-bottom:14px}
-.msg{font-size:var(--text-base);line-height:var(--leading-body);color:var(--ink-strong);max-width:74ch}
-.msg code{font-family:var(--font-mono);font-size:var(--text-sm);background:var(--surface-sunken);
-  padding:1px 4px;border-radius:var(--radius-mark)}
-.msg .vars{color:var(--ink-muted)}
+      .tr h2,
+      .who h3 {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+      }
+      .who {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        font-weight: var(--weight-medium);
+        margin-bottom: 4px;
+      }
+      .who .dot {
+        width: 14px;
+        height: 14px;
+        border-radius: var(--radius-mark);
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+      }
+      .who .dot.u {
+        background: var(--surface-sunken);
+        color: var(--ink-body);
+      }
+      .who .dot.a {
+        background: var(--brand-lo);
+        color: var(--on-brand);
+      }
+      .who .dot svg {
+        width: 9px;
+        height: 9px;
+      }
+      .role {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        color: var(--ink-strong);
+      }
+      .turn {
+        margin-bottom: 14px;
+      }
+      .msg {
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        color: var(--ink-strong);
+        max-width: 74ch;
+      }
+      .msg code {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        background: var(--surface-sunken);
+        padding: 1px 4px;
+        border-radius: var(--radius-mark);
+      }
+      .msg .vars {
+        color: var(--ink-muted);
+      }
 
-/* tool group: indent + rail, never a nested card */
-.tools{margin:6px 0 0 7px;padding-left:12px;background:var(--rail) left top/2px 100% no-repeat}
-.trow{height:var(--a-row);display:flex;align-items:center;gap:8px;font-size:var(--text-sm);color:var(--ink-body)}
-.trow .ic{width:15px;height:15px;flex:0 0 auto;display:grid;place-items:center;color:var(--ink-muted)}
-.trow .ic svg{width:15px;height:15px;display:block}
-.trow .tk{font-weight:var(--weight-strong);color:var(--ink-strong);font-size:var(--text-sm);flex:0 0 40px}
-.trow .arg{font-family:var(--font-mono);color:var(--ink-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 auto}
-.trow .t{margin-left:auto;color:var(--ink-muted);font-variant-numeric:tabular-nums;flex:0 0 auto}
-.trow .d{color:var(--data-ok);font-variant-numeric:tabular-nums;flex:0 0 auto}
-.trow .d.bad{color:var(--data-bad)}
-.trow .s{display:inline-flex;align-items:center;gap:5px;font-size:var(--text-sm);color:var(--ink-muted);flex:0 0 auto}
+      /* tool group: indent + rail, never a nested card */
+      .tools {
+        margin: 6px 0 0 7px;
+        padding-left: 12px;
+        background: var(--rail) left top / 2px 100% no-repeat;
+      }
+      .trow {
+        height: var(--a-row);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: var(--text-sm);
+        color: var(--ink-body);
+      }
+      .trow .ic {
+        width: 15px;
+        height: 15px;
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        color: var(--ink-muted);
+      }
+      .trow .ic svg {
+        width: 15px;
+        height: 15px;
+        display: block;
+      }
+      .trow .tk {
+        font-weight: var(--weight-strong);
+        color: var(--ink-strong);
+        font-size: var(--text-sm);
+        flex: 0 0 40px;
+      }
+      .trow .arg {
+        font-family: var(--font-mono);
+        color: var(--ink-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .trow .t {
+        margin-left: auto;
+        color: var(--ink-muted);
+        font-variant-numeric: tabular-nums;
+        flex: 0 0 auto;
+      }
+      .trow .d {
+        color: var(--data-ok);
+        font-variant-numeric: tabular-nums;
+        flex: 0 0 auto;
+      }
+      .trow .d.bad {
+        color: var(--data-bad);
+      }
+      .trow .s {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        flex: 0 0 auto;
+      }
 
-/* thinking / reasoning (designer inference — see canon gap note below) */
-.think{margin:6px 0 0 7px;padding-left:12px;background:var(--rail) left top/2px 100% no-repeat;
-  font-style:italic;color:var(--ink-muted);font-size:var(--text-sm);line-height:var(--leading-body);max-width:70ch}
-.think .caret{display:inline-block;width:2px;height:11px;background:var(--ink-muted);
-  vertical-align:-1px;margin-left:2px;animation:blink var(--c-500) var(--e-in) infinite}
-@keyframes blink{50%{opacity:0}}
+      /* thinking / reasoning (designer inference — see canon gap note below) */
+      .think {
+        margin: 6px 0 0 7px;
+        padding-left: 12px;
+        background: var(--rail) left top / 2px 100% no-repeat;
+        font-style: italic;
+        color: var(--ink-muted);
+        font-size: var(--text-sm);
+        line-height: var(--leading-body);
+        max-width: 70ch;
+      }
+      .think .caret {
+        display: inline-block;
+        width: 2px;
+        height: 11px;
+        background: var(--ink-muted);
+        vertical-align: -1px;
+        margin-left: 2px;
+        animation: blink var(--c-500) var(--e-in) infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
 
-/* subagent tree: a fold, not a box */
-.branch{margin:6px 0 0 7px;padding-left:12px;background:var(--rail) left top/2px 100% no-repeat}
-.bhead{height:var(--a-row);display:flex;align-items:center;gap:8px;font-size:var(--text-sm)}
-.bhead .tag{display:inline-flex;align-items:center;gap:4px;font-size:var(--text-sm);font-weight:var(--weight-medium);
-  letter-spacing:.02em;text-transform:uppercase;color:var(--accent-text);background:var(--accent-bg-subtle);
-  border:0;border-radius:var(--radius-mark);padding:2px 7px}
-.bhead .tag svg{width:12px;height:12px;flex:0 0 auto}
-.bhead .tk{font-family:var(--font-mono);color:var(--ink-strong);font-size:var(--text-sm)}
-.bhead .arg{color:var(--ink-muted);font-size:var(--text-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.bhead .t{margin-left:auto;color:var(--ink-muted);font-variant-numeric:tabular-nums;flex:0 0 auto;font-size:var(--text-sm)}
-.bmsg{margin:2px 0 0 22px;font-size:var(--text-sm);color:var(--ink-body);max-width:68ch}
-/* a child subagent nested under its parent */
-.branch .branch{margin-left:2px}
+      /* subagent tree: a fold, not a box */
+      .branch {
+        margin: 6px 0 0 7px;
+        padding-left: 12px;
+        background: var(--rail) left top / 2px 100% no-repeat;
+      }
+      .bhead {
+        height: var(--a-row);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: var(--text-sm);
+      }
+      .bhead .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        color: var(--accent-text);
+        background: var(--accent-bg-subtle);
+        border: 0;
+        border-radius: var(--radius-mark);
+        padding: 2px 7px;
+      }
+      .bhead .tag svg {
+        width: 12px;
+        height: 12px;
+        flex: 0 0 auto;
+      }
+      .bhead .tk {
+        font-family: var(--font-mono);
+        color: var(--ink-strong);
+        font-size: var(--text-sm);
+      }
+      .bhead .arg {
+        color: var(--ink-muted);
+        font-size: var(--text-sm);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .bhead .t {
+        margin-left: auto;
+        color: var(--ink-muted);
+        font-variant-numeric: tabular-nums;
+        flex: 0 0 auto;
+        font-size: var(--text-sm);
+      }
+      .bmsg {
+        margin: 2px 0 0 22px;
+        font-size: var(--text-sm);
+        color: var(--ink-body);
+        max-width: 68ch;
+      }
+      /* a child subagent nested under its parent */
+      .branch .branch {
+        margin-left: 2px;
+      }
 
-/* ============================ HUMAN-IN-THE-LOOP =========================== */
-/* One shared hitl surface: heading (glyph-led pill + role), a plain-language
+      /* ============================ HUMAN-IN-THE-LOOP =========================== */
+      /* One shared hitl surface: heading (glyph-led pill + role), a plain-language
    reason, a disclosure grid (machine / path / network / future), the answer row,
    and the separated scope-widening control. Same anatomy for permission and
    question cards; they differ only in what the answer row selects. */
-.hitl{border:1px solid var(--border-control);border-radius:var(--radius-panel);
-  background:var(--surface-raised);margin:10px 0 0 7px;padding:var(--a-card-pad) var(--a-card-pad) var(--a-card-pad);
-  box-shadow:var(--shadow-hairline)}
-.hitl h2{font-size:var(--text-base);font-weight:var(--weight-strong);display:flex;align-items:center;gap:8px;margin-bottom:7px}
-.hitl .lede{font-size:var(--text-base);line-height:var(--leading-body);color:var(--ink-body);margin-bottom:9px;max-width:72ch}
-/* the raw command carries a plain-language consequence line (DW-5.4) */
-.cmd{font-family:var(--font-mono);font-size:var(--text-sm);color:var(--ink-strong);
-  border-left:2px solid var(--border-divider);padding:3px 0 3px 10px;margin-bottom:8px}
-.cmd .eff{display:block;font-family:var(--font-body);font-size:var(--text-sm);color:var(--ink-muted);margin-top:3px}
-.scope{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:var(--text-sm);margin-bottom:4px}
-.scope dt{color:var(--ink-muted)}
-.scope dd{color:var(--ink-body);min-width:0;overflow-wrap:anywhere}
-.scope dd .mono{word-break:break-all;font-size:var(--text-xs)}
-.scope dd .no{color:var(--ink-muted)}
-/* =========================================================================
+      .hitl {
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-panel);
+        background: var(--surface-raised);
+        margin: 10px 0 0 7px;
+        padding: var(--a-card-pad) var(--a-card-pad) var(--a-card-pad);
+        box-shadow: var(--shadow-hairline);
+      }
+      .hitl h2 {
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 7px;
+      }
+      .hitl .lede {
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        color: var(--ink-body);
+        margin-bottom: 9px;
+        max-width: 72ch;
+      }
+      /* the raw command carries a plain-language consequence line (DW-5.4) */
+      .cmd {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        color: var(--ink-strong);
+        border-left: 2px solid var(--border-divider);
+        padding: 3px 0 3px 10px;
+        margin-bottom: 8px;
+      }
+      .cmd .eff {
+        display: block;
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        margin-top: 3px;
+      }
+      .scope {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 3px 14px;
+        font-size: var(--text-sm);
+        margin-bottom: 4px;
+      }
+      .scope dt {
+        color: var(--ink-muted);
+      }
+      .scope dd {
+        color: var(--ink-body);
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .scope dd .mono {
+        word-break: break-all;
+        font-size: var(--text-xs);
+      }
+      .scope dd .no {
+        color: var(--ink-muted);
+      }
+      /* =========================================================================
    THE ANSWER PAIR — Approve / Deny (DW-5.1, 5.2, 5.3).
    The pair is MEASURABLY SYMMETRIC: identical box (equal width by flex:1 1 0,
    equal height, equal font, equal weight), identical hit area, identical
@@ -228,300 +760,1034 @@ main{display:flex;flex-direction:column;overflow:hidden;min-width:0;position:rel
    colour-treated louder than the other. The action gradient is WITHHELD from
    both — a destructive or irreversible gate has no primary to mark.
    ========================================================================= */
-.choice{display:flex;gap:9px;margin-top:9px}
-.choice button{flex:1 1 0;min-width:0;height:var(--a-btn-h);padding:0 var(--a-btn-pad);
-  border-radius:var(--radius-control);display:inline-flex;align-items:center;justify-content:center;gap:6px;
-  font-family:var(--font-body);font-size:var(--text-base);font-weight:var(--weight-strong);
-  line-height:var(--leading-ui);cursor:pointer;background:var(--surface-raised);color:var(--ink-strong);
-  border:1px solid var(--border-control)}
-.choice button svg{width:12px;height:12px;flex:0 0 auto}
-/* The pair is recessed at the SAME fill and border (DW-5.1 / DESIGN.md): the
+      .choice {
+        display: flex;
+        gap: 9px;
+        margin-top: 9px;
+      }
+      .choice button {
+        flex: 1 1 0;
+        min-width: 0;
+        height: var(--a-btn-h);
+        padding: 0 var(--a-btn-pad);
+        border-radius: var(--radius-control);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+        line-height: var(--leading-ui);
+        cursor: pointer;
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        border: 1px solid var(--border-control);
+      }
+      .choice button svg {
+        width: 12px;
+        height: 12px;
+        flex: 0 0 auto;
+      }
+      /* The pair is recessed at the SAME fill and border (DW-5.1 / DESIGN.md): the
    action gradient is WITHHELD from both. They differ in KIND only — a check
    glyph + --ink-strong for the grant, a cross glyph + --ink-body for the
    refusal. Equal weight, never one colour-treated louder than the other. */
-.choice button.grant{color:var(--ink-strong)}
-.choice button.refuse{color:var(--ink-body)}
-@media (hover:hover) and (pointer:fine){
-  .choice button:hover{background-color:var(--surface-hover)}
-  .choice button:active{background-color:var(--surface-active)}
-}
-.choice button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      .choice button.grant {
+        color: var(--ink-strong);
+      }
+      .choice button.refuse {
+        color: var(--ink-body);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .choice button:hover {
+          background-color: var(--surface-hover);
+        }
+        .choice button:active {
+          background-color: var(--surface-active);
+        }
+      }
+      .choice button:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-/* scope-widening (DW-5.11): separated by a STATED MINIMUM DISTANCE (>=40px),
+      /* scope-widening (DW-5.11): separated by a STATED MINIMUM DISTANCE (>=40px),
    after the pair in tab order, never reachable by the pair's keystroke. */
-.widen{margin-top:40px;padding-top:18px;border-top:1px solid var(--border-hairline)}
-.widen > p{font-size:var(--text-sm);color:var(--ink-muted);margin-bottom:8px;max-width:66ch}
-.widen button{height:var(--a-btn-h);padding:0 13px;border:1px solid var(--status-attn-ink);
-  border-radius:var(--radius-control);background:var(--status-attn-bg);color:var(--status-attn-ink);
-  font-family:var(--font-body);font-size:var(--text-base);font-weight:var(--weight-strong);
-  display:inline-flex;align-items:center;gap:6px;cursor:pointer}
-.widen button svg{width:11px;height:11px;flex:0 0 auto}
-.widen button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-/* the standing-grant note reads as consequential, not a benign chip */
-.widen .imp{font-size:var(--text-sm);color:var(--status-fail-ink);margin-top:6px;max-width:66ch}
+      .widen {
+        margin-top: 40px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border-hairline);
+      }
+      .widen > p {
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        margin-bottom: 8px;
+        max-width: 66ch;
+      }
+      .widen button {
+        height: var(--a-btn-h);
+        padding: 0 13px;
+        border: 1px solid var(--status-attn-ink);
+        border-radius: var(--radius-control);
+        background: var(--status-attn-bg);
+        color: var(--status-attn-ink);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+      }
+      .widen button svg {
+        width: 11px;
+        height: 11px;
+        flex: 0 0 auto;
+      }
+      .widen button:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      /* the standing-grant note reads as consequential, not a benign chip */
+      .widen .imp {
+        font-size: var(--text-sm);
+        color: var(--status-fail-ink);
+        margin-top: 6px;
+        max-width: 66ch;
+      }
 
-/* question card — answer options + free text */
-.qopts{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 9px}
-.qopts button{height:auto;min-height:30px;padding:7px 11px;border:1px solid var(--border-control);border-radius:var(--radius-control);
-  background:var(--surface-raised);color:var(--ink-strong);font-family:var(--font-body);font-size:var(--text-base);
-  font-weight:var(--weight-medium);display:inline-flex;align-items:center;gap:8px;cursor:pointer;text-align:left;max-width:100%}
-.qopts button .kc{flex:0 0 auto}
-.kc{display:inline-grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border-radius:var(--radius-mark);
-  background:var(--surface-sunken);font-family:var(--font-mono);font-size:var(--text-xs);color:var(--ink-body);line-height:1}
-@media (hover:hover) and (pointer:fine){.qopts button:hover{background:var(--surface-hover)}}
-.qopts button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-.qfree{display:flex;gap:8px;align-items:center;font-size:var(--text-sm);color:var(--ink-muted)}
-.qfree .fake-in{flex:1 1 auto;height:var(--a-input-h);border:1px solid var(--border-control);border-radius:var(--radius-control);
-  display:flex;align-items:center;padding:0 10px;color:var(--ink-muted)}
+      /* question card — answer options + free text */
+      .qopts {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 2px 0 9px;
+      }
+      .qopts button {
+        height: auto;
+        min-height: 30px;
+        padding: 7px 11px;
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-control);
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: var(--weight-medium);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        text-align: left;
+        max-width: 100%;
+      }
+      .qopts button .kc {
+        flex: 0 0 auto;
+      }
+      .kc {
+        display: inline-grid;
+        place-items: center;
+        min-width: 17px;
+        height: 17px;
+        padding: 0 4px;
+        border-radius: var(--radius-mark);
+        background: var(--surface-sunken);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        color: var(--ink-body);
+        line-height: 1;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .qopts button:hover {
+          background: var(--surface-hover);
+        }
+      }
+      .qopts button:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      .qfree {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+      }
+      .qfree .fake-in {
+        flex: 1 1 auto;
+        height: var(--a-input-h);
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-control);
+        display: flex;
+        align-items: center;
+        padding: 0 10px;
+        color: var(--ink-muted);
+      }
 
-/* ============================ RUN PROGRESS / STOP ========================= */
-/* Deterministic progress (Tier 4: open-ended runs are the normal case) with the
+      /* ============================ RUN PROGRESS / STOP ========================= */
+      /* Deterministic progress (Tier 4: open-ended runs are the normal case) with the
    interrupt. Stop must stay reachable whether an approval card is open or a
    subagent is executing (DW-5.8) — it lives in the composer, which never leaves
    the viewport, and its box is fixed across states (DW-5.7). */
-.runprog{display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 12px;
-  background:var(--surface-field);border:1px solid var(--border-hairline);border-radius:var(--radius-well)}
-.runprog .label{font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--ink-body);
-  white-space:nowrap;flex:0 0 auto;display:inline-flex;align-items:center;gap:5px}
-.runprog .label svg{width:13px;height:13px;flex:0 0 auto}
-.runprog .track{flex:1 1 auto;min-width:80px;height:5px;border-radius:var(--radius-pill);background:var(--surface-sunken);
-  overflow:hidden}
-.runprog .fill{height:100%;border-radius:var(--radius-pill);background:var(--info-9)}
-.runprog .n{font-size:var(--text-sm);color:var(--ink-muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+      .runprog {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 12px;
+        padding: 10px 12px;
+        background: var(--surface-field);
+        border: 1px solid var(--border-hairline);
+        border-radius: var(--radius-well);
+      }
+      .runprog .label {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        color: var(--ink-body);
+        white-space: nowrap;
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .runprog .label svg {
+        width: 13px;
+        height: 13px;
+        flex: 0 0 auto;
+      }
+      .runprog .track {
+        flex: 1 1 auto;
+        min-width: 80px;
+        height: 5px;
+        border-radius: var(--radius-pill);
+        background: var(--surface-sunken);
+        overflow: hidden;
+      }
+      .runprog .fill {
+        height: 100%;
+        border-radius: var(--radius-pill);
+        background: var(--info-9);
+      }
+      .runprog .n {
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
 
-/* ============================ FAILURE / REFUSAL =========================== */
-/* Designer inference surfaces (DW-5.9, 5.10): each failure mode has a defined
+      /* ============================ FAILURE / REFUSAL =========================== */
+      /* Designer inference surfaces (DW-5.9, 5.10): each failure mode has a defined
    state and a named handoff. Shown below as static cards labelled by mode. */
-.failcard{border-left:3px solid var(--status-fail-ink);background:var(--status-fail-bg);color:var(--status-fail-ink);
-  border-radius:var(--radius-control);padding:10px 12px;margin:8px 0}
-.failcard b{display:block;font-weight:var(--weight-strong);margin-bottom:2px}
-.failcard .handoff{font-size:var(--text-sm);opacity:.92}
-.attncard{border-left:3px solid var(--status-attn-ink);background:var(--status-attn-bg);color:var(--status-attn-ink);
-  border-radius:var(--radius-control);padding:10px 12px;margin:8px 0}
-.attncard b{display:block;font-weight:var(--weight-strong);margin-bottom:2px}
-.attncard .handoff{font-size:var(--text-sm);opacity:.92}
+      .failcard {
+        border-left: 3px solid var(--status-fail-ink);
+        background: var(--status-fail-bg);
+        color: var(--status-fail-ink);
+        border-radius: var(--radius-control);
+        padding: 10px 12px;
+        margin: 8px 0;
+      }
+      .failcard b {
+        display: block;
+        font-weight: var(--weight-strong);
+        margin-bottom: 2px;
+      }
+      .failcard .handoff {
+        font-size: var(--text-sm);
+        opacity: 0.92;
+      }
+      .attncard {
+        border-left: 3px solid var(--status-attn-ink);
+        background: var(--status-attn-bg);
+        color: var(--status-attn-ink);
+        border-radius: var(--radius-control);
+        padding: 10px 12px;
+        margin: 8px 0;
+      }
+      .attncard b {
+        display: block;
+        font-weight: var(--weight-strong);
+        margin-bottom: 2px;
+      }
+      .attncard .handoff {
+        font-size: var(--text-sm);
+        opacity: 0.92;
+      }
 
-/* ============================== COMPOSER ================================= */
-/* The floating-morph composer from v4, token-gated. Home (brand), composer
+      /* ============================== COMPOSER ================================= */
+      /* The floating-morph composer from v4, token-gated. Home (brand), composer
    input, and Stop are the fixed anchors of DW-5.7 — their geometry is invariant
    across streaming / idle / awaiting-approval / error. */
-.fade{position:absolute;left:0;right:0;bottom:0;height:96px;pointer-events:none;z-index:19;
-  background:linear-gradient(to top,var(--surface-field) 22%,oklch(from var(--surface-field) l c h / 0))}
-.composer{position:absolute;left:50%;transform:translateX(-50%);z-index:20;
-  bottom:calc(16px + env(safe-area-inset-bottom));width:min(720px,calc(100% - 50px));pointer-events:none}
-.composer > *{pointer-events:auto}
-.cin{border:1px solid var(--border-control);background:oklch(from var(--surface-raised) l c h / 0.82);
-  -webkit-backdrop-filter:blur(16px) saturate(1.6);backdrop-filter:blur(16px) saturate(1.6);
-  border-radius:var(--radius-shell);padding:5px 5px 5px 15px;display:flex;align-items:center;gap:10px;
-  box-shadow:var(--shadow-lifted)}
-.composer:focus-within .cin{border-radius:var(--radius-panel);flex-direction:column;align-items:stretch;padding:12px 12px 9px}
-.cin textarea{flex:1 1 auto;border:0;outline:0;background:transparent;resize:none;
-  font-family:var(--font-body);font-size:var(--a-input-fs);line-height:var(--leading-ui);color:var(--ink-strong);
-  height:34px;padding:7px 0 0;min-width:0}
-.composer:focus-within .cin textarea{height:66px;padding-top:0}
-.cin textarea::placeholder{color:var(--ink-muted)}
-/* the STOP anchor — reaches its maximal target under coarse pointer and stays put */
-.stop{width:44px;height:44px;min-width:44px;min-height:44px;border:0;border-radius:var(--radius-pill);flex:0 0 auto;
-  background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);
-  color:var(--on-brand);display:grid;place-items:center;cursor:pointer}
-.stop svg{width:15px;height:15px}
-.stop:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-.aff-row{display:grid;grid-template-rows:0fr;opacity:0;transform:translateY(-4px);pointer-events:none;
-  transition:opacity var(--c-300) var(--e-in),transform var(--c-300) var(--e-in)}
-.composer:focus-within .aff-row{grid-template-rows:1fr;opacity:1;transform:none;pointer-events:auto}
-.aff-row > .inner{overflow:hidden;display:flex;align-items:center;gap:12px;font-size:var(--text-sm);
-  color:var(--ink-muted);padding-top:8px;flex-wrap:wrap;row-gap:6px}
-.aff-row .hint{margin-left:auto}
-.composer:focus-within .stop{align-self:flex-end;margin-top:-26px}
+      .fade {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 96px;
+        pointer-events: none;
+        z-index: 19;
+        background: linear-gradient(
+          to top,
+          var(--surface-field) 22%,
+          oklch(from var(--surface-field) l c h / 0)
+        );
+      }
+      .composer {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 20;
+        bottom: calc(16px + env(safe-area-inset-bottom));
+        width: min(720px, calc(100% - 50px));
+        pointer-events: none;
+      }
+      .composer > * {
+        pointer-events: auto;
+      }
+      .cin {
+        border: 1px solid var(--border-control);
+        background: oklch(from var(--surface-raised) l c h / 0.82);
+        -webkit-backdrop-filter: blur(16px) saturate(1.6);
+        backdrop-filter: blur(16px) saturate(1.6);
+        border-radius: var(--radius-shell);
+        padding: 5px 5px 5px 15px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        box-shadow: var(--shadow-lifted);
+      }
+      .composer:focus-within .cin {
+        border-radius: var(--radius-panel);
+        flex-direction: column;
+        align-items: stretch;
+        padding: 12px 12px 9px;
+      }
+      .cin textarea {
+        flex: 1 1 auto;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        resize: none;
+        font-family: var(--font-body);
+        font-size: var(--a-input-fs);
+        line-height: var(--leading-ui);
+        color: var(--ink-strong);
+        height: 34px;
+        padding: 7px 0 0;
+        min-width: 0;
+      }
+      .composer:focus-within .cin textarea {
+        height: 66px;
+        padding-top: 0;
+      }
+      .cin textarea::placeholder {
+        color: var(--ink-muted);
+      }
+      /* the STOP anchor — reaches its maximal target under coarse pointer and stays put */
+      .stop {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+        border: 0;
+        border-radius: var(--radius-pill);
+        flex: 0 0 auto;
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+      }
+      .stop svg {
+        width: 15px;
+        height: 15px;
+      }
+      .stop:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      .aff-row {
+        display: grid;
+        grid-template-rows: 0fr;
+        opacity: 0;
+        transform: translateY(-4px);
+        pointer-events: none;
+        transition:
+          opacity var(--c-300) var(--e-in),
+          transform var(--c-300) var(--e-in);
+      }
+      .composer:focus-within .aff-row {
+        grid-template-rows: 1fr;
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+      }
+      .aff-row > .inner {
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        padding-top: 8px;
+        flex-wrap: wrap;
+        row-gap: 6px;
+      }
+      .aff-row .hint {
+        margin-left: auto;
+      }
+      .composer:focus-within .stop {
+        align-self: flex-end;
+        margin-top: -26px;
+      }
 
-/* ============================ ASSISTANT PANEL ============================ */
-/* The v3 assistant panel, token-gated and compact. Reuses the fixed anchors of
+      /* ============================ ASSISTANT PANEL ============================ */
+      /* The v3 assistant panel, token-gated and compact. Reuses the fixed anchors of
    the session surface without moving them. */
-.asst-scrim{position:fixed;inset:0;background:var(--scrim-soft);z-index:50}
-.asst{position:fixed;top:40px;right:24px;width:380px;min-height:0;z-index:60;
-  background:var(--surface-overlay);border-radius:var(--radius-panel);display:flex;flex-direction:column;overflow:auto;
-  box-shadow:var(--shadow-overlay);border:1px solid var(--border-hairline)}
-.asst header{height:47px;display:flex;align-items:center;gap:9px;padding:0 12px;flex-shrink:0}
-.a-logo{width:25px;height:25px;border-radius:var(--radius-tile);background:var(--brand-solid);
-  background-image:var(--gradient-action);box-shadow:var(--shadow-action);color:var(--on-brand);
-  display:grid;place-items:center;flex:0 0 auto}
-.a-logo svg{width:14px;height:14px}
-.a-t{font-size:var(--text-md);color:var(--ink-strong);font-weight:var(--weight-medium)}
-.a-t b{font-weight:var(--weight-strong)}
-.a-x{margin-left:auto;width:44px;height:44px;border:0;background:var(--surface-sunken);border-radius:var(--radius-control);
-  color:var(--ink-muted);display:grid;place-items:center;cursor:pointer}
-.a-x svg{width:15px;height:15px}
-.a-x:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-.a-body{padding:0 16px 4px;flex:0 0 auto}
-.a-body h3{font-size:var(--text-md);font-weight:var(--weight-strong);letter-spacing:var(--track-display)}
-.a-body p{font-size:var(--text-base);line-height:var(--leading-body);color:var(--ink-muted);margin:5px 0 14px}
-.a-sug{display:flex;flex-direction:column;gap:4px}
-.a-sug button{min-height:40px;border:1px solid var(--border-hairline);background:var(--surface-raised);
-  border-radius:var(--radius-control);display:flex;align-items:center;gap:10px;padding:0 11px;
-  font-family:var(--font-body);font-size:var(--text-md);color:var(--ink-strong);cursor:pointer;text-align:left}
-.s-i{width:22px;height:22px;border-radius:var(--radius-tile);display:grid;place-items:center;flex:0 0 auto;
-  background-image:var(--mark-overlay);background-color:var(--mark-2)}
-.s-i svg{width:12px;height:12px;stroke:var(--mark-glyph);opacity:1}
-@media (hover:hover) and (pointer:fine){.a-sug button:hover{background:var(--surface-hover)}}
-.a-sug button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-.a-composer{margin:14px 16px 16px;border:1px solid var(--border-hairline);border-radius:var(--radius-panel);padding:12px;flex:0 0 auto}
-.a-in{font-size:var(--text-md);color:var(--ink-muted);min-height:44px}
-.a-actions{display:flex;align-items:center;gap:8px}
-.a-plus{width:44px;height:44px;border:0;background:var(--surface-sunken);border-radius:var(--radius-pill);
-  color:var(--ink-muted);display:grid;place-items:center;cursor:pointer}
-.a-plus svg{width:15px;height:15px}
-.a-send{margin-left:auto;width:44px;height:44px;border:0;border-radius:var(--radius-pill);
-  background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);
-  color:var(--on-brand);display:grid;place-items:center;cursor:pointer}
-.a-send svg{width:15px;height:15px}
-.a-plus:focus-visible,.a-send:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      .asst-scrim {
+        position: fixed;
+        inset: 0;
+        background: var(--scrim-soft);
+        z-index: 50;
+      }
+      .asst {
+        position: fixed;
+        top: 40px;
+        right: 24px;
+        width: 380px;
+        min-height: 0;
+        z-index: 60;
+        background: var(--surface-overlay);
+        border-radius: var(--radius-panel);
+        display: flex;
+        flex-direction: column;
+        overflow: auto;
+        box-shadow: var(--shadow-overlay);
+        border: 1px solid var(--border-hairline);
+      }
+      .asst header {
+        height: 47px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 12px;
+        flex-shrink: 0;
+      }
+      .a-logo {
+        width: 25px;
+        height: 25px;
+        border-radius: var(--radius-tile);
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+      }
+      .a-logo svg {
+        width: 14px;
+        height: 14px;
+      }
+      .a-t {
+        font-size: var(--text-md);
+        color: var(--ink-strong);
+        font-weight: var(--weight-medium);
+      }
+      .a-t b {
+        font-weight: var(--weight-strong);
+      }
+      .a-x {
+        margin-left: auto;
+        width: 44px;
+        height: 44px;
+        border: 0;
+        background: var(--surface-sunken);
+        border-radius: var(--radius-control);
+        color: var(--ink-muted);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+      }
+      .a-x svg {
+        width: 15px;
+        height: 15px;
+      }
+      .a-x:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      .a-body {
+        padding: 0 16px 4px;
+        flex: 0 0 auto;
+      }
+      .a-body h3 {
+        font-size: var(--text-md);
+        font-weight: var(--weight-strong);
+        letter-spacing: var(--track-display);
+      }
+      .a-body p {
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        color: var(--ink-muted);
+        margin: 5px 0 14px;
+      }
+      .a-sug {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .a-sug button {
+        min-height: 40px;
+        border: 1px solid var(--border-hairline);
+        background: var(--surface-raised);
+        border-radius: var(--radius-control);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 11px;
+        font-family: var(--font-body);
+        font-size: var(--text-md);
+        color: var(--ink-strong);
+        cursor: pointer;
+        text-align: left;
+      }
+      .s-i {
+        width: 22px;
+        height: 22px;
+        border-radius: var(--radius-tile);
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+        background-image: var(--mark-overlay);
+        background-color: var(--mark-2);
+      }
+      .s-i svg {
+        width: 12px;
+        height: 12px;
+        stroke: var(--mark-glyph);
+        opacity: 1;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .a-sug button:hover {
+          background: var(--surface-hover);
+        }
+      }
+      .a-sug button:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      .a-composer {
+        margin: 14px 16px 16px;
+        border: 1px solid var(--border-hairline);
+        border-radius: var(--radius-panel);
+        padding: 12px;
+        flex: 0 0 auto;
+      }
+      .a-in {
+        font-size: var(--text-md);
+        color: var(--ink-muted);
+        min-height: 44px;
+      }
+      .a-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .a-plus {
+        width: 44px;
+        height: 44px;
+        border: 0;
+        background: var(--surface-sunken);
+        border-radius: var(--radius-pill);
+        color: var(--ink-muted);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+      }
+      .a-plus svg {
+        width: 15px;
+        height: 15px;
+      }
+      .a-send {
+        margin-left: auto;
+        width: 44px;
+        height: 44px;
+        border: 0;
+        border-radius: var(--radius-pill);
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+      }
+      .a-send svg {
+        width: 15px;
+        height: 15px;
+      }
+      .a-plus:focus-visible,
+      .a-send:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-/* ============================ STATE-CELL CHROME =========================== */
-/* Interaction-state modifiers — the SAME declarations as the real
+      /* ============================ STATE-CELL CHROME =========================== */
+      /* Interaction-state modifiers — the SAME declarations as the real
    :hover/:focus-visible/:active states — so every control's 8 states can be
    shown and measured in a static gallery. The eight states per control:
    default · hover · focus · active(press) · disabled · loading · error · success. */
-.st-hover{background-color:var(--surface-hover)}
-.stop.st-hover,.quota button.st-hover{filter:brightness(1.08)}
-.st-press{background-color:var(--surface-active);box-shadow:var(--shadow-inset-sel)}
-.stop.st-press,.quota button.st-press{filter:brightness(0.94);box-shadow:var(--shadow-inset-sel)}
-.st-focus{outline:2px solid var(--focus-ring);outline-offset:2px}
-.st-loading{opacity:.55;cursor:progress}
-.stop.st-loading,.quota button.st-loading{opacity:1}
-.st-disabled{cursor:default;opacity:.45;box-shadow:none;background-image:none;border-color:var(--border-control);color:var(--ink-muted)}
-.st-error{border-color:var(--error-9);color:var(--error-11)}
-.st-success{border-color:var(--success-9);color:var(--success-11)}
-.pill.st-error{background:var(--status-fail-bg);color:var(--status-fail-ink)}
-.pill.st-success{background:var(--status-done-bg);color:var(--status-done-ink)}
+      .st-hover {
+        background-color: var(--surface-hover);
+      }
+      .stop.st-hover,
+      .quota button.st-hover {
+        filter: brightness(1.08);
+      }
+      .st-press {
+        background-color: var(--surface-active);
+        box-shadow: var(--shadow-inset-sel);
+      }
+      .stop.st-press,
+      .quota button.st-press {
+        filter: brightness(0.94);
+        box-shadow: var(--shadow-inset-sel);
+      }
+      .st-focus {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      .st-loading {
+        opacity: 0.55;
+        cursor: progress;
+      }
+      .stop.st-loading,
+      .quota button.st-loading {
+        opacity: 1;
+      }
+      .st-disabled {
+        cursor: default;
+        opacity: 0.45;
+        box-shadow: none;
+        background-image: none;
+        border-color: var(--border-control);
+        color: var(--ink-muted);
+      }
+      .st-error {
+        border-color: var(--error-9);
+        color: var(--error-11);
+      }
+      .st-success {
+        border-color: var(--success-9);
+        color: var(--success-11);
+      }
+      .pill.st-error {
+        background: var(--status-fail-bg);
+        color: var(--status-fail-ink);
+      }
+      .pill.st-success {
+        background: var(--status-done-bg);
+        color: var(--status-done-ink);
+      }
 
-.cell{display:flex;flex-direction:column;gap:8px;min-width:150px;max-width:100%}
-.cell .cap{font-size:var(--text-xs);color:var(--ink-muted);text-transform:uppercase;letter-spacing:var(--track-caps)}
-.cell .inner{display:flex;flex-wrap:wrap;align-items:center;min-height:52px;gap:6px}
+      .cell {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 150px;
+        max-width: 100%;
+      }
+      .cell .cap {
+        font-size: var(--text-xs);
+        color: var(--ink-muted);
+        text-transform: uppercase;
+        letter-spacing: var(--track-caps);
+      }
+      .cell .inner {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        min-height: 52px;
+        gap: 6px;
+      }
 
-/* ---- flux-state switcher (screenshot affordance, not the product) ----------
+      /* ---- flux-state switcher (screenshot affordance, not the product) ----------
    The four agent states (streaming · idle · awaiting-approval · error) only swap
    the transcript CONTENT and the status pill's reading. The fixed anchors of
    DW-5.7 — Home, composer input, and Stop — live in chrome that does not move
    between these states. Shown here as a static, toggleable demonstration. */
-body[data-ux] .fx{display:none}
-body[data-ux="streaming"] .fx-streaming{display:block}
-body[data-ux="idle"] .fx-idle{display:block}
-body[data-ux="approval"] .fx-approval{display:block}
-body[data-ux="error"] .fx-error{display:block}
-/* .fx-all shows in every flux state but is hidden when no state is selected */
-.fx-all{display:block}
-body[data-ux] .fx-all{display:block}
-.fs-pill .g-live,.fs-pill .g-fail,.fs-pill .g-idle,.fs-pill .g-attn{display:inline-block}
-.fs-pill:not(.live) .g-live,.fs-pill:not(.attn) .g-attn,.fs-pill:not(.fail) .g-fail,.fs-pill:not(.idle) .g-idle{display:none}
-body[data-ux="idle"] .fs-stop{opacity:.45;cursor:default}
-.fxerror .fx{display:block}
-.fx-streaming,.fx-idle,.fx-approval,.fx-error{display:block}
+      body[data-ux] .fx {
+        display: none;
+      }
+      body[data-ux="streaming"] .fx-streaming {
+        display: block;
+      }
+      body[data-ux="idle"] .fx-idle {
+        display: block;
+      }
+      body[data-ux="approval"] .fx-approval {
+        display: block;
+      }
+      body[data-ux="error"] .fx-error {
+        display: block;
+      }
+      /* .fx-all shows in every flux state but is hidden when no state is selected */
+      .fx-all {
+        display: block;
+      }
+      body[data-ux] .fx-all {
+        display: block;
+      }
+      .fs-pill .g-live,
+      .fs-pill .g-fail,
+      .fs-pill .g-idle,
+      .fs-pill .g-attn {
+        display: inline-block;
+      }
+      .fs-pill:not(.live) .g-live,
+      .fs-pill:not(.attn) .g-attn,
+      .fs-pill:not(.fail) .g-fail,
+      .fs-pill:not(.idle) .g-idle {
+        display: none;
+      }
+      body[data-ux="idle"] .fs-stop {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .fxerror .fx {
+        display: block;
+      }
+      .fx-streaming,
+      .fx-idle,
+      .fx-approval,
+      .fx-error {
+        display: block;
+      }
 
-/* ---- flux toolbar -------------------------------------------------------- */
-.fluxbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:98;display:flex;gap:4px;
-  align-items:center;padding:4px;border:1px solid var(--border-control);background:var(--surface-raised);
-  border-radius:var(--radius-control);box-shadow:var(--shadow-lifted)}
-.fluxbar button{height:30px;padding:0 10px;border:1px solid transparent;border-radius:var(--radius-control);
-  background:none;color:var(--ink-muted);font-family:var(--font-body);font-size:var(--text-sm);cursor:pointer}
-.fluxbar button.on{background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);
-  color:var(--on-brand);font-weight:var(--weight-strong)}
+      /* ---- flux toolbar -------------------------------------------------------- */
+      .fluxbar {
+        position: fixed;
+        left: 50%;
+        bottom: 14px;
+        transform: translateX(-50%);
+        z-index: 98;
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        padding: 4px;
+        border: 1px solid var(--border-control);
+        background: var(--surface-raised);
+        border-radius: var(--radius-control);
+        box-shadow: var(--shadow-lifted);
+      }
+      .fluxbar button {
+        height: 30px;
+        padding: 0 10px;
+        border: 1px solid transparent;
+        border-radius: var(--radius-control);
+        background: none;
+        color: var(--ink-muted);
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        cursor: pointer;
+      }
+      .fluxbar button.on {
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        font-weight: var(--weight-strong);
+      }
 
-/* ============================== MOTION =================================== */
-/* Durations map to the 100 / 300 / 500ms tiers ONLY. Easings are limited to the
+      /* ============================== MOTION =================================== */
+      /* Durations map to the 100 / 300 / 500ms tiers ONLY. Easings are limited to the
    three canonical curves. ONLY transform and opacity animate. The reduced-motion
    block precedes the animations. */
-:root{
-  --c-100:100ms; --c-300:300ms; --c-500:500ms;
-  --e-in:cubic-bezier(0.16,1,0.3,1);
-  --e-out:cubic-bezier(0.7,0,0.84,0);
-  --e-toggle:cubic-bezier(0.65,0,0.35,1);
-}
-@media (prefers-reduced-motion: reduce){
-  *,*::before,*::after{transition-duration:1ms !important;animation-duration:1ms !important;animation-iteration-count:1 !important}
-}
+      :root {
+        --c-100: 100ms;
+        --c-300: 300ms;
+        --c-500: 500ms;
+        --e-in: cubic-bezier(0.16, 1, 0.3, 1);
+        --e-out: cubic-bezier(0.7, 0, 0.84, 0);
+        --e-toggle: cubic-bezier(0.65, 0, 0.35, 1);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition-duration: 1ms !important;
+          animation-duration: 1ms !important;
+          animation-iteration-count: 1 !important;
+        }
+      }
 
-/* ============================== 8-STATE GALLERY ========================== */
-.g8-title{font-size:var(--text-md);font-weight:var(--weight-strong);margin:0 0 14px}
-.g8-row{margin-bottom:18px}
-.g8-cap{display:block;font-size:var(--text-xs);color:var(--ink-muted);text-transform:uppercase;
-  letter-spacing:var(--track-caps);margin-bottom:8px}
-/* the gallery rows show the controls in a stationary strip, so the flex:1 1 0
+      /* ============================== 8-STATE GALLERY ========================== */
+      .g8-title {
+        font-size: var(--text-md);
+        font-weight: var(--weight-strong);
+        margin: 0 0 14px;
+      }
+      .g8-row {
+        margin-bottom: 18px;
+      }
+      .g8-cap {
+        display: block;
+        font-size: var(--text-xs);
+        color: var(--ink-muted);
+        text-transform: uppercase;
+        letter-spacing: var(--track-caps);
+        margin-bottom: 8px;
+      }
+      /* the gallery rows show the controls in a stationary strip, so the flex:1 1 0
    stretch of the live answer row is overridden to inline-flex per specimen */
-.g8-row .choice.minor{display:flex;gap:var(--a-gap);margin:0;flex-wrap:wrap}
-.g8-row .choice.minor button{flex:0 0 auto;width:auto;min-width:104px}
-.g8-row .qopts.minor{margin:0}
-.g8-row .qopts.minor button{min-height:var(--a-btn-h)}
-.g8-row .pop{display:flex;gap:var(--a-gap)}
-.g8-row .wopen{display:flex;gap:var(--a-gap);flex-wrap:wrap}
-.g8-row .brow{display:flex;gap:var(--a-gap);flex-wrap:wrap;align-items:center}
-.g8-row .brow .bhead{height:auto;min-height:26px;border-radius:var(--radius-control);
-  padding:2px 8px;margin:0;background:var(--surface-field)}
-.g8-row .bhead .tag{margin-right:2px}
-/* state modifiers for the ghost stop / wider / branch heads — the surface rules
+      .g8-row .choice.minor {
+        display: flex;
+        gap: var(--a-gap);
+        margin: 0;
+        flex-wrap: wrap;
+      }
+      .g8-row .choice.minor button {
+        flex: 0 0 auto;
+        width: auto;
+        min-width: 104px;
+      }
+      .g8-row .qopts.minor {
+        margin: 0;
+      }
+      .g8-row .qopts.minor button {
+        min-height: var(--a-btn-h);
+      }
+      .g8-row .pop {
+        display: flex;
+        gap: var(--a-gap);
+      }
+      .g8-row .wopen {
+        display: flex;
+        gap: var(--a-gap);
+        flex-wrap: wrap;
+      }
+      .g8-row .brow {
+        display: flex;
+        gap: var(--a-gap);
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .g8-row .brow .bhead {
+        height: auto;
+        min-height: 26px;
+        border-radius: var(--radius-control);
+        padding: 2px 8px;
+        margin: 0;
+        background: var(--surface-field);
+      }
+      .g8-row .bhead .tag {
+        margin-right: 2px;
+      }
+      /* state modifiers for the ghost stop / wider / branch heads — the surface rules
    already cover .stop/.grant; give the remaining specimens the same treatment */
-.g8-row .stop{width:44px;height:44px}
-.g8-row .wider{height:var(--a-btn-h);padding:0 13px;border:1px solid var(--status-attn-ink);
-  border-radius:var(--radius-control);background:var(--status-attn-bg);color:var(--status-attn-ink);
-  font-family:var(--font-body);font-size:var(--text-base);font-weight:var(--weight-strong);
-  display:inline-flex;align-items:center;gap:6px;cursor:pointer}
-.g8-row .wider svg{width:11px;height:11px;flex:0 0 auto}
-.g8-row .wider.st-hover{background:var(--surface-hover)}
-.g8-row .wider.st-press{background:var(--surface-active);box-shadow:var(--shadow-inset-sel)}
-.g8-row .wider.st-loading{opacity:.55}
-.g8-row .wider.st-disabled{opacity:.45;cursor:default;box-shadow:none}
-.g8-row .wider.st-error{border-color:var(--error-9);color:var(--error-11)}
-.g8-row .wider.st-success{border-color:var(--success-9);color:var(--success-11)}
-.g8-row .bhead.st-hover{background:var(--surface-hover)}
-.g8-row .bhead.st-press{background:var(--surface-active);box-shadow:var(--shadow-inset-sel)}
-.g8-row .bhead.st-disabled{opacity:.45}
-.g8-row .bhead.st-loading{opacity:.55}
-.g8-row .bhead.st-error{color:var(--error-11)}
-.g8-row .bhead.st-success{color:var(--success-11)}
+      .g8-row .stop {
+        width: 44px;
+        height: 44px;
+      }
+      .g8-row .wider {
+        height: var(--a-btn-h);
+        padding: 0 13px;
+        border: 1px solid var(--status-attn-ink);
+        border-radius: var(--radius-control);
+        background: var(--status-attn-bg);
+        color: var(--status-attn-ink);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+      }
+      .g8-row .wider svg {
+        width: 11px;
+        height: 11px;
+        flex: 0 0 auto;
+      }
+      .g8-row .wider.st-hover {
+        background: var(--surface-hover);
+      }
+      .g8-row .wider.st-press {
+        background: var(--surface-active);
+        box-shadow: var(--shadow-inset-sel);
+      }
+      .g8-row .wider.st-loading {
+        opacity: 0.55;
+      }
+      .g8-row .wider.st-disabled {
+        opacity: 0.45;
+        cursor: default;
+        box-shadow: none;
+      }
+      .g8-row .wider.st-error {
+        border-color: var(--error-9);
+        color: var(--error-11);
+      }
+      .g8-row .wider.st-success {
+        border-color: var(--success-9);
+        color: var(--success-11);
+      }
+      .g8-row .bhead.st-hover {
+        background: var(--surface-hover);
+      }
+      .g8-row .bhead.st-press {
+        background: var(--surface-active);
+        box-shadow: var(--shadow-inset-sel);
+      }
+      .g8-row .bhead.st-disabled {
+        opacity: 0.45;
+      }
+      .g8-row .bhead.st-loading {
+        opacity: 0.55;
+      }
+      .g8-row .bhead.st-error {
+        color: var(--error-11);
+      }
+      .g8-row .bhead.st-success {
+        color: var(--success-11);
+      }
 
-/* ================== COMPACT IS FINE-POINTER ONLY (DW-4.10) =================
+      /* ================== COMPACT IS FINE-POINTER ONLY (DW-4.10) =================
    Under a coarse pointer every row, control and tap target on this compact
    surface relaxes to />=44x44/; body type does not fall below the mobile floor;
    text inputs stay />=16px/. Targets are keyed to POINTER TYPE, not width, so a
    touch tablet at any width gets the full target.                              */
-@media (pointer:coarse){
-  body{grid-template-columns:1fr}
-  aside{position:fixed;inset:0 auto 0 0;width:284px;z-index:40;transform:translateX(-100%);
-    box-shadow:var(--shadow-drawer);transition:transform var(--c-300) var(--e-out)}
-  .nav-i,.run-i{min-height:44px}
-  .trow,.bhead{min-height:44px}
-  .choice button,.widen button,.qopts button,.qfree .fake-in{min-height:44px}
-  .stop,.back,.shead .back{min-width:44px;min-height:44px}
-  .cin textarea{font-size:16px}
-  .runprog{flex-wrap:wrap}
-}
-@media (max-width:900px){
-  body{grid-template-columns:1fr}
-  aside{position:fixed;inset:0 auto 0 0;width:284px;z-index:40;transform:translateX(-100%);
-    box-shadow:var(--shadow-drawer);transition:transform var(--c-300) var(--e-out)}
-  .nav-open aside{transform:none}
-  .burger{display:grid;place-items:center;width:44px;height:44px;flex:0 0 auto;
-    border-radius:var(--radius-control);color:var(--ink-body);background:none;border:0;cursor:pointer}
-  .burger svg{width:19px;height:19px}
-  .shead,.tr{padding-left:16px;padding-right:16px}
-  .shead{height:auto;flex-wrap:wrap;padding:10px 16px;row-gap:8px}
-  .shead .meta{display:none}
-  .hitl,.tools,.think,.branch{margin-left:0}
-  /* the composer STAYS A FIXED ANCHOR on a phone: it docks flush to the bottom
+      @media (pointer: coarse) {
+        body {
+          grid-template-columns: 1fr;
+        }
+        aside {
+          position: fixed;
+          inset: 0 auto 0 0;
+          width: 284px;
+          z-index: 40;
+          transform: translateX(-100%);
+          box-shadow: var(--shadow-drawer);
+          transition: transform var(--c-300) var(--e-out);
+        }
+        .nav-i,
+        .run-i {
+          min-height: 44px;
+        }
+        .trow,
+        .bhead {
+          min-height: 44px;
+        }
+        .choice button,
+        .widen button,
+        .qopts button,
+        .qfree .fake-in {
+          min-height: 44px;
+        }
+        .stop,
+        .back,
+        .shead .back {
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .cin textarea {
+          font-size: 16px;
+        }
+        .runprog {
+          flex-wrap: wrap;
+        }
+      }
+      @media (max-width: 900px) {
+        body {
+          grid-template-columns: 1fr;
+        }
+        aside {
+          position: fixed;
+          inset: 0 auto 0 0;
+          width: 284px;
+          z-index: 40;
+          transform: translateX(-100%);
+          box-shadow: var(--shadow-drawer);
+          transition: transform var(--c-300) var(--e-out);
+        }
+        .nav-open aside {
+          transform: none;
+        }
+        .burger {
+          display: grid;
+          place-items: center;
+          width: 44px;
+          height: 44px;
+          flex: 0 0 auto;
+          border-radius: var(--radius-control);
+          color: var(--ink-body);
+          background: none;
+          border: 0;
+          cursor: pointer;
+        }
+        .burger svg {
+          width: 19px;
+          height: 19px;
+        }
+        .shead,
+        .tr {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+        .shead {
+          height: auto;
+          flex-wrap: wrap;
+          padding: 10px 16px;
+          row-gap: 8px;
+        }
+        .shead .meta {
+          display: none;
+        }
+        .hitl,
+        .tools,
+        .think,
+        .branch {
+          margin-left: 0;
+        }
+        /* the composer STAYS A FIXED ANCHOR on a phone: it docks flush to the bottom
      of the viewport (above the thumb bar and safe-area), so Home / composer
      input / Stop hold identical positions in every agent state (DW-5.7). It is
      the last region in the DOM, so it reads and tabs AFTER the transcript — the
      JOURNEY narrow-width ordering is kept even though it no longer sits in flow. */
-  .composer{position:fixed;left:12px;right:12px;width:auto;transform:none;
-    bottom:calc(10px + env(safe-area-inset-bottom));z-index:21}
-  .tr{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
-  .scope{grid-template-columns:1fr;gap:1px 0}
-  .scope dt{margin-top:7px}
-}
+        .composer {
+          position: fixed;
+          left: 12px;
+          right: 12px;
+          width: auto;
+          transform: none;
+          bottom: calc(10px + env(safe-area-inset-bottom));
+          z-index: 21;
+        }
+        .tr {
+          padding-bottom: calc(84px + env(safe-area-inset-bottom));
+        }
+        .scope {
+          grid-template-columns: 1fr;
+          gap: 1px 0;
+        }
+        .scope dt {
+          margin-top: 7px;
+        }
+      }
 
-/* screen-reader-only live region (DW-5.12) */
-.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+      /* screen-reader-only live region (DW-5.12) */
+      .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
 
-/* ============================================================================
+      /* ============================================================================
    DESIGN-DELIVERABLE NOTES (not rendered) — these are part of the Phase 5 spec.
 
    ---- CONSEQUENTIAL-ACTION -> UNDO / CHECKPOINT MAP (DW-5.6) ---------------
@@ -562,322 +1828,725 @@ body[data-ux="idle"] .fs-stop{opacity:.45;cursor:default}
        blinking caret; it is collapsed by default and never stateful. [designer
        inference]
    ========================================================================== */
-</style></head><body>
-
-<aside aria-label="Fleet navigation">
-  <div class="brand"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></div><b>Whiffle</b>
-    <button type="button" class="home" aria-label="Home (fleet board)">{{solar:widget-5}}</button>
-  </div>
-
-  <div class="sec">Fleet</div>
-  <nav>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:widget-5}}</span>Fleet<span class="cnt">6</span></a>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:tuning-4}}</span>Tools</a>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:checklist-minimalistic}}</span>Rules</a>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:chart-2}}</span>Usage</a>
-  </nav>
-
-  <div class="sec">Machines</div>
-  <nav>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:laptop-minimalistic}}</span>nixbox</a>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:laptop-minimalistic}}</span>mba-m3</a>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:laptop-minimalistic}}</span>hetzner-01</a>
-  </nav>
-
-  <div class="sec">Running now</div>
-  <div class="runs">
-    <a class="run-i on" href="#session"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span><span class="nm">wire delegate row outc…</span><span class="st">3</span></a>
-    <a class="run-i" href="#session"><span class="mark" style="background-color:var(--mark-2)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg></span><span class="nm">table system spike</span></a>
-    <a class="run-i" href="#session"><span class="mark" style="background-color:var(--mark-5)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span><span class="nm">flaky ws reconnect</span></a>
-    <a class="run-i" href="#session"><span class="mark" style="background-color:var(--mark-6)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5h14M9 7.5v9M15 7.5v6.5a2.5 2.5 0 0 0 4 0"/></svg></span><span class="nm">landing copy pass</span></a>
-  </div>
-
-  <div class="quota">
-    <div class="n">{{solar:bolt}}18.40 / 50.00</div>
-    <div class="s">Spend today across the fleet</div>
-    <button type="button">View usage</button>
-  </div>
-</aside>
-
-<main>
-  <header class="shead">
-    <button type="button" class="burger" aria-label="Open navigation">{{solar:hamburger-menu}}</button>
-    <button type="button" class="back" aria-label="Back to fleet board">{{solar:alt-arrow-left}}</button>
-    <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span>
-    <h1>wire delegate row outcomes</h1>
-    <span class="path">nixbox : ~/whiffle</span>
-    <span class="pill fs-pill attn">
-  <svg class="glyph g-live" viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="6" r="3.1"/></svg>
-  <svg class="glyph g-attn" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.4V2.6M3 5.6 6 2.6l3 3"/></svg>
-  <svg class="glyph g-fail" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3.2 3.2l5.6 5.6M8.8 3.2l-5.6 5.6"/></svg>
-  <svg class="glyph g-idle" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4.4 3v6M7.6 3v6"/></svg>
-  <span class="fs-label">needs you</span>
-</span>
-<div class="meta"><span>Claude Code</span><span><b>28</b> turns</span><span><b>104k</b>/200k</span><span><b>$4.12</b></span></div>
-  </header>
-
-  <div class="tr" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Session transcript">
-    <p class="sr" role="status" aria-live="assertive">Agent is waiting for your approval to run a shell command on nixbox.</p>
-
-    <section class="turn fx fx-all">
-      <h2 class="who"><span class="dot u">{{solar:user}}</span><span class="role">You</span></h2>
-      <div class="msg">The delegate rows and the fleet board disagree on how they order equal-age items. Make them consistent.</div>
-    </section>
-
-    <section class="turn fx fx-all">
-      <h2 class="who"><span class="dot a">{{solar:atom}}</span><span class="role">Claude Code</span></h2>
-      <div class="msg">Three real call sites use the age comparator: <code>FleetBoard.svelte</code>, <code>SessionPane.svelte</code>, <code>fleet-memory.ts</code>. A fourth hit is a test fixture asserting the old shape deliberately.</div>
-      <div class="tools">
-        <div class="trow"><span class="ic">{{solar:magnifer}}</span><span class="tk">Grep</span><span class="arg">outcomeLabel\( — 4 files</span><span class="t">0.4s</span></div>
-        <div class="trow"><span class="ic">{{solar:document-text}}</span><span class="tk">Read</span><span class="arg">lib/state/delegates.svelte.ts</span><span class="t">0.2s</span></div>
-        <div class="trow"><span class="ic">{{solar:pen}}</span><span class="tk">Edit</span><span class="arg">DelegateRow.svelte</span><span class="d">+14 −6</span></div>
-        <div class="trow"><span class="ic">{{solar:pen}}</span><span class="tk">Edit</span><span class="arg">lib/format/age.ts</span><span class="d">+9 −2</span></div>
+    </style>
+  </head>
+  <body>
+    <aside aria-label="Fleet navigation">
+      <div class="brand">
+        <div class="logo">
+          <svg
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.7"
+            viewBox="0 0 24 24"
+          >
+            <path d="M4 4h16v16H4z" />
+            <path d="M4 4h8v16H4z" fill="currentColor" />
+          </svg>
+        </div>
+        <b>Whiffle</b>
+        <button aria-label="Home (fleet board)" class="home" type="button">
+          {{solar:widget-5}}
+        </button>
       </div>
-      <div class="branch">
-        <div class="bhead"><span class="tag">{{solar:branching-paths-down}}subagent</span><span class="tk">fixture-check</span><span class="arg">pi · 2 steps</span><span class="t">9s</span></div>
-        <p class="bmsg">Fixture asserts the old shape on purpose. Left alone, flagged.</p>
-      </div>
-    </section>
 
-    <!-- QUESTION CARD: same hitl anatomy, selectable answers (DW-5.4/5.9) -->
-    <section class="hitl fx fx-approval fx-streaming" id="q-card" aria-labelledby="q1">
-      <h2 id="q1"><span class="pill attn">{{solar:alt-arrow-up}}needs you</span>Question from the agent</h2>
-      <p class="lede">Two delegate rows can finish in the same second. What should break the tie in the age column?</p>
-      <div class="qopts">
-        <button type="button"><span class="kc">1</span><span>Earliest start time wins the tie</span></button>
-        <button type="button"><span class="kc">2</span><span>Order by session id</span></button>
-        <button type="button"><span class="kc">3</span><span>Group by machine, then start time</span></button>
-        <button type="button"><span class="kc">4</span><span>Keep equal, preserve arrival order</span></button>
-      </div>
-      <div class="qfree"><span>Or answer in your own words</span><span class="fake-in">Type an answer…</span></div>
-    </section>
+      <div class="sec">Fleet</div>
+      <nav>
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:widget-5}}</span>Fleet<span class="cnt"
+            >6</span
+          ></a
+        >
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:tuning-4}}</span>Tools</a
+        >
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:checklist-minimalistic}}</span>Rules</a
+        >
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:chart-2}}</span>Usage</a
+        >
+      </nav>
 
-    <!-- STREAMING TURN (designer inference: output streams in place, caret marks
+      <div class="sec">Machines</div>
+      <nav>
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:laptop-minimalistic}}</span>nixbox</a
+        >
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:laptop-minimalistic}}</span>mba-m3</a
+        >
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:laptop-minimalistic}}</span>hetzner-01</a
+        >
+      </nav>
+
+      <div class="sec">Running now</div>
+      <div class="runs">
+        <a class="run-i on" href="#session"
+          ><span class="mark"
+            ><svg
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+            </svg></span
+          ><span class="nm">wire delegate row outc…</span
+          ><span class="st">3</span></a
+        >
+        <a class="run-i" href="#session"
+          ><span class="mark" style="background-color:var(--mark-2)"
+            ><svg
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M9 8l-4 4 4 4M15 8l4 4-4 4" />
+            </svg></span
+          ><span class="nm">table system spike</span></a
+        >
+        <a class="run-i" href="#session"
+          ><span class="mark" style="background-color:var(--mark-5)"
+            ><svg
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+            </svg></span
+          ><span class="nm">flaky ws reconnect</span></a
+        >
+        <a class="run-i" href="#session"
+          ><span class="mark" style="background-color:var(--mark-6)"
+            ><svg
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M5 7.5h14M9 7.5v9M15 7.5v6.5a2.5 2.5 0 0 0 4 0" />
+            </svg></span
+          ><span class="nm">landing copy pass</span></a
+        >
+      </div>
+
+      <div class="quota">
+        <div class="n">{{solar:bolt}}18.40 / 50.00</div>
+        <div class="s">Spend today across the fleet</div>
+        <button type="button">View usage</button>
+      </div>
+    </aside>
+
+    <main>
+      <header class="shead">
+        <button aria-label="Open navigation" class="burger" type="button">
+          {{solar:hamburger-menu}}
+        </button>
+        <button aria-label="Back to fleet board" class="back" type="button">
+          {{solar:alt-arrow-left}}
+        </button>
+        <span class="mark"
+          ><svg
+            fill="none"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            viewBox="0 0 24 24"
+          >
+            <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+          </svg></span
+        >
+        <h1>wire delegate row outcomes</h1>
+        <span class="path">nixbox : ~/whiffle</span>
+        <span class="pill fs-pill attn">
+          <svg class="glyph g-live" fill="currentColor" viewBox="0 0 12 12">
+            <circle cx="6" cy="6" r="3.1" />
+          </svg>
+          <svg
+            class="glyph g-attn"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.7"
+            viewBox="0 0 12 12"
+          >
+            <path d="M6 9.4V2.6M3 5.6 6 2.6l3 3" />
+          </svg>
+          <svg
+            class="glyph g-fail"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-width="1.7"
+            viewBox="0 0 12 12"
+          >
+            <path d="M3.2 3.2l5.6 5.6M8.8 3.2l-5.6 5.6" />
+          </svg>
+          <svg
+            class="glyph g-idle"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-width="1.7"
+            viewBox="0 0 12 12"
+          >
+            <path d="M4.4 3v6M7.6 3v6" />
+          </svg>
+          <span class="fs-label">needs you</span>
+        </span>
+        <div class="meta">
+          <span>Claude Code</span><span><b>28</b> turns</span
+          ><span><b>104k</b>/200k</span><span><b>$4.12</b></span>
+        </div>
+      </header>
+
+      <div
+        aria-label="Session transcript"
+        aria-live="polite"
+        aria-relevant="additions text"
+        class="tr"
+        role="log"
+      >
+        <p aria-live="assertive" class="sr" role="status">
+          Agent is waiting for your approval to run a shell command on nixbox.
+        </p>
+
+        <section class="turn fx fx-all">
+          <h2 class="who">
+            <span class="dot u">{{solar:user}}</span
+            ><span class="role">You</span>
+          </h2>
+          <div class="msg">
+            The delegate rows and the fleet board disagree on how they order
+            equal-age items. Make them consistent.
+          </div>
+        </section>
+
+        <section class="turn fx fx-all">
+          <h2 class="who">
+            <span class="dot a">{{solar:atom}}</span
+            ><span class="role">Claude Code</span>
+          </h2>
+          <div class="msg">
+            Three real call sites use the age comparator:
+            <code>FleetBoard.svelte</code>, <code>SessionPane.svelte</code>,
+            <code>fleet-memory.ts</code>. A fourth hit is a test fixture
+            asserting the old shape deliberately.
+          </div>
+          <div class="tools">
+            <div class="trow">
+              <span class="ic">{{solar:magnifer}}</span
+              ><span class="tk">Grep</span
+              ><span class="arg">outcomeLabel\( — 4 files</span
+              ><span class="t">0.4s</span>
+            </div>
+            <div class="trow">
+              <span class="ic">{{solar:document-text}}</span
+              ><span class="tk">Read</span
+              ><span class="arg">lib/state/delegates.svelte.ts</span
+              ><span class="t">0.2s</span>
+            </div>
+            <div class="trow">
+              <span class="ic">{{solar:pen}}</span><span class="tk">Edit</span
+              ><span class="arg">DelegateRow.svelte</span
+              ><span class="d">+14 −6</span>
+            </div>
+            <div class="trow">
+              <span class="ic">{{solar:pen}}</span><span class="tk">Edit</span
+              ><span class="arg">lib/format/age.ts</span
+              ><span class="d">+9 −2</span>
+            </div>
+          </div>
+          <div class="branch">
+            <div class="bhead">
+              <span class="tag">{{solar:branching-paths-down}}subagent</span
+              ><span class="tk">fixture-check</span
+              ><span class="arg">pi · 2 steps</span><span class="t">9s</span>
+            </div>
+            <p class="bmsg">
+              Fixture asserts the old shape on purpose. Left alone, flagged.
+            </p>
+          </div>
+        </section>
+
+        <!-- QUESTION CARD: same hitl anatomy, selectable answers (DW-5.4/5.9) -->
+        <section
+          aria-labelledby="q1"
+          class="hitl fx fx-approval fx-streaming"
+          id="q-card"
+        >
+          <h2 id="q1">
+            <span class="pill attn">{{solar:alt-arrow-up}}needs you</span
+            >Question from the agent
+          </h2>
+          <p class="lede">
+            Two delegate rows can finish in the same second. What should break
+            the tie in the age column?
+          </p>
+          <div class="qopts">
+            <button type="button">
+              <span class="kc">1</span
+              ><span>Earliest start time wins the tie</span>
+            </button>
+            <button type="button">
+              <span class="kc">2</span><span>Order by session id</span>
+            </button>
+            <button type="button">
+              <span class="kc">3</span
+              ><span>Group by machine, then start time</span>
+            </button>
+            <button type="button">
+              <span class="kc">4</span
+              ><span>Keep equal, preserve arrival order</span>
+            </button>
+          </div>
+          <div class="qfree">
+            <span>Or answer in your own words</span
+            ><span class="fake-in">Type an answer…</span>
+          </div>
+        </section>
+
+        <!-- STREAMING TURN (designer inference: output streams in place, caret marks
      a turn still generating) -->
-    <section class="turn fx fx-streaming">
-      <h2 class="who"><span class="dot a">{{solar:atom}}</span><span class="role">Claude Code</span></h2>
-      <div class="think">The token rename landed in the same branch, so the build cache is still holding the old CSS custom properties and the dev server keeps serving them<span class="caret"></span></div>
-      <div class="runprog"><span class="label">{{solar:clock-circle}}Running</span><span class="track"><span class="fill" style="width:64%"></span></span><span class="n">11 / 17 steps</span></div>
-    </section>
+        <section class="turn fx fx-streaming">
+          <h2 class="who">
+            <span class="dot a">{{solar:atom}}</span
+            ><span class="role">Claude Code</span>
+          </h2>
+          <div class="think">
+            The token rename landed in the same branch, so the build cache is
+            still holding the old CSS custom properties and the dev server keeps
+            serving them<span class="caret"></span>
+          </div>
+          <div class="runprog">
+            <span class="label">{{solar:clock-circle}}Running</span
+            ><span class="track"
+              ><span class="fill" style="width:64%"></span></span
+            ><span class="n">11 / 17 steps</span>
+          </div>
+        </section>
 
-    <!-- PERMISSION / APPROVAL CARD: the deceptive-pattern gate lives here -->
-    <section class="hitl fx fx-approval fx-error" id="perm-card" aria-labelledby="p1">
-      <h2 id="p1"><span class="pill attn">{{solar:alt-arrow-up}}needs you</span>Permission — run a shell command</h2>
-      <p class="lede">This deletes the SvelteKit build cache so the next build picks up the renamed tokens. The next build regenerates it, so the change is reversible; nothing outside <code>apps/dashboard</code> is touched.</p>
-      <div class="cmd">rm -rf apps/dashboard/.svelte-kit<span class="eff">Removes a generated build-cache folder inside apps/dashboard only; recreated by the next build. Nothing else is deleted.</span></div>
-      <dl class="scope">
-        <dt>Machine</dt><dd>nixbox <span class="no">— mba-m3 and hetzner-01 are not affected</span></dd>
-        <dt>Path</dt><dd class="mono">/home/bewinxed/whiffle/apps/dashboard/.svelte-kit</dd>
-        <dt>Network</dt><dd>No network access requested.</dd>
-        <dt>Undo</dt><dd>Regenerated by the next <span class="mono">vite build</span>. No checkpoint needed.</dd>
-        <dt>Future</dt><dd>Approving covers this one command. It does not widen what the agent may run later.</dd>
-      </dl>
-      <div class="choice">
-        <button type="button" class="grant">{{solar:check-circle}}Approve</button>
-        <button type="button" class="refuse">{{solar:close-circle}}Deny</button>
+        <!-- PERMISSION / APPROVAL CARD: the deceptive-pattern gate lives here -->
+        <section
+          aria-labelledby="p1"
+          class="hitl fx fx-approval fx-error"
+          id="perm-card"
+        >
+          <h2 id="p1">
+            <span class="pill attn">{{solar:alt-arrow-up}}needs you</span
+            >Permission — run a shell command
+          </h2>
+          <p class="lede">
+            This deletes the SvelteKit build cache so the next build picks up
+            the renamed tokens. The next build regenerates it, so the change is
+            reversible; nothing outside <code>apps/dashboard</code> is touched.
+          </p>
+          <div class="cmd">
+            rm -rf apps/dashboard/.svelte-kit<span class="eff"
+              >Removes a generated build-cache folder inside apps/dashboard
+              only; recreated by the next build. Nothing else is deleted.</span
+            >
+          </div>
+          <dl class="scope">
+            <dt>Machine</dt>
+            <dd>
+              nixbox
+              <span class="no">— mba-m3 and hetzner-01 are not affected</span>
+            </dd>
+            <dt>Path</dt>
+            <dd class="mono">
+              /home/bewinxed/whiffle/apps/dashboard/.svelte-kit
+            </dd>
+            <dt>Network</dt>
+            <dd>No network access requested.</dd>
+            <dt>Undo</dt>
+            <dd>
+              Regenerated by the next <span class="mono">vite build</span>. No
+              checkpoint needed.
+            </dd>
+            <dt>Future</dt>
+            <dd>
+              Approving covers this one command. It does not widen what the
+              agent may run later.
+            </dd>
+          </dl>
+          <div class="choice">
+            <button class="grant" type="button">
+              {{solar:check-circle}}Approve
+            </button>
+            <button class="refuse" type="button">
+              {{solar:close-circle}}Deny
+            </button>
+          </div>
+          <div class="widen">
+            <p>
+              This would let the agent run <span class="mono">rm -rf</span> in
+              <span class="mono">~/whiffle</span> unprompted in future — a wider
+              grant than the command above.
+            </p>
+            <button type="button">
+              {{solar:danger-triangle}}Always allow rm -rf in ~/whiffle
+            </button>
+            <p class="imp">
+              Widens future permissions for every session in this folder, on
+              every machine. Reviewable under Rules.
+            </p>
+          </div>
+        </section>
+
+        <section class="turn fx fx-approval" style="margin-top:14px">
+          <h2 class="who">
+            <span class="dot a">{{solar:atom}}</span
+            ><span class="role">Claude Code</span>
+          </h2>
+          <div class="msg">
+            While you decide, I handed the fixture assertion to a
+            <span class="vars">pi</span> subagent so the build is not blocked.
+          </div>
+        </section>
       </div>
-      <div class="widen">
-        <p>This would let the agent run <span class="mono">rm -rf</span> in <span class="mono">~/whiffle</span> unprompted in future — a wider grant than the command above.</p>
-        <button type="button">{{solar:danger-triangle}}Always allow rm -rf in ~/whiffle</button>
-        <p class="imp">Widens future permissions for every session in this folder, on every machine. Reviewable under Rules.</p>
+
+      <div class="fade"></div>
+      <div class="composer" id="comp">
+        <form
+          aria-label="Message the agent"
+          class="cin"
+          onsubmit="return false"
+        >
+          <textarea
+            aria-label="Message the agent"
+            placeholder="Message the agent…"
+          ></textarea>
+          <div class="aff-row">
+            <div class="inner">
+              <span>/ commands</span><span>@ mention</span
+              ><span>＋ attach</span>
+              <span class="hint">Enter sends · Shift+Enter for a new line</span>
+            </div>
+          </div>
+          <button aria-label="Stop the agent" class="stop" type="button">
+            {{solar:pause}}
+          </button>
+        </form>
+      </div>
+    </main>
+
+    <!-- ============================ ASSISTANT PANEL ============================ -->
+    <div class="asst-scrim"></div>
+    <section aria-label="Whiffle Assistant" aria-live="polite" class="asst">
+      <header>
+        <span class="a-logo">{{solar:magic-stick-3}}</span>
+        <span class="a-t"><b>Whiffle</b> Assistant</span>
+        <button aria-label="Close assistant" class="a-x" type="button">
+          {{solar:close-circle}}
+        </button>
+      </header>
+      <div class="a-body">
+        <h3>Hey there!</h3>
+        <p>
+          Ask me anything about your fleet — what an agent is stuck on, why a
+          run failed, or where your tokens went.
+        </p>
+        <div class="a-sug">
+          <button type="button">
+            <span class="s-i">{{solar:folder}}</span>Start a session
+          </button>
+          <button type="button">
+            <span class="s-i">{{solar:bell}}</span>What needs me right now?
+          </button>
+          <button type="button">
+            <span class="s-i">{{solar:chart-2}}</span>Why did spend jump today?
+          </button>
+        </div>
+      </div>
+      <div class="a-composer">
+        <div class="a-in">Ask anything about your fleet…</div>
+        <div class="a-actions">
+          <button aria-label="Attach" class="a-plus" type="button">
+            {{solar:add-circle}}
+          </button>
+          <button aria-label="Send" class="a-send" type="button">
+            {{solar:alt-arrow-up}}
+          </button>
+        </div>
       </div>
     </section>
 
-    <section class="turn fx fx-approval" style="margin-top:14px">
-      <h2 class="who"><span class="dot a">{{solar:atom}}</span><span class="role">Claude Code</span></h2>
-      <div class="msg">While you decide, I handed the fixture assertion to a <span class="vars">pi</span> subagent so the build is not blocked.</div>
-    </section>
-  </div>
-
-  <div class="fade"></div>
-  <div class="composer" id="comp">
-    <form class="cin" onsubmit="return false" aria-label="Message the agent">
-      <textarea placeholder="Message the agent…" aria-label="Message the agent"></textarea>
-      <div class="aff-row"><div class="inner">
-        <span>/ commands</span><span>@ mention</span><span>＋ attach</span>
-        <span class="hint">Enter sends · Shift+Enter for a new line</span>
-      </div></div>
-      <button class="stop" type="button" aria-label="Stop the agent">{{solar:pause}}</button>
-    </form>
-  </div>
-</main>
-
-<!-- ============================ ASSISTANT PANEL ============================ -->
-<div class="asst-scrim"></div>
-<section class="asst" aria-label="Whiffle Assistant" aria-live="polite">
-  <header>
-    <span class="a-logo">{{solar:magic-stick-3}}</span>
-    <span class="a-t"><b>Whiffle</b> Assistant</span>
-    <button class="a-x" type="button" aria-label="Close assistant">{{solar:close-circle}}</button>
-  </header>
-  <div class="a-body">
-    <h3>Hey there!</h3>
-    <p>Ask me anything about your fleet — what an agent is stuck on, why a run failed, or where your tokens went.</p>
-    <div class="a-sug">
-      <button type="button"><span class="s-i">{{solar:folder}}</span>Start a session</button>
-      <button type="button"><span class="s-i">{{solar:bell}}</span>What needs me right now?</button>
-      <button type="button"><span class="s-i">{{solar:chart-2}}</span>Why did spend jump today?</button>
-    </div>
-  </div>
-  <div class="a-composer">
-    <div class="a-in">Ask anything about your fleet…</div>
-    <div class="a-actions">
-      <button class="a-plus" type="button" aria-label="Attach">{{solar:add-circle}}</button>
-      <button class="a-send" type="button" aria-label="Send">{{solar:alt-arrow-up}}</button>
-    </div>
-  </div>
-</section>
-
-<!-- ============================ FAILURE-MODE STATES =========================
+    <!-- ============================ FAILURE-MODE STATES =========================
      Every failure mode has a defined state + a named handoff (DW-5.9). Shown
      statically below so each has a designed, inspectable representation. -->
-<div class="tr" style="padding:0 0 20px">
-  <section class="turn">
-    <h2 class="who"><span class="dot a">{{solar:atom}}</span><span class="role">Claude Code</span></h2>
-    <div class="failcard"><b>Machine unreachable</b><span class="handoff">nixbox stopped answering (timeout). The run is paused and holds its place. <strong>Handoff:</strong> check the machine, then Reconnect to resume.</span></div>
-    <div class="failcard"><b>Tool errored</b><span class="handoff">A tool call failed and cannot be retried as-is. <strong>Handoff:</strong> the agent re-plans or you Redirect it.</span></div>
-    <div class="failcard"><b>Agent got it wrong</b><span class="handoff">The agent's last turn does not match the intent you asked for. <strong>Handoff:</strong> the transcript marks the turn as contested, and you Redirect it in the composer.</span></div>
-    <div class="attncard"><b>Low confidence</b><span class="handoff">The agent is under-confident about a step it is about to take. <strong>Handoff:</strong> it stops and asks a question before proceeding.</span></div>
-    <div class="attncard"><b>Out of scope</b><span class="handoff">Your instruction is outside what this session is permitted to do. <strong>Handoff:</strong> the agent stops and names the closest permitted alternative.</span></div>
-  </section>
-</div>
+    <div class="tr" style="padding:0 0 20px">
+      <section class="turn">
+        <h2 class="who">
+          <span class="dot a">{{solar:atom}}</span
+          ><span class="role">Claude Code</span>
+        </h2>
+        <div class="failcard">
+          <b>Machine unreachable</b
+          ><span class="handoff"
+            >nixbox stopped answering (timeout). The run is paused and holds its
+            place. <strong>Handoff:</strong> check the machine, then Reconnect
+            to resume.</span
+          >
+        </div>
+        <div class="failcard">
+          <b>Tool errored</b
+          ><span class="handoff"
+            >A tool call failed and cannot be retried as-is.
+            <strong>Handoff:</strong> the agent re-plans or you Redirect
+            it.</span
+          >
+        </div>
+        <div class="failcard">
+          <b>Agent got it wrong</b
+          ><span class="handoff"
+            >The agent's last turn does not match the intent you asked for.
+            <strong>Handoff:</strong> the transcript marks the turn as
+            contested, and you Redirect it in the composer.</span
+          >
+        </div>
+        <div class="attncard">
+          <b>Low confidence</b
+          ><span class="handoff"
+            >The agent is under-confident about a step it is about to take.
+            <strong>Handoff:</strong> it stops and asks a question before
+            proceeding.</span
+          >
+        </div>
+        <div class="attncard">
+          <b>Out of scope</b
+          ><span class="handoff"
+            >Your instruction is outside what this session is permitted to do.
+            <strong>Handoff:</strong> the agent stops and names the closest
+            permitted alternative.</span
+          >
+        </div>
+      </section>
+    </div>
 
-<!-- flux-state toolbar (screenshot affordance, not the product) -->
-<div class="fluxbar" aria-hidden="true">
-  <button type="button" tabindex="-1" data-ux-btn="streaming">Streaming</button>
-  <button type="button" tabindex="-1" data-ux-btn="idle">Idle</button>
-  <button type="button" tabindex="-1" data-ux-btn="approval" class="on">Awaiting approval</button>
-  <button type="button" tabindex="-1" data-ux-btn="error">Error</button>
-</div>
+    <!-- flux-state toolbar (screenshot affordance, not the product) -->
+    <div aria-hidden="true" class="fluxbar">
+      <button data-ux-btn="streaming" tabindex="-1" type="button">
+        Streaming
+      </button>
+      <button data-ux-btn="idle" tabindex="-1" type="button">Idle</button>
+      <button class="on" data-ux-btn="approval" tabindex="-1" type="button">
+        Awaiting approval
+      </button>
+      <button data-ux-btn="error" tabindex="-1" type="button">Error</button>
+    </div>
 
-<script>
-(function () {
-  /* flux-state switcher — a screenshot affordance only. It swaps the transcript
+    <script>
+      "use strict";
+      (() => {
+        /* flux-state switcher — a screenshot affordance only. It swaps the transcript
      content and status-pill reading between the four agent states to show that
      the DW-5.7 fixed anchors (Home, composer input, Stop) never move. */
-  var body = document.body;
-  var pill = document.querySelector('.fs-pill');
-  var label = document.querySelector('.fs-label');
-  var stop = document.querySelector('.composer .stop');
-  var buttons = Array.prototype.slice.call(document.querySelectorAll('[data-ux-btn]'));
-  var spec = {
-    streaming: { pill: 'live', word: 'working' },
-    idle:      { pill: 'idle', word: 'idle' },
-    approval:  { pill: 'attn', word: 'needs you' },
-    error:     { pill: 'fail', word: 'error' },
-  };
-  function set(state) {
-    body.setAttribute('data-ux', state);
-    pill.className = 'pill fs-pill ' + spec[state].pill;
-    label.textContent = spec[state].word;
-    stop.disabled = state === 'idle' || state === 'error';
-    /* the awaiting-approval answer row is disabled while the hub is erroring —
+        var body = document.body;
+        var pill = document.querySelector(".fs-pill");
+        var label = document.querySelector(".fs-label");
+        var stop = document.querySelector(".composer .stop");
+        var buttons = Array.prototype.slice.call(
+          document.querySelectorAll("[data-ux-btn]")
+        );
+        var spec = {
+          streaming: { pill: "live", word: "working" },
+          idle: { pill: "idle", word: "idle" },
+          approval: { pill: "attn", word: "needs you" },
+          error: { pill: "fail", word: "error" },
+        };
+        function set(state) {
+          body.setAttribute("data-ux", state);
+          pill.className = "pill fs-pill " + spec[state].pill;
+          label.textContent = spec[state].word;
+          stop.disabled = state === "idle" || state === "error";
+          /* the awaiting-approval answer row is disabled while the hub is erroring —
        an approval must not be composable against a socket that cannot carry it */
-    var choice = document.querySelector('.choice');
-    if (choice) {
-      var btns = choice.querySelectorAll('button');
-      btns.forEach(function (b) { b.disabled = state === 'error'; });
-    }
-    var wid = document.querySelector('.widen button');
-    if (wid) wid.disabled = state === 'error';
-    buttons.forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-ux-btn') === state); });
-  }
-  buttons.forEach(function (b) {
-    b.addEventListener('click', function () { set(b.getAttribute('data-ux-btn')); });
-  });
-})();
-</script>
+          var choice = document.querySelector(".choice");
+          if (choice) {
+            var btns = choice.querySelectorAll("button");
+            btns.forEach((b) => {
+              b.disabled = state === "error";
+            });
+          }
+          var wid = document.querySelector(".widen button");
+          if (wid) {
+            wid.disabled = state === "error";
+          }
+          buttons.forEach((b) => {
+            b.classList.toggle("on", b.getAttribute("data-ux-btn") === state);
+          });
+        }
+        buttons.forEach((b) => {
+          b.addEventListener("click", () => {
+            set(b.getAttribute("data-ux-btn"));
+          });
+        });
+      })();
+    </script>
 
-<!-- ============================= 8-STATE GALLERY ============================
+    <!-- ============================= 8-STATE GALLERY ============================
      The agent-surface controls shown at compact density in all eight
      interaction states (default · hover · focus · active · disabled · loading ·
      error · success), using the same declarations as the real pseudo-classes. -->
-<div class="tr g8" style="padding:20px 0 40px">
-  <h2 class="g8-title">Agent-surface controls — interaction states (compact)</h2>
+    <div class="tr g8" style="padding:20px 0 40px">
+      <h2 class="g8-title">
+        Agent-surface controls — interaction states (compact)
+      </h2>
 
-  <div class="g8-row">
-    <span class="g8-cap">Approve (grant)</span>
-    <div class="choice minor">
-      <button type="button" class="grant">Approve</button>
-      <button type="button" class="grant st-hover">Approve</button>
-      <button type="button" class="grant st-focus">Approve</button>
-      <button type="button" class="grant st-press">Approve</button>
-      <button type="button" class="grant st-disabled" disabled>Approve</button>
-      <button type="button" class="grant st-loading">Approve</button>
-      <button type="button" class="grant st-error">Approve</button>
-      <button type="button" class="grant st-success">Approve</button>
+      <div class="g8-row">
+        <span class="g8-cap">Approve (grant)</span>
+        <div class="choice minor">
+          <button class="grant" type="button">Approve</button>
+          <button class="grant st-hover" type="button">Approve</button>
+          <button class="grant st-focus" type="button">Approve</button>
+          <button class="grant st-press" type="button">Approve</button>
+          <button class="grant st-disabled" disabled type="button">
+            Approve
+          </button>
+          <button class="grant st-loading" type="button">Approve</button>
+          <button class="grant st-error" type="button">Approve</button>
+          <button class="grant st-success" type="button">Approve</button>
+        </div>
+      </div>
+
+      <div class="g8-row">
+        <span class="g8-cap">Deny (refuse)</span>
+        <div class="choice minor">
+          <button class="refuse" type="button">Deny</button>
+          <button class="refuse st-hover" type="button">Deny</button>
+          <button class="refuse st-focus" type="button">Deny</button>
+          <button class="refuse st-press" type="button">Deny</button>
+          <button class="refuse st-disabled" disabled type="button">
+            Deny
+          </button>
+          <button class="refuse st-loading" type="button">Deny</button>
+          <button class="refuse st-error" type="button">Deny</button>
+          <button class="refuse st-success" type="button">Deny</button>
+        </div>
+      </div>
+
+      <div class="g8-row">
+        <span class="g8-cap">Question option</span>
+        <div class="qopts minor">
+          <button type="button">
+            <span class="kc">1</span><span>Answer one</span>
+          </button>
+          <button class="st-hover" type="button">
+            <span class="kc">2</span><span>Answer two</span>
+          </button>
+          <button class="st-focus" type="button">
+            <span class="kc">3</span><span>Answer three</span>
+          </button>
+          <button class="st-press" type="button">
+            <span class="kc">4</span><span>Answer four</span>
+          </button>
+          <button disabled type="button">
+            <span class="kc">5</span><span>Disabled</span>
+          </button>
+          <button class="st-loading" type="button">
+            <span class="kc">6</span><span>Sending…</span>
+          </button>
+          <button class="st-error" type="button">
+            <span class="kc">7</span><span>Rejected</span>
+          </button>
+          <button class="st-success" type="button">
+            <span class="kc">8</span><span>Recorded</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="g8-row">
+        <span class="g8-cap">Stop / interrupt</span>
+        <div class="pop minor">
+          <button class="stop" type="button">{{solar:pause}}</button>
+          <button class="stop st-hover" type="button">{{solar:pause}}</button>
+          <button class="stop st-focus" type="button">{{solar:pause}}</button>
+          <button class="stop st-press" type="button">{{solar:pause}}</button>
+          <button class="stop st-disabled" disabled type="button">
+            {{solar:pause}}
+          </button>
+          <button class="stop st-loading" type="button">
+            {{solar:restart}}
+          </button>
+          <button class="stop st-error" type="button">{{solar:pause}}</button>
+          <button class="stop st-success" type="button">{{solar:pause}}</button>
+        </div>
+      </div>
+
+      <div class="g8-row">
+        <span class="g8-cap">Scope-widen (consequential)</span>
+        <div class="wopen minor">
+          <button class="wider" type="button">
+            {{solar:danger-triangle}}Always allow
+          </button>
+          <button class="wider st-hover" type="button">
+            {{solar:danger-triangle}}Always allow
+          </button>
+          <button class="wider st-focus" type="button">
+            {{solar:danger-triangle}}Always allow
+          </button>
+          <button class="wider st-press" type="button">
+            {{solar:danger-triangle}}Always allow
+          </button>
+          <button class="wider" disabled type="button">
+            {{solar:danger-triangle}}Always allow
+          </button>
+          <button class="wider st-loading" type="button">
+            {{solar:danger-triangle}}Saving…
+          </button>
+          <button class="wider st-error" type="button">
+            {{solar:danger-triangle}}Failed
+          </button>
+          <button class="wider st-success" type="button">
+            {{solar:danger-triangle}}Set as rule
+          </button>
+        </div>
+      </div>
+
+      <div class="g8-row">
+        <span class="g8-cap">Subagent branch (expand)</span>
+        <div class="brow minor">
+          <div class="bhead">
+            <span class="tag">{{solar:branching-paths-down}}subagent</span
+            ><span class="tk">fixture-check</span>
+          </div>
+          <div class="bhead st-hover">
+            <span class="tag">{{solar:branching-paths-down}}subagent</span
+            ><span class="tk">fixture-check</span>
+          </div>
+          <div class="bhead st-focus">
+            <span class="tag">{{solar:branching-paths-down}}subagent</span
+            ><span class="tk">fixture-check</span>
+          </div>
+          <div class="bhead st-press">
+            <span class="tag">{{solar:branching-paths-down}}subagent</span
+            ><span class="tk">fixture-check</span>
+          </div>
+          <div class="bhead st-disabled">
+            <span class="tag">{{solar:branching-paths-down}}subagent</span
+            ><span class="tk">fixture-check</span>
+          </div>
+          <div class="bhead st-loading">
+            <span class="tag">{{solar:branching-paths-down}}subagent</span
+            ><span class="tk">syncing…</span>
+          </div>
+          <div class="bhead st-error">
+            <span class="tag">{{solar:branching-paths-down}}subagent</span
+            ><span class="tk">failed</span>
+          </div>
+          <div class="bhead st-success">
+            <span class="tag">{{solar:branching-paths-down}}subagent</span
+            ><span class="tk">done</span>
+          </div>
+        </div>
+      </div>
     </div>
-  </div>
-
-  <div class="g8-row">
-    <span class="g8-cap">Deny (refuse)</span>
-    <div class="choice minor">
-      <button type="button" class="refuse">Deny</button>
-      <button type="button" class="refuse st-hover">Deny</button>
-      <button type="button" class="refuse st-focus">Deny</button>
-      <button type="button" class="refuse st-press">Deny</button>
-      <button type="button" class="refuse st-disabled" disabled>Deny</button>
-      <button type="button" class="refuse st-loading">Deny</button>
-      <button type="button" class="refuse st-error">Deny</button>
-      <button type="button" class="refuse st-success">Deny</button>
-    </div>
-  </div>
-
-  <div class="g8-row">
-    <span class="g8-cap">Question option</span>
-    <div class="qopts minor">
-      <button type="button"><span class="kc">1</span><span>Answer one</span></button>
-      <button type="button" class="st-hover"><span class="kc">2</span><span>Answer two</span></button>
-      <button type="button" class="st-focus"><span class="kc">3</span><span>Answer three</span></button>
-      <button type="button" class="st-press"><span class="kc">4</span><span>Answer four</span></button>
-      <button type="button" disabled><span class="kc">5</span><span>Disabled</span></button>
-      <button type="button" class="st-loading"><span class="kc">6</span><span>Sending…</span></button>
-      <button type="button" class="st-error"><span class="kc">7</span><span>Rejected</span></button>
-      <button type="button" class="st-success"><span class="kc">8</span><span>Recorded</span></button>
-    </div>
-  </div>
-
-  <div class="g8-row">
-    <span class="g8-cap">Stop / interrupt</span>
-    <div class="pop minor">
-      <button type="button" class="stop">{{solar:pause}}</button>
-      <button type="button" class="stop st-hover">{{solar:pause}}</button>
-      <button type="button" class="stop st-focus">{{solar:pause}}</button>
-      <button type="button" class="stop st-press">{{solar:pause}}</button>
-      <button type="button" class="stop st-disabled" disabled>{{solar:pause}}</button>
-      <button type="button" class="stop st-loading">{{solar:restart}}</button>
-      <button type="button" class="stop st-error">{{solar:pause}}</button>
-      <button type="button" class="stop st-success">{{solar:pause}}</button>
-    </div>
-  </div>
-
-  <div class="g8-row">
-    <span class="g8-cap">Scope-widen (consequential)</span>
-    <div class="wopen minor">
-      <button type="button" class="wider">{{solar:danger-triangle}}Always allow</button>
-      <button type="button" class="wider st-hover">{{solar:danger-triangle}}Always allow</button>
-      <button type="button" class="wider st-focus">{{solar:danger-triangle}}Always allow</button>
-      <button type="button" class="wider st-press">{{solar:danger-triangle}}Always allow</button>
-      <button type="button" disabled class="wider">{{solar:danger-triangle}}Always allow</button>
-      <button type="button" class="wider st-loading">{{solar:danger-triangle}}Saving…</button>
-      <button type="button" class="wider st-error">{{solar:danger-triangle}}Failed</button>
-      <button type="button" class="wider st-success">{{solar:danger-triangle}}Set as rule</button>
-    </div>
-  </div>
-
-  <div class="g8-row">
-    <span class="g8-cap">Subagent branch (expand)</span>
-    <div class="brow minor">
-      <div class="bhead"><span class="tag">{{solar:branching-paths-down}}subagent</span><span class="tk">fixture-check</span></div>
-      <div class="bhead st-hover"><span class="tag">{{solar:branching-paths-down}}subagent</span><span class="tk">fixture-check</span></div>
-      <div class="bhead st-focus"><span class="tag">{{solar:branching-paths-down}}subagent</span><span class="tk">fixture-check</span></div>
-      <div class="bhead st-press"><span class="tag">{{solar:branching-paths-down}}subagent</span><span class="tk">fixture-check</span></div>
-      <div class="bhead st-disabled"><span class="tag">{{solar:branching-paths-down}}subagent</span><span class="tk">fixture-check</span></div>
-      <div class="bhead st-loading"><span class="tag">{{solar:branching-paths-down}}subagent</span><span class="tk">syncing…</span></div>
-      <div class="bhead st-error"><span class="tag">{{solar:branching-paths-down}}subagent</span><span class="tk">failed</span></div>
-      <div class="bhead st-success"><span class="tag">{{solar:branching-paths-down}}subagent</span><span class="tk">done</span></div>
-    </div>
-  </div>
-</div>
-
-</body></html>
+  </body>
+</html>

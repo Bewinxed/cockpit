@@ -1,4 +1,4 @@
-const TYPING = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
+const TYPING = new Set(["INPUT", "TEXTAREA", "SELECT"]);
 
 /**
  * Whether focus is in something that takes text. A shortcut that is a bare
@@ -7,7 +7,7 @@ const TYPING = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
 export function isTyping(): boolean {
   const focused = document.activeElement;
   return (
-    focused instanceof HTMLElement && (TYPING.has(focused.tagName) || focused.isContentEditable)
+    focused instanceof HTMLElement &&
+    (TYPING.has(focused.tagName) || focused.isContentEditable)
   );
 }
-

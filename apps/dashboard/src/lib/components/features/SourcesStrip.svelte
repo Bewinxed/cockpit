@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { quintOut } from "svelte/easing";
+  import { prefersReducedMotion } from "svelte/motion";
   /**
    * Where an answer's facts came from. Closed it is one line — three favicons
    * and a count — because a turn that read the web says so quietly; opened it
@@ -7,12 +9,10 @@
    * Only pages this turn's own calls named reach here (see `sources.ts`), so
    * there is no empty state: an answer with nothing to cite renders nothing.
    */
-  import { fly } from 'svelte/transition';
-  import { quintOut } from 'svelte/easing';
-  import { prefersReducedMotion } from 'svelte/motion';
-  import * as Collapsible from '$lib/components/ui/collapsible';
-  import { IconChevronRight } from '$lib/icons';
-  import { faviconFor, type SourceRef } from '$lib/whiffle/sources';
+  import { fly } from "svelte/transition";
+  import * as Collapsible from "$lib/components/ui/collapsible";
+  import { IconChevronRight } from "$lib/icons";
+  import { faviconFor, type SourceRef } from "$lib/whiffle/sources";
 
   interface Props {
     sources: SourceRef[];
@@ -32,32 +32,34 @@
 
 {#snippet favicon(source: SourceRef)}
   <!-- Ringed so the overlap reads on any colour the icons happen to be. -->
-  <span class="size-4 shrink-0 overflow-hidden rounded-full bg-muted ring-2 ring-background">
+  <span
+    class="size-4 shrink-0 overflow-hidden rounded-full bg-muted ring-2 ring-background"
+  >
     {#if failed[source.host]}
       <span
+        aria-hidden="true"
         class="flex size-full items-center justify-center text-micro leading-none font-medium
                text-muted-foreground uppercase"
-        aria-hidden="true"
       >
         {source.host.charAt(0)}
       </span>
     {:else}
       <img
-        src={faviconFor(source.host)}
         alt=""
         class="size-full object-cover"
         loading="lazy"
         onerror={() => (failed[source.host] = true)}
-      />
+        src={faviconFor(source.host)}
+      >
     {/if}
   </span>
 {/snippet}
 
-<Collapsible.Root bind:open class="mt-2">
+<Collapsible.Root class="mt-2" bind:open>
   <Collapsible.Trigger
     class="group -ml-1 flex min-h-9 items-center gap-2 rounded-[var(--radius-control)] px-1 transition-colors hover:bg-accent/40"
   >
-    <span class="flex -space-x-1.5" aria-hidden="true">
+    <span aria-hidden="true" class="flex -space-x-1.5">
       {#each sources.slice(0, STACKED) as source (source.url)}
         {@render favicon(source)}
       {/each}
@@ -77,10 +79,10 @@
     <div class="flex flex-col pt-0.5">
       {#each sources as source, index (source.url)}
         <a
-          href={source.url}
-          target="_blank"
-          rel="noopener noreferrer"
           class="flex min-h-9 items-center gap-2.5 rounded-[var(--radius-control)] px-1 transition-colors hover:bg-accent/40"
+          href={source.url}
+          rel="noopener noreferrer"
+          target="_blank"
           in:fly={{
             y: prefersReducedMotion.current ? 0 : 4,
             duration: prefersReducedMotion.current ? 120 : 180,
@@ -92,7 +94,9 @@
           <span class="min-w-0 flex-1 truncate text-[13px] text-foreground">
             {source.title ?? source.url}
           </span>
-          <span class="shrink-0 font-mono text-micro text-muted-foreground">{source.host}</span>
+          <span class="shrink-0 font-mono text-micro text-muted-foreground"
+            >{source.host}</span
+          >
         </a>
       {/each}
     </div>

@@ -1,27 +1,27 @@
 <script lang="ts">
-	import { Progress as ProgressPrimitive } from "bits-ui";
-	import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
+  import { Progress as ProgressPrimitive } from "bits-ui";
+  import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
 
-	let {
-		ref = $bindable(null),
-		class: className,
-		max = 100,
-		value,
-		...restProps
-	}: WithoutChildrenOrChild<ProgressPrimitive.RootProps> = $props();
+  let {
+    ref = $bindable(null),
+    class: className,
+    max = 100,
+    value,
+    ...restProps
+  }: WithoutChildrenOrChild<ProgressPrimitive.RootProps> = $props();
 </script>
 
 <ProgressPrimitive.Root
-	bind:ref
-	data-slot="progress"
-	class={cn("h-3 rounded-[var(--radius-pill)] bg-muted relative flex w-full items-center overflow-x-hidden", className)}
-	{value}
-	{max}
-	{...restProps}
+  class={cn("h-3 rounded-[var(--radius-pill)] bg-muted relative flex w-full items-center overflow-x-hidden", className)}
+  data-slot="progress"
+  {max}
+  {value}
+  bind:ref
+  {...restProps}
 >
-	<div
-		data-slot="progress-indicator"
-		class="bg-primary size-full flex-1 transition-all"
-		style="transform: translateX(-{100 - (100 * (value ?? 0)) / (max ?? 1)}%)"
-	></div>
+  <div
+    class="bg-primary size-full flex-1 transition-all"
+    data-slot="progress-indicator"
+    style="transform: translateX(-{100 - (100 * (value ?? 0)) / (max ?? 1)}%)"
+  ></div>
 </ProgressPrimitive.Root>

@@ -1,9 +1,14 @@
-import { chmod } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { WHIFFLE_ENV, WHIFFLE_HUB_PORT, WHIFFLE_MDNS_TYPE, readEnv } from '@whiffle/core';
-import { Bonjour, type Service } from 'bonjour-service';
+import { existsSync } from "node:fs";
+import { chmod } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import {
+  readEnv,
+  WHIFFLE_ENV,
+  WHIFFLE_HUB_PORT,
+  WHIFFLE_MDNS_TYPE,
+} from "@whiffle/core";
+import { Bonjour, type Service } from "bonjour-service";
 
 /**
  * The network rungs of hub discovery, shared between `whiffle up`
@@ -31,13 +36,21 @@ const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
  */
 export const toHttpBase = (raw: string): string | undefined => {
   const text = raw.trim();
-  const url = URL.parse(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `http://${text}`);
-  if (!url) return undefined;
-  const scheme = { 'ws:': 'http:', 'wss:': 'https:' }[url.protocol] ?? url.protocol;
-  return scheme === 'http:' || scheme === 'https:' ? `${scheme}//${url.host}` : undefined;
+  const url = URL.parse(
+    /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `http://${text}`
+  );
+  if (!url) {
+    return undefined;
+  }
+  const scheme =
+    { "ws:": "http:", "wss:": "https:" }[url.protocol] ?? url.protocol;
+  return scheme === "http:" || scheme === "https:"
+    ? `${scheme}//${url.host}`
+    : undefined;
 };
 
-export const toWsUrl = (httpBase: string): string => `${httpBase.replace(/^http/, 'ws')}/ws`;
+export const toWsUrl = (httpBase: string): string =>
+  `${httpBase.replace(/^http/, "ws")}/ws`;
 
 /**
  * What tells a whiffle hub apart from whatever else is listening on the port:
@@ -59,10 +72,14 @@ export const firstToAnswer = async (
   candidates: string[],
   probe: (httpUrl: string) => Promise<boolean> = probeHub
 ): Promise<string | undefined> => {
-  if (candidates.length === 0) return undefined;
+  if (candidates.length === 0) {
+    return undefined;
+  }
   return Promise.any(
     candidates.map(async (url) => {
-      if (!(await probe(url))) throw new Error(url);
+      if (!(await probe(url))) {
+        throw new Error(url);
+      }
       return url;
     })
   ).catch(() => undefined);
@@ -85,17 +102,26 @@ export const browseMdns = (): Promise<string[]> =>
       bonjour.destroy();
       resolve(candidates);
     };
-    const browser = bonjour.find({ type: WHIFFLE_MDNS_TYPE, protocol: 'tcp' }, (service: Service) => {
-      const addresses = (service.addresses ?? []).filter((address) => IPV4.test(address));
-      if (addresses.length > 0) settle(addresses.map((address) => `http://${address}:${service.port}`));
-    });
+    const browser = bonjour.find(
+      { type: WHIFFLE_MDNS_TYPE, protocol: "tcp" },
+      (service: Service) => {
+        const addresses = (service.addresses ?? []).filter((address) =>
+          IPV4.test(address)
+        );
+        if (addresses.length > 0) {
+          settle(
+            addresses.map((address) => `http://${address}:${service.port}`)
+          );
+        }
+      }
+    );
     const timer = setTimeout(() => settle([]), MDNS_BROWSE_MS);
   });
 
 /** The shape of `tailscale status --json` this reads, and nothing more. */
 interface TailscaleNode {
-  Online?: boolean;
   HostName?: string;
+  Online?: boolean;
   TailscaleIPs?: string[];
 }
 
@@ -105,13 +131,13 @@ interface TailscaleNode {
  * these are tried — found the hard way, from a Mac that was plainly on the net.
  */
 const TAILSCALE_BINARIES = [
-  '/Applications/Tailscale.app/Contents/MacOS/Tailscale',
-  '/usr/local/bin/tailscale',
-  '/opt/homebrew/bin/tailscale',
+  "/Applications/Tailscale.app/Contents/MacOS/Tailscale",
+  "/usr/local/bin/tailscale",
+  "/opt/homebrew/bin/tailscale",
 ];
 
 const tailscaleBinary = (): string | undefined =>
-  Bun.which('tailscale') ?? TAILSCALE_BINARIES.find((path) => existsSync(path));
+  Bun.which("tailscale") ?? TAILSCALE_BINARIES.find((path) => existsSync(path));
 
 /**
  * Every online node on the tailnet, at the hub port.
@@ -121,14 +147,20 @@ const tailscaleBinary = (): string | undefined =>
  * the list alongside the peers because a hub can be bound to its tailnet address
  * alone, which no localhost probe would reach.
  */
-export const tailscaleCandidates = async (port: number): Promise<{ ip: string; host: string }[]> => {
+export const tailscaleCandidates = async (
+  port: number
+): Promise<{ ip: string; host: string }[]> => {
   const binary = tailscaleBinary();
-  if (!binary) return [];
+  if (!binary) {
+    return [];
+  }
   const status = await Bun.$`${binary} status --json`
     .quiet()
     .json()
     .catch(() => undefined);
-  if (!status) return [];
+  if (!status) {
+    return [];
+  }
 
   const nodes: TailscaleNode[] = [
     ...Object.values((status.Peer ?? {}) as Record<string, TailscaleNode>),
@@ -136,7 +168,10 @@ export const tailscaleCandidates = async (port: number): Promise<{ ip: string; h
   ];
   return nodes
     .filter((node) => node.Online && node.TailscaleIPs?.[0])
-    .map((node) => ({ ip: `http://${node.TailscaleIPs?.[0]}:${port}`, host: node.HostName ?? '?' }));
+    .map((node) => ({
+      ip: `http://${node.TailscaleIPs?.[0]}:${port}`,
+      host: node.HostName ?? "?",
+    }));
 };
 
 /**
@@ -147,17 +182,21 @@ export const tailscaleCandidates = async (port: number): Promise<{ ip: string; h
  * cli: the dependency only runs cli → agent.
  */
 const CONFIG_PATH = join(
-  process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'),
-  'whiffle',
-  'config.json'
+  process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
+  "whiffle",
+  "config.json"
 );
 const CONFIG_MODE = 0o600;
 
 const readCachedHubUrl = async (): Promise<string | undefined> => {
   const file = Bun.file(CONFIG_PATH);
-  if (!(await file.exists())) return undefined;
+  if (!(await file.exists())) {
+    return undefined;
+  }
   const config = await file.json().catch(() => undefined);
-  return typeof config?.hubUrl === 'string' && config.hubUrl.length > 0 ? config.hubUrl : undefined;
+  return typeof config?.hubUrl === "string" && config.hubUrl.length > 0
+    ? config.hubUrl
+    : undefined;
 };
 
 /**
@@ -167,21 +206,29 @@ const readCachedHubUrl = async (): Promise<string | undefined> => {
  */
 const repinHubUrl = async (httpUrl: string): Promise<void> => {
   const file = Bun.file(CONFIG_PATH);
-  const existing = (await file.exists()) ? await file.json().catch(() => undefined) : undefined;
-  const config = { ...existing, hubUrl: httpUrl, updatedAt: new Date().toISOString() };
+  const existing = (await file.exists())
+    ? await file.json().catch(() => undefined)
+    : undefined;
+  const config = {
+    ...existing,
+    hubUrl: httpUrl,
+    updatedAt: new Date().toISOString(),
+  };
   await Bun.write(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`);
   await chmod(CONFIG_PATH, CONFIG_MODE);
 };
 
 /** Everything {@link rediscoverHub} calls out to, injectable so a test never touches the real network or `CONFIG_PATH`. */
 export interface RediscoverProbes {
-  readonly port?: number;
-  readonly readCachedHubUrl?: () => Promise<string | undefined>;
-  readonly probe?: (httpUrl: string) => Promise<boolean>;
   readonly browseMdns?: () => Promise<string[]>;
-  readonly tailscaleCandidates?: (port: number) => Promise<{ ip: string; host: string }[]>;
-  readonly repin?: (httpUrl: string) => Promise<void>;
   readonly log?: (line: string) => void;
+  readonly port?: number;
+  readonly probe?: (httpUrl: string) => Promise<boolean>;
+  readonly readCachedHubUrl?: () => Promise<string | undefined>;
+  readonly repin?: (httpUrl: string) => Promise<void>;
+  readonly tailscaleCandidates?: (
+    port: number
+  ) => Promise<{ ip: string; host: string }[]>;
 }
 
 /**
@@ -198,12 +245,15 @@ export interface RediscoverProbes {
  * Returns `undefined` when nothing answers, which is not itself a failure:
  * the caller's existing backoff series simply continues against the old URL.
  */
-export const rediscoverHub = async (probes: RediscoverProbes = {}): Promise<string | undefined> => {
+export const rediscoverHub = async (
+  probes: RediscoverProbes = {}
+): Promise<string | undefined> => {
   const note = probes.log ?? ((): void => {});
   const probe = probes.probe ?? probeHub;
   const findMdns = probes.browseMdns ?? browseMdns;
   const findTailscale = probes.tailscaleCandidates ?? tailscaleCandidates;
-  const port = probes.port ?? Number(readEnv(WHIFFLE_ENV.hubPort) ?? WHIFFLE_HUB_PORT);
+  const port =
+    probes.port ?? Number(readEnv(WHIFFLE_ENV.hubPort) ?? WHIFFLE_HUB_PORT);
 
   const settle = async (httpUrl: string, rung: string): Promise<string> => {
     note(`[rediscover/${rung}] ${httpUrl} answered — repinning`);
@@ -214,35 +264,43 @@ export const rediscoverHub = async (probes: RediscoverProbes = {}): Promise<stri
   const cached = await (probes.readCachedHubUrl ?? readCachedHubUrl)();
   if (cached) {
     note(`[rediscover/cached] ${cached}: probing`);
-    if (await probe(cached)) return settle(cached, 'cached');
-    note(`[rediscover/cached] did not answer`);
+    if (await probe(cached)) {
+      return settle(cached, "cached");
+    }
+    note("[rediscover/cached] did not answer");
   } else {
-    note(`[rediscover/cached] none configured`);
+    note("[rediscover/cached] none configured");
   }
 
-  note(`[rediscover/mdns] browsing`);
+  note("[rediscover/mdns] browsing");
   const advertised = await findMdns();
   if (advertised.length > 0) {
     const answered = await firstToAnswer(advertised, probe);
-    if (answered) return settle(answered, 'mdns');
-    note(`[rediscover/mdns] nothing advertised answered`);
+    if (answered) {
+      return settle(answered, "mdns");
+    }
+    note("[rediscover/mdns] nothing advertised answered");
   } else {
-    note(`[rediscover/mdns] nothing advertising on the local link`);
+    note("[rediscover/mdns] nothing advertising on the local link");
   }
 
   const peers = await findTailscale(port);
   if (peers.length > 0) {
-    note(`[rediscover/tailscale] probing ${peers.map((p) => `${p.host} ${p.ip}`).join(', ')}`);
+    note(
+      `[rediscover/tailscale] probing ${peers.map((p) => `${p.host} ${p.ip}`).join(", ")}`
+    );
     const answered = await firstToAnswer(
       peers.map((peer) => peer.ip),
       probe
     );
-    if (answered) return settle(answered, 'tailscale');
+    if (answered) {
+      return settle(answered, "tailscale");
+    }
     note(`[rediscover/tailscale] no peer answered on :${port}`);
   } else {
-    note(`[rediscover/tailscale] no binary, or no online peers`);
+    note("[rediscover/tailscale] no binary, or no online peers");
   }
 
-  note('[rediscover] nothing answered — the existing backoff series continues');
+  note("[rediscover] nothing answered — the existing backoff series continues");
   return undefined;
 };

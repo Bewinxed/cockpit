@@ -10,22 +10,22 @@
    * folds into a single counted chip that opens the same list, and the servers
    * cost one slot until somebody asks for them.
    */
-  import type { McpServerStatus } from '@whiffle/core';
-  import { flip } from 'svelte/animate';
-  import { fly, slide } from 'svelte/transition';
-  import { quintOut } from 'svelte/easing';
-  import { toast } from 'svelte-sonner';
-  import { Button } from '$lib/components/ui/button';
-  import * as ContextMenu from '$lib/components/ui/context-menu';
-  import * as Popover from '$lib/components/ui/popover';
-  import { restartMcpServer, setMcpServerEnabled } from './client.svelte';
-  import { faviconCandidates, mcpHost } from './mcp';
-  import McpServerDetail from './McpServerDetail.svelte';
+  import type { McpServerStatus } from "@whiffle/core";
+  import { flip } from "svelte/animate";
+  import { quintOut } from "svelte/easing";
+  import { fly, slide } from "svelte/transition";
+  import { toast } from "svelte-sonner";
+  import { Button } from "$lib/components/ui/button";
+  import * as ContextMenu from "$lib/components/ui/context-menu";
+  import * as Popover from "$lib/components/ui/popover";
+  import { restartMcpServer, setMcpServerEnabled } from "./client.svelte";
+  import McpServerDetail from "./McpServerDetail.svelte";
+  import { faviconCandidates, mcpHost } from "./mcp";
 
   interface Props {
-    servers: McpServerStatus[];
     instanceId: string;
     machineId: string;
+    servers: McpServerStatus[];
   }
 
   let { servers, instanceId, machineId }: Props = $props();
@@ -48,27 +48,27 @@
   let loaded = $state<Record<string, boolean>>({});
 
   const DOT: Record<string, string> = {
-    connected: 'bg-success',
-    failed: 'bg-destructive',
-    'needs-auth': 'bg-warning',
-    pending: 'bg-muted-foreground animate-pulse',
+    connected: "bg-success",
+    failed: "bg-destructive",
+    "needs-auth": "bg-warning",
+    pending: "bg-muted-foreground animate-pulse",
   };
 
   /** The chip's dot says only what needs acting on; connected is the quiet case. */
   const CHIP_DOT: Record<string, string> = {
     failed: DOT.failed,
-    'needs-auth': DOT['needs-auth'],
+    "needs-auth": DOT["needs-auth"],
     pending: DOT.pending,
   };
 
   const tip = (server: McpServerStatus): string =>
-    server.status === 'failed' && server.error
+    server.status === "failed" && server.error
       ? `${server.name} · ${server.status} — ${server.error}`
       : `${server.name} · ${server.status}`;
 
   /** The loudest thing any of them is doing, for the folded chip's one dot. */
   const worst = $derived(
-    (['failed', 'needs-auth', 'pending'] as const).find((status) =>
+    (["failed", "needs-auth", "pending"] as const).find((status) =>
       servers.some((server) => server.status === status)
     )
   );
@@ -87,13 +87,17 @@
     }
   }
 
-  const restart = (name: string) => run(name, () => restartMcpServer(instanceId, machineId, name));
+  const restart = (name: string) =>
+    run(name, () => restartMcpServer(instanceId, machineId, name));
   const setEnabled = (name: string, enabled: boolean) =>
     run(name, () => setMcpServerEnabled(instanceId, machineId, name, enabled));
 </script>
 
 {#if !folded}
-  <span class="hidden shrink-0 items-center gap-1 sm:flex" aria-label="MCP servers">
+  <span
+    aria-label="MCP servers"
+    class="hidden shrink-0 items-center gap-1 sm:flex"
+  >
     {#each servers as server (server.name)}
       {@const host = mcpHost(server)}
       {@const candidates = host ? faviconCandidates(host) : []}
@@ -102,14 +106,14 @@
            text baseline and every chip drifts against its neighbours. -->
       <span
         class="inline-flex"
-        animate:flip={{ duration: 200 }}
         in:fly={{ y: 4, duration: 200, easing: quintOut }}
+        animate:flip={{ duration: 200 }}
       >
         <ContextMenu.Root>
           <ContextMenu.Trigger class="contents">
             <Popover.Root
-              open={detailsFor === server.name}
               onOpenChange={(open) => (detailsFor = open ? server.name : null)}
+              open={detailsFor === server.name}
             >
               <!-- The kit's outline button, like every other control in this
                    header: the border and hover are what say "clickable", and the
@@ -118,21 +122,20 @@
                 {#snippet child({ props })}
                   <Button
                     {...props}
-                    variant="outline"
-                    size="icon-sm"
+                    aria-label="MCP server {server.name}"
                     class="relative {server.status === 'disabled' ? 'opacity-40' : ''} {busy[
                       server.name
                     ]
                       ? 'animate-pulse'
                       : ''}"
+                    size="icon-sm"
                     title={tip(server)}
-                    aria-label="MCP server {server.name}"
+                    variant="outline"
                   >
                     <!-- The favicon IS the button: it fills the circle edge to
                          edge, cropped round — no inset, no framed-square look. -->
                     {#if step < candidates.length}
                       <img
-                        src={candidates[step]}
                         alt={server.name}
                         class="size-full rounded-full object-cover transition-opacity duration-300 {loaded[
                           server.name
@@ -140,14 +143,15 @@
                           ? 'opacity-100'
                           : 'opacity-0'}"
                         loading="lazy"
-                        onload={() => (loaded[server.name] = true)}
                         onerror={() => (attempt[server.name] = step + 1)}
-                      />
+                        onload={() => (loaded[server.name] = true)}
+                        src={candidates[step]}
+                      >
                     {:else}
                       <span
+                        aria-hidden="true"
                         class="flex size-full items-center justify-center rounded-full bg-muted text-xs leading-none
                                font-medium text-muted-foreground uppercase"
-                        aria-hidden="true"
                       >
                         {server.name.charAt(0)}
                       </span>
@@ -163,8 +167,11 @@
                 {/snippet}
               </Popover.Trigger>
 
-              <Popover.Content class="w-64 rounded-[var(--radius-panel)] p-3 shadow-lg" align="end">
-                <McpServerDetail {server} {instanceId} {machineId} />
+              <Popover.Content
+                align="end"
+                class="w-64 rounded-[var(--radius-panel)] p-3 shadow-lg"
+              >
+                <McpServerDetail {instanceId} {machineId} {server} />
               </Popover.Content>
             </Popover.Root>
           </ContextMenu.Trigger>
@@ -173,7 +180,10 @@
             <ContextMenu.Item onSelect={() => (detailsFor = server.name)}>
               Status & errors
             </ContextMenu.Item>
-            <ContextMenu.Item disabled={busy[server.name]} onSelect={() => restart(server.name)}>
+            <ContextMenu.Item
+              disabled={busy[server.name]}
+              onSelect={() => restart(server.name)}
+            >
               Restart
             </ContextMenu.Item>
             {#if server.status === 'disabled'}
@@ -206,11 +216,11 @@
     {#snippet child({ props })}
       <Button
         {...props}
-        variant="outline"
-        size="sm"
-        class="relative shrink-0 gap-1 text-xs {folded ? '' : 'sm:hidden'}"
-        title={servers.map((server) => tip(server)).join('\n')}
         aria-label="{servers.length} MCP servers"
+        class="relative shrink-0 gap-1 text-xs {folded ? '' : 'sm:hidden'}"
+        size="sm"
+        title={servers.map((server) => tip(server)).join('\n')}
+        variant="outline"
       >
         <span class="tabular-nums" data-tabular>{servers.length}</span>
         MCP
@@ -225,7 +235,10 @@
     {/snippet}
   </Popover.Trigger>
 
-  <Popover.Content class="w-72 rounded-[var(--radius-panel)] p-1.5 shadow-lg" align="end">
+  <Popover.Content
+    align="end"
+    class="w-72 rounded-[var(--radius-panel)] p-1.5 shadow-lg"
+  >
     <ul class="flex max-h-[60vh] flex-col overflow-y-auto">
       {#each servers as server (server.name)}
         {@const open = foldedDetail === server.name}
@@ -234,18 +247,17 @@
         {@const step = attempt[server.name] ?? 0}
         <li class="flex flex-col">
           <button
-            type="button"
+            aria-expanded={open}
             class="flex min-h-9 items-center gap-2.5 rounded-[var(--radius-control)] px-2 text-left transition-colors
                    hover:bg-accent hover:text-accent-foreground"
-            aria-expanded={open}
             onclick={() => (foldedDetail = open ? null : server.name)}
+            type="button"
           >
             <!-- Same favicon + ringed status dot as the unfolded chips, at row
                  scale — the fold hid the row, not the identity. -->
             <span class="relative size-5 shrink-0">
               {#if step < candidates.length}
                 <img
-                  src={candidates[step]}
                   alt=""
                   class="size-full rounded-full object-cover transition-opacity duration-300 {loaded[
                     server.name
@@ -253,14 +265,15 @@
                     ? 'opacity-100'
                     : 'opacity-0'}"
                   loading="lazy"
-                  onload={() => (loaded[server.name] = true)}
                   onerror={() => (attempt[server.name] = step + 1)}
-                />
+                  onload={() => (loaded[server.name] = true)}
+                  src={candidates[step]}
+                >
               {:else}
                 <span
+                  aria-hidden="true"
                   class="flex size-full items-center justify-center rounded-full bg-muted text-micro
                          leading-none font-medium text-muted-foreground uppercase"
-                  aria-hidden="true"
                 >
                   {server.name.charAt(0)}
                 </span>
@@ -273,11 +286,16 @@
               {/if}
             </span>
             <span class="min-w-0 flex-1 truncate text-sm">{server.name}</span>
-            <span class="shrink-0 text-micro text-muted-foreground">{server.status}</span>
+            <span class="shrink-0 text-micro text-muted-foreground"
+              >{server.status}</span
+            >
           </button>
           {#if open}
-            <div class="px-2 pt-1 pb-2" transition:slide={{ duration: 160, easing: quintOut }}>
-              <McpServerDetail {server} {instanceId} {machineId} />
+            <div
+              class="px-2 pt-1 pb-2"
+              transition:slide={{ duration: 160, easing: quintOut }}
+            >
+              <McpServerDetail {instanceId} {machineId} {server} />
             </div>
           {/if}
         </li>

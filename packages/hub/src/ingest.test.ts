@@ -16,24 +16,24 @@
  * lines in, and the two rules `resumeCursor`/`alreadyIngested` that the agent's
  * `SessionSupervisor` reads on the other side of the wire.
  */
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, expect, test } from "bun:test";
 import {
   alreadyIngested,
+  type Envelope,
+  type FrameProvenance,
+  type IngestMark,
   readIngested,
   readProvenance,
   resumeCursor,
   SessionRing,
-  type Envelope,
-  type FrameProvenance,
-  type IngestMark,
-} from '@whiffle/core';
-import { makeDb } from './db';
-import type { PendingShape } from './pending';
-import type { HubSocket, RegistryShape } from './registry';
-import { createServer, reattachable } from './server';
-import { createStreamHub, type StreamPorts } from './stream';
+} from "@whiffle/core";
+import { makeDb } from "./db";
+import type { PendingShape } from "./pending";
+import type { HubSocket, RegistryShape } from "./registry";
+import { createServer, reattachable } from "./server";
+import { createStreamHub, type StreamPorts } from "./stream";
 
-const INSTANCE = 'inst-ledger';
+const INSTANCE = "inst-ledger";
 
 const ports: StreamPorts = {
   setLegacySubscriptions: () => {},
@@ -79,17 +79,19 @@ const bootSessiond = (): Sessiond => ({
 
 /** The child speaks; the ring fills whether or not an agent is listening. */
 const speak = (daemon: Sessiond, lines: number): void => {
-  for (let n = 0; n < lines; n++) daemon.ring.record(INSTANCE, { n: ++daemon.written });
+  for (let n = 0; n < lines; n++) {
+    daemon.ring.record(INSTANCE, { n: ++daemon.written });
+  }
 };
 
 /** One line as the hub ends up filing it. */
 interface Ingested {
   epoch: string;
-  srcSeq: number;
-  /** The child's counter for that line — undefined for an announced seam. */
-  n?: number;
   /** True for the `sessiond_stream_gap` system frame: an announcement, not a line. */
   gap?: boolean;
+  /** The child's counter for that line — undefined for an announced seam. */
+  n?: number;
+  srcSeq: number;
 }
 
 /**
@@ -119,18 +121,30 @@ const agentLife = (
   const cursor = resumeCursor(daemon.epoch, mark);
 
   const forward = (line: { seq: number; frame: unknown }): void => {
-    const provenance: FrameProvenance = { srcEpoch: daemon.epoch, srcSeq: line.seq };
+    const provenance: FrameProvenance = {
+      srcEpoch: daemon.epoch,
+      srcSeq: line.seq,
+    };
     // The agent's half of at-most-once: never forward a line the hub itself
     // said it already has.
-    if (alreadyIngested(mark, provenance)) return;
+    if (alreadyIngested(mark, provenance)) {
+      return;
+    }
     const envelope = {
-      verb: 'frames',
-      machineId: 'machine-1',
+      verb: "frames",
+      machineId: "machine-1",
       instanceId: INSTANCE,
-      payload: { kind: 'frame', instanceId: INSTANCE, message: line.frame, ...provenance },
+      payload: {
+        kind: "frame",
+        instanceId: INSTANCE,
+        message: line.frame,
+        ...provenance,
+      },
     };
     // The hub's half: the ledger decides, exactly as `server.ts` asks it to.
-    if (!hub.admitFrame(INSTANCE, readProvenance(envelope))) return;
+    if (!hub.admitFrame(INSTANCE, readProvenance(envelope))) {
+      return;
+    }
     hub.sequence(INSTANCE, envelope.payload);
     transcript.push({
       epoch: daemon.epoch,
@@ -141,16 +155,18 @@ const agentLife = (
 
   if (cursor !== undefined) {
     if (daemon.ring.canReplay(cursor)) {
-      for (const event of daemon.ring.since(cursor)) forward(event);
+      for (const event of daemon.ring.since(cursor)) {
+        forward(event);
+      }
     } else {
       // sessiond's honest refusal (design §6). The agent does NOT splice: it
       // announces the seam and follows from head, which is what makes the hole
       // below legible instead of invisible.
       const nextSeq = daemon.ring.head + 1;
       hub.sequence(INSTANCE, {
-        kind: 'frame',
+        kind: "frame",
         instanceId: INSTANCE,
-        message: { type: 'system', subtype: 'sessiond_stream_gap' },
+        message: { type: "system", subtype: "sessiond_stream_gap" },
       });
       transcript.push({ epoch: daemon.epoch, srcSeq: nextSeq - 1, gap: true });
     }
@@ -164,11 +180,15 @@ const agentLife = (
     live.push(line);
     forward(line);
   }
-  for (const line of live.slice(-resend)) forward(line);
+  for (const line of live.slice(-resend)) {
+    forward(line);
+  }
 };
 
 /** The register ack this hub would send for this instance, shape included. */
-const ackFrom = (hub: ReturnType<typeof createStreamHub>): { ok: true; ingested: Record<string, IngestMark> } => ({
+const ackFrom = (
+  hub: ReturnType<typeof createStreamHub>
+): { ok: true; ingested: Record<string, IngestMark> } => ({
   ok: true,
   ingested: hub.ingestedFor([INSTANCE]),
 });
@@ -178,26 +198,39 @@ const ackFrom = (hub: ReturnType<typeof createStreamHub>): { ok: true; ingested:
 // ---------------------------------------------------------------------------
 
 interface Case {
-  agentRestarts: number;
-  hubRestart: boolean;
-  sessiondRestart: boolean;
   /** Lines written while nobody is attached — the ring overflows above RING. */
   absence: number;
+  agentRestarts: number;
+  hubRestart: boolean;
   liveLines: number;
   resend: number;
+  sessiondRestart: boolean;
 }
 
 const CASES: Case[] = [];
-for (const agentRestarts of [1, 2])
-  for (const hubRestart of [false, true])
-    for (const sessiondRestart of [false, true])
-      for (const absence of [3, 20])
-        for (const liveLines of [2, 11])
-          for (const resend of [0, 3])
-            CASES.push({ agentRestarts, hubRestart, sessiondRestart, absence, liveLines, resend });
+for (const agentRestarts of [1, 2]) {
+  for (const hubRestart of [false, true]) {
+    for (const sessiondRestart of [false, true]) {
+      for (const absence of [3, 20]) {
+        for (const liveLines of [2, 11]) {
+          for (const resend of [0, 3]) {
+            CASES.push({
+              agentRestarts,
+              hubRestart,
+              sessiondRestart,
+              absence,
+              liveLines,
+              resend,
+            });
+          }
+        }
+      }
+    }
+  }
+}
 
 const label = (c: Case): string =>
-  `agent×${c.agentRestarts} hub${c.hubRestart ? '↺' : '='} sessiond${c.sessiondRestart ? '↺' : '='} absence:${c.absence}${c.absence > RING ? ' (overflow)' : ''} live:${c.liveLines} resend:${c.resend}`;
+  `agent×${c.agentRestarts} hub${c.hubRestart ? "↺" : "="} sessiond${c.sessiondRestart ? "↺" : "="} absence:${c.absence}${c.absence > RING ? " (overflow)" : ""} live:${c.liveLines} resend:${c.resend}`;
 
 test(`the sweep crosses agent × hub × sessiond restarts with ring overflow — ${CASES.length} cases`, () => {
   // Quoted in the leaf report; asserted so a dimension cannot be dropped
@@ -215,7 +248,16 @@ for (const scenario of CASES) {
     const hubEpochs: number[] = [0];
 
     // Life one: a fresh spawn sees its child from line 1.
-    agentLife(hub, daemon, { ok: true, ingested: { [INSTANCE]: { epoch: daemon.epoch, srcSeq: 0 } } }, transcript, 4);
+    agentLife(
+      hub,
+      daemon,
+      {
+        ok: true,
+        ingested: { [INSTANCE]: { epoch: daemon.epoch, srcSeq: 0 } },
+      },
+      transcript,
+      4
+    );
 
     for (let life = 0; life < scenario.agentRestarts; life++) {
       // THE ABSENCE. The child keeps talking to nobody.
@@ -230,16 +272,27 @@ for (const scenario of CASES) {
         hub = bootHub();
         hubEpochs.push(transcript.length);
       }
-      agentLife(hub, daemon, ackFrom(hub), transcript, scenario.liveLines, scenario.resend);
+      agentLife(
+        hub,
+        daemon,
+        ackFrom(hub),
+        transcript,
+        scenario.liveLines,
+        scenario.resend
+      );
     }
 
     // ---- AT MOST ONCE ---------------------------------------------------
-    const keys = transcript.filter((e) => !e.gap).map((e) => `${e.epoch}#${e.srcSeq}`);
+    const keys = transcript
+      .filter((e) => !e.gap)
+      .map((e) => `${e.epoch}#${e.srcSeq}`);
     expect(new Set(keys).size).toBe(keys.length);
     // And the child's own counter never lands twice inside one sessiond boot,
     // which is the same statement read from the other end of the pipe.
     for (const epoch of new Set(transcript.map((e) => e.epoch))) {
-      const ns = transcript.filter((e) => e.epoch === epoch && e.n !== undefined).map((e) => e.n);
+      const ns = transcript
+        .filter((e) => e.epoch === epoch && e.n !== undefined)
+        .map((e) => e.n);
       expect(new Set(ns).size).toBe(ns.length);
     }
 
@@ -251,9 +304,15 @@ for (const scenario of CASES) {
     for (let i = 1; i < transcript.length; i++) {
       const previous = transcript[i - 1]!;
       const current = transcript[i]!;
-      if (current.epoch !== previous.epoch) continue; // a new epoch is its own announcement
-      if (hubEpochs.includes(i)) continue; // a hub restart: every cursor is dead
-      if (current.gap || previous.gap) continue; // announced, in band
+      if (current.epoch !== previous.epoch) {
+        continue; // a new epoch is its own announcement
+      }
+      if (hubEpochs.includes(i)) {
+        continue; // a hub restart: every cursor is dead
+      }
+      if (current.gap || previous.gap) {
+        continue; // announced, in band
+      }
       expect(current.srcSeq).toBe(previous.srcSeq + 1);
     }
 
@@ -264,7 +323,7 @@ for (const scenario of CASES) {
   });
 }
 
-test('an overflow during the absence is announced in the stream, never spliced over', () => {
+test("an overflow during the absence is announced in the stream, never spliced over", () => {
   const hub = bootHub();
   const daemon = bootSessiond();
   const transcript: Ingested[] = [];
@@ -286,16 +345,18 @@ test('an overflow during the absence is announced in the stream, never spliced o
 // G2: the honest-loss rule, stated on its own.
 // ---------------------------------------------------------------------------
 
-test('no ledger entry means replay nothing and follow from head', () => {
+test("no ledger entry means replay nothing and follow from head", () => {
   const daemon = bootSessiond();
   const hub = bootHub();
   // A hub that has never ingested this instance offers no mark at all — not a
   // zero mark, which would ask for everything.
   expect(hub.ingestedFor([INSTANCE])).toEqual({});
-  expect(resumeCursor(daemon.epoch, readIngested(ackFrom(hub))?.[INSTANCE])).toBeUndefined();
+  expect(
+    resumeCursor(daemon.epoch, readIngested(ackFrom(hub))?.[INSTANCE])
+  ).toBeUndefined();
 });
 
-test('a mark from a dead sessiond epoch replays nothing', () => {
+test("a mark from a dead sessiond epoch replays nothing", () => {
   const stale: IngestMark = { epoch: crypto.randomUUID(), srcSeq: 900 };
   expect(resumeCursor(crypto.randomUUID(), stale)).toBeUndefined();
   // The same mark under its own epoch is a cursor, not a refusal — the rule
@@ -303,7 +364,7 @@ test('a mark from a dead sessiond epoch replays nothing', () => {
   expect(resumeCursor(stale.epoch, stale)).toBe(900);
 });
 
-test('the ledger admits a new epoch at any seq, and refuses a replayed one', () => {
+test("the ledger admits a new epoch at any seq, and refuses a replayed one", () => {
   const hub = bootHub();
   const first = crypto.randomUUID();
   expect(hub.admitFrame(INSTANCE, { srcEpoch: first, srcSeq: 5 })).toBe(true);
@@ -311,14 +372,16 @@ test('the ledger admits a new epoch at any seq, and refuses a replayed one', () 
   expect(hub.admitFrame(INSTANCE, { srcEpoch: first, srcSeq: 4 })).toBe(false);
   expect(hub.admitFrame(INSTANCE, { srcEpoch: first, srcSeq: 6 })).toBe(true);
   // A new sessiond boot is a new sequence space: seq 1 is news again.
-  expect(hub.admitFrame(INSTANCE, { srcEpoch: crypto.randomUUID(), srcSeq: 1 })).toBe(true);
+  expect(
+    hub.admitFrame(INSTANCE, { srcEpoch: crypto.randomUUID(), srcSeq: 1 })
+  ).toBe(true);
   // A frame that claims no provenance is never deduped — and retires the mark,
   // because whatever is producing it is not reading the ring any more.
   expect(hub.admitFrame(INSTANCE, undefined)).toBe(true);
   expect(hub.ingestedFor([INSTANCE])).toEqual({});
 });
 
-test('the mark is retired when a session stops being read off the ring', () => {
+test("the mark is retired when a session stops being read off the ring", () => {
   const hub = bootHub();
   const epoch = crypto.randomUUID();
   hub.admitFrame(INSTANCE, { srcEpoch: epoch, srcSeq: 12 });
@@ -334,12 +397,24 @@ test('the mark is retired when a session stops being read off the ring', () => {
   expect(hub.ingestedFor([INSTANCE])[INSTANCE]).toEqual({ epoch, srcSeq: 40 });
 });
 
-test('a malformed provenance reads as absent, never as a mark', () => {
-  expect(readProvenance({ payload: { srcEpoch: '', srcSeq: 3 } })).toBeUndefined();
-  expect(readProvenance({ payload: { srcEpoch: 'e', srcSeq: 0 } })).toBeUndefined();
-  expect(readProvenance({ payload: { srcEpoch: 'e', srcSeq: 1.5 } })).toBeUndefined();
-  expect(readProvenance({ srcEpoch: 'e', srcSeq: 7 })).toEqual({ srcEpoch: 'e', srcSeq: 7 });
-  expect(readProvenance({ payload: { srcEpoch: 'e', srcSeq: 7 } })).toEqual({ srcEpoch: 'e', srcSeq: 7 });
+test("a malformed provenance reads as absent, never as a mark", () => {
+  expect(
+    readProvenance({ payload: { srcEpoch: "", srcSeq: 3 } })
+  ).toBeUndefined();
+  expect(
+    readProvenance({ payload: { srcEpoch: "e", srcSeq: 0 } })
+  ).toBeUndefined();
+  expect(
+    readProvenance({ payload: { srcEpoch: "e", srcSeq: 1.5 } })
+  ).toBeUndefined();
+  expect(readProvenance({ srcEpoch: "e", srcSeq: 7 })).toEqual({
+    srcEpoch: "e",
+    srcSeq: 7,
+  });
+  expect(readProvenance({ payload: { srcEpoch: "e", srcSeq: 7 } })).toEqual({
+    srcEpoch: "e",
+    srcSeq: 7,
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -349,28 +424,44 @@ test('a malformed provenance reads as absent, never as a mark', () => {
 const DB_FILE = `/tmp/whiffle-ingest-${crypto.randomUUID()}.db`;
 const db = makeDb(DB_FILE);
 const MACHINE = `machine-ingest-${crypto.randomUUID()}`;
-db.upsertAgent({ machineId: MACHINE, hostname: 'box', os: 'linux', auth: 'authenticated' });
+db.upsertAgent({
+  machineId: MACHINE,
+  hostname: "box",
+  os: "linux",
+  auth: "authenticated",
+});
 
 const registry: RegistryShape = (() => {
-  const dashboards = new Map<string, { socket: HubSocket; subscriptions: Set<string> }>();
+  const dashboards = new Map<
+    string,
+    { socket: HubSocket; subscriptions: Set<string> }
+  >();
   const requesters = new Map<string, HubSocket>();
   return {
     registerAgent: () => {},
     dropAgent: () => undefined,
     agent: () => undefined,
     machineIds: () => [MACHINE],
-    addDashboard: (socket) => dashboards.set(socket.id, { socket, subscriptions: new Set() }),
+    addDashboard: (socket) =>
+      dashboards.set(socket.id, { socket, subscriptions: new Set() }),
     dropDashboard: (socket) => dashboards.delete(socket.id),
     broadcast: (envelope) => {
-      for (const { socket } of dashboards.values()) socket.send(envelope);
+      for (const { socket } of dashboards.values()) {
+        socket.send(envelope);
+      }
     },
     broadcastFrame: (envelope, instanceId) => {
-      for (const { socket, subscriptions } of dashboards.values())
-        if (subscriptions.has(instanceId)) socket.send(envelope);
+      for (const { socket, subscriptions } of dashboards.values()) {
+        if (subscriptions.has(instanceId)) {
+          socket.send(envelope);
+        }
+      }
     },
     setSubscriptions: (socket, instanceIds) => {
       const entry = dashboards.get(socket.id);
-      if (entry) entry.subscriptions = new Set(instanceIds);
+      if (entry) {
+        entry.subscriptions = new Set(instanceIds);
+      }
     },
     noteDashboardOrigin: () => {},
     dashboardOrigin: () => undefined,
@@ -395,95 +486,137 @@ const app = createServer({ registry, db, pending }).listen(0);
 const port = app.server?.port;
 
 afterAll(async () => {
-  for (const hub of hubs) hub.stop();
+  for (const hub of hubs) {
+    hub.stop();
+  }
   app.stop();
-  for (const suffix of ['', '-shm', '-wal']) {
-    await Bun.file(`${DB_FILE}${suffix}`).delete().catch(() => {});
+  for (const suffix of ["", "-shm", "-wal"]) {
+    await Bun.file(`${DB_FILE}${suffix}`)
+      .delete()
+      .catch(() => {});
   }
 });
 
 interface Wire {
-  send(message: unknown): void;
-  next(match: (message: Record<string, unknown>) => boolean, label: string): Promise<Record<string, unknown>>;
   close(): void;
+  next(
+    match: (message: Record<string, unknown>) => boolean,
+    label: string
+  ): Promise<Record<string, unknown>>;
+  send(message: unknown): void;
 }
 
 const openSocket = async (path: string): Promise<Wire> => {
   const socket = new WebSocket(`ws://localhost:${port}${path}`);
   const inbox: Record<string, unknown>[] = [];
-  socket.addEventListener('message', (event) => {
+  socket.addEventListener("message", (event) => {
     inbox.push(JSON.parse(String(event.data)) as Record<string, unknown>);
   });
   await new Promise<void>((resolve, reject) => {
-    socket.addEventListener('open', () => resolve(), { once: true });
-    socket.addEventListener('error', () => reject(new Error(`could not open ${path}`)), { once: true });
+    socket.addEventListener("open", () => resolve(), { once: true });
+    socket.addEventListener(
+      "error",
+      () => reject(new Error(`could not open ${path}`)),
+      { once: true }
+    );
   });
   return {
     send: (message) => socket.send(JSON.stringify(message)),
     next: async (match, why) => {
       for (let waited = 0; waited < 400; waited++) {
         const found = inbox.find(match);
-        if (found) return found;
+        if (found) {
+          return found;
+        }
         await Bun.sleep(5);
       }
-      throw new Error(`timed out waiting for ${why}; inbox: ${JSON.stringify(inbox)}`);
+      throw new Error(
+        `timed out waiting for ${why}; inbox: ${JSON.stringify(inbox)}`
+      );
     },
     close: () => socket.close(),
   };
 };
 
-const frameEnvelope = (instanceId: string, provenance: FrameProvenance, text: string): Envelope => ({
-  verb: 'frames',
+const frameEnvelope = (
+  instanceId: string,
+  provenance: FrameProvenance,
+  text: string
+): Envelope => ({
+  verb: "frames",
   machineId: MACHINE,
   instanceId,
   payload: {
-    kind: 'frame',
+    kind: "frame",
     instanceId,
-    harness: 'claude',
-    message: { type: 'system', subtype: 'note', text },
+    harness: "claude",
+    message: { type: "system", subtype: "note", text },
     ...provenance,
   },
 });
 
-test('the register ack carries the ledger, and a replayed line is ingested once', async () => {
-  const agent = await openSocket('/ws');
-  const dashboard = await openSocket('/ws/dashboard');
+test("the register ack carries the ledger, and a replayed line is ingested once", async () => {
+  const agent = await openSocket("/ws");
+  const dashboard = await openSocket("/ws/dashboard");
   const instanceId = `wired-${crypto.randomUUID()}`;
   const epoch = crypto.randomUUID();
 
   agent.send({
-    verb: 'register',
+    verb: "register",
     machineId: MACHINE,
-    payload: { hostname: 'box', os: 'linux', auth: 'authenticated', instances: [instanceId] },
+    payload: {
+      hostname: "box",
+      os: "linux",
+      auth: "authenticated",
+      instances: [instanceId],
+    },
   });
-  const firstAck = await agent.next((m) => m.verb === 'register', 'the register ack');
+  const firstAck = await agent.next(
+    (m) => m.verb === "register",
+    "the register ack"
+  );
   // Nothing ingested yet: an empty ledger, and — crucially — no zero marks.
   expect((firstAck.payload as { ok: boolean }).ok).toBe(true);
-  expect((firstAck.payload as { ingested?: Record<string, IngestMark> }).ingested).toEqual({});
+  expect(
+    (firstAck.payload as { ingested?: Record<string, IngestMark> }).ingested
+  ).toEqual({});
 
-  dashboard.send({ type: 'stream.subscribe', sessionId: instanceId });
+  dashboard.send({ type: "stream.subscribe", sessionId: instanceId });
   await Bun.sleep(30);
 
   for (const srcSeq of [1, 2, 3]) {
-    agent.send(frameEnvelope(instanceId, { srcEpoch: epoch, srcSeq }, `line ${srcSeq}`));
+    agent.send(
+      frameEnvelope(instanceId, { srcEpoch: epoch, srcSeq }, `line ${srcSeq}`)
+    );
   }
   await dashboard.next(
-    (m) => m.type === 'stream.event' && ((m.event as { seq: number }).seq === 3),
-    'three sequenced frames'
+    (m) => m.type === "stream.event" && (m.event as { seq: number }).seq === 3,
+    "three sequenced frames"
   );
 
   // THE RESTART. The agent re-registers and is told exactly how far this hub
   // got — which is what it subscribes to sessiond with.
   agent.send({
-    verb: 'register',
+    verb: "register",
     machineId: MACHINE,
-    payload: { hostname: 'box', os: 'linux', auth: 'authenticated', instances: [instanceId] },
+    payload: {
+      hostname: "box",
+      os: "linux",
+      auth: "authenticated",
+      instances: [instanceId],
+    },
   });
   const secondAck = await agent.next(
-    (m) => m.verb === 'register' && Object.keys((m.payload as { ingested: object }).ingested).length > 0,
-    'the ack carrying the ledger'
+    (m) =>
+      m.verb === "register" &&
+      Object.keys((m.payload as { ingested: object }).ingested).length > 0,
+    "the ack carrying the ledger"
   );
-  expect((secondAck.payload as { ingested: Record<string, IngestMark> }).ingested[instanceId]).toEqual({
+  expect(
+    (secondAck.payload as { ingested: Record<string, IngestMark> }).ingested[
+      instanceId
+    ]
+  ).toEqual({
     epoch,
     srcSeq: 3,
   });
@@ -491,67 +624,91 @@ test('the register ack carries the ledger, and a replayed line is ingested once'
   // An overshooting replay — the same lines again — is refused, and only the
   // line beyond the mark is sequenced. seq 4, never 4-through-7.
   for (const srcSeq of [2, 3, 4]) {
-    agent.send(frameEnvelope(instanceId, { srcEpoch: epoch, srcSeq }, `replay ${srcSeq}`));
+    agent.send(
+      frameEnvelope(instanceId, { srcEpoch: epoch, srcSeq }, `replay ${srcSeq}`)
+    );
   }
   const fourth = await dashboard.next(
-    (m) => m.type === 'stream.event' && ((m.event as { seq: number }).seq === 4),
-    'the one frame beyond the mark'
+    (m) => m.type === "stream.event" && (m.event as { seq: number }).seq === 4,
+    "the one frame beyond the mark"
   );
-  expect(((fourth.event as { frame: { message: { text: string } } }).frame.message.text)).toBe('replay 4');
+  expect(
+    (fourth.event as { frame: { message: { text: string } } }).frame.message
+      .text
+  ).toBe("replay 4");
   await Bun.sleep(30);
   // And nothing after it: the duplicates never became frames at all.
   await expect(
-    dashboard.next((m) => m.type === 'stream.event' && (m.event as { seq: number }).seq === 5, 'a fifth frame')
+    dashboard.next(
+      (m) =>
+        m.type === "stream.event" && (m.event as { seq: number }).seq === 5,
+      "a fifth frame"
+    )
   ).rejects.toThrow();
 
   agent.close();
   dashboard.close();
 }, 20_000);
 
-test('the announced seam is relayed to a following dashboard like any other frame', async () => {
-  const agent = await openSocket('/ws');
-  const dashboard = await openSocket('/ws/dashboard');
+test("the announced seam is relayed to a following dashboard like any other frame", async () => {
+  const agent = await openSocket("/ws");
+  const dashboard = await openSocket("/ws/dashboard");
   const instanceId = `seam-${crypto.randomUUID()}`;
   const epoch = crypto.randomUUID();
 
-  dashboard.send({ type: 'stream.subscribe', sessionId: instanceId });
+  dashboard.send({ type: "stream.subscribe", sessionId: instanceId });
   await Bun.sleep(30);
 
-  agent.send(frameEnvelope(instanceId, { srcEpoch: epoch, srcSeq: 1 }, 'before the absence'));
+  agent.send(
+    frameEnvelope(
+      instanceId,
+      { srcEpoch: epoch, srcSeq: 1 },
+      "before the absence"
+    )
+  );
   // Exactly what the claude adapter emits on sessiond's `proc.reset` — a
   // system frame with no provenance of its own, because it is an announcement
   // about lines rather than one of them.
   agent.send({
-    verb: 'frames',
+    verb: "frames",
     machineId: MACHINE,
     instanceId,
     payload: {
-      kind: 'frame',
+      kind: "frame",
       instanceId,
-      harness: 'claude',
+      harness: "claude",
       message: {
-        type: 'system',
-        subtype: 'sessiond_stream_gap',
+        type: "system",
+        subtype: "sessiond_stream_gap",
         text: "whiffle: sessiond's replay window overflowed; this transcript resumes at line 4321",
       },
     },
   });
-  agent.send(frameEnvelope(instanceId, { srcEpoch: epoch, srcSeq: 4321 }, 'after the absence'));
+  agent.send(
+    frameEnvelope(
+      instanceId,
+      { srcEpoch: epoch, srcSeq: 4321 },
+      "after the absence"
+    )
+  );
 
   const third = await dashboard.next(
-    (m) => m.type === 'stream.event' && (m.event as { seq: number }).seq === 3,
-    'the three sequenced frames'
+    (m) => m.type === "stream.event" && (m.event as { seq: number }).seq === 3,
+    "the three sequenced frames"
   );
   // The seam sits between the two lines it separates, in the operator's own
   // transcript. A jump from srcSeq 1 to 4321 is legible because of it.
-  expect((third.event as { frame: { message: { text: string } } }).frame.message.text).toBe('after the absence');
+  expect(
+    (third.event as { frame: { message: { text: string } } }).frame.message.text
+  ).toBe("after the absence");
   const seam = await dashboard.next(
-    (m) => m.type === 'stream.event' && (m.event as { seq: number }).seq === 2,
-    'the seam frame'
+    (m) => m.type === "stream.event" && (m.event as { seq: number }).seq === 2,
+    "the seam frame"
   );
-  expect((seam.event as { frame: { message: { subtype: string } } }).frame.message.subtype).toBe(
-    'sessiond_stream_gap'
-  );
+  expect(
+    (seam.event as { frame: { message: { subtype: string } } }).frame.message
+      .subtype
+  ).toBe("sessiond_stream_gap");
   agent.close();
   dashboard.close();
 }, 20_000);
@@ -568,9 +725,9 @@ test('the announced seam is relayed to a following dashboard like any other fram
 // {@link reattachable}, and this is the end-to-end proof of it.
 // ---------------------------------------------------------------------------
 
-test('a returning daemon that names nothing is still handed the ledger for the sessions it is restored', async () => {
-  const agent = await openSocket('/ws');
-  const dashboard = await openSocket('/ws/dashboard');
+test("a returning daemon that names nothing is still handed the ledger for the sessions it is restored", async () => {
+  const agent = await openSocket("/ws");
+  const dashboard = await openSocket("/ws/dashboard");
   const instanceId = `returning-${crypto.randomUUID()}`;
   const epoch = crypto.randomUUID();
 
@@ -579,56 +736,71 @@ test('a returning daemon that names nothing is still handed the ledger for the s
   db.openInstance({
     id: instanceId,
     machineId: MACHINE,
-    cwd: '/tmp/x3-returning',
+    cwd: "/tmp/x3-returning",
     sessionId: `sess-${crypto.randomUUID()}`,
-    harness: 'claude',
-    kind: 'mainline',
+    harness: "claude",
+    kind: "mainline",
   });
 
   agent.send({
-    verb: 'register',
+    verb: "register",
     machineId: MACHINE,
-    payload: { hostname: 'box', os: 'linux', auth: 'authenticated', instances: [instanceId] },
+    payload: {
+      hostname: "box",
+      os: "linux",
+      auth: "authenticated",
+      instances: [instanceId],
+    },
   });
-  await agent.next((m) => m.verb === 'register', 'the first register ack');
+  await agent.next((m) => m.verb === "register", "the first register ack");
 
-  dashboard.send({ type: 'stream.subscribe', sessionId: instanceId });
+  dashboard.send({ type: "stream.subscribe", sessionId: instanceId });
   await Bun.sleep(30);
 
   // The absence begins after line 2: this hub has ingested 1 and 2 and nothing
   // more, and sessiond goes on buffering 3, 4, 5 with nobody attached.
   for (const srcSeq of [1, 2]) {
-    agent.send(frameEnvelope(instanceId, { srcEpoch: epoch, srcSeq }, `before ${srcSeq}`));
+    agent.send(
+      frameEnvelope(instanceId, { srcEpoch: epoch, srcSeq }, `before ${srcSeq}`)
+    );
   }
   await dashboard.next(
-    (m) => m.type === 'stream.event' && (m.event as { seq: number }).seq === 2,
-    'the two frames before the absence'
+    (m) => m.type === "stream.event" && (m.event as { seq: number }).seq === 2,
+    "the two frames before the absence"
   );
 
   // THE RESTART. A daemon whose supervisor is empty: `instances: []`, exactly
   // what `supervisor.instanceIds` returns one tick after boot.
   agent.send({
-    verb: 'register',
+    verb: "register",
     machineId: MACHINE,
-    payload: { hostname: 'box', os: 'linux', auth: 'authenticated', instances: [] },
+    payload: {
+      hostname: "box",
+      os: "linux",
+      auth: "authenticated",
+      instances: [],
+    },
   });
 
   // The hub answers with BOTH halves of the circle, and the daemon needs both:
   // the restore spawn is the only place it learns the session's `cwd`, and the
   // ack is the only place it learns how far this hub got.
   const spawn = (await agent.next(
-    (m) => m.verb === 'spawn' && m.instanceId === instanceId,
-    'the restore spawn'
+    (m) => m.verb === "spawn" && m.instanceId === instanceId,
+    "the restore spawn"
   )) as { payload: { instanceId: string; cwd: string } };
-  expect(spawn.payload.cwd).toBe('/tmp/x3-returning');
+  expect(spawn.payload.cwd).toBe("/tmp/x3-returning");
 
   const ack = await agent.next(
     (m) =>
-      m.verb === 'register' &&
-      Object.keys((m.payload as { ingested?: object }).ingested ?? {}).includes(instanceId),
-    'the ack carrying the ledger for a session the daemon never named'
+      m.verb === "register" &&
+      Object.keys((m.payload as { ingested?: object }).ingested ?? {}).includes(
+        instanceId
+      ),
+    "the ack carrying the ledger for a session the daemon never named"
   );
-  const mark = (ack.payload as { ingested: Record<string, IngestMark> }).ingested[instanceId];
+  const mark = (ack.payload as { ingested: Record<string, IngestMark> })
+    .ingested[instanceId];
   expect(mark).toEqual({ epoch, srcSeq: 2 });
 
   // AND IT IS ACTED ON. This is the agent's real code path: `readIngested` off
@@ -639,35 +811,53 @@ test('a returning daemon that names nothing is still handed the ledger for the s
   // sessiond hands back 3, 4, 5 (`since(2)`), which the reattached agent
   // forwards; only they are news, and the ones already ingested stay refused.
   for (const srcSeq of [1, 2, 3, 4, 5]) {
-    if (alreadyIngested({ epoch, srcSeq: cursor! }, { srcEpoch: epoch, srcSeq })) continue;
-    agent.send(frameEnvelope(instanceId, { srcEpoch: epoch, srcSeq }, `replayed ${srcSeq}`));
+    if (
+      alreadyIngested({ epoch, srcSeq: cursor! }, { srcEpoch: epoch, srcSeq })
+    ) {
+      continue;
+    }
+    agent.send(
+      frameEnvelope(
+        instanceId,
+        { srcEpoch: epoch, srcSeq },
+        `replayed ${srcSeq}`
+      )
+    );
   }
 
   const fifth = await dashboard.next(
-    (m) => m.type === 'stream.event' && (m.event as { seq: number }).seq === 5,
-    'the three recovered lines'
+    (m) => m.type === "stream.event" && (m.event as { seq: number }).seq === 5,
+    "the three recovered lines"
   );
-  expect((fifth.event as { frame: { message: { text: string } } }).frame.message.text).toBe('replayed 5');
+  expect(
+    (fifth.event as { frame: { message: { text: string } } }).frame.message.text
+  ).toBe("replayed 5");
   // Exactly the gap: hub seq 3, 4, 5 carry src 3, 4, 5. No duplicate of 1-2 got
   // in front of them, and nothing was spliced over.
   const third = await dashboard.next(
-    (m) => m.type === 'stream.event' && (m.event as { seq: number }).seq === 3,
-    'the first recovered line'
+    (m) => m.type === "stream.event" && (m.event as { seq: number }).seq === 3,
+    "the first recovered line"
   );
-  expect((third.event as { frame: { message: { text: string } } }).frame.message.text).toBe('replayed 3');
+  expect(
+    (third.event as { frame: { message: { text: string } } }).frame.message.text
+  ).toBe("replayed 3");
   await Bun.sleep(30);
   await expect(
-    dashboard.next((m) => m.type === 'stream.event' && (m.event as { seq: number }).seq === 6, 'a sixth frame')
+    dashboard.next(
+      (m) =>
+        m.type === "stream.event" && (m.event as { seq: number }).seq === 6,
+      "a sixth frame"
+    )
   ).rejects.toThrow();
 
   agent.close();
   dashboard.close();
 }, 20_000);
 
-test('the union is the reported sessions and the restored ones, de-duplicated', () => {
-  expect(reattachable(['a', 'b'], ['b', 'c'])).toEqual(['a', 'b', 'c']);
+test("the union is the reported sessions and the restored ones, de-duplicated", () => {
+  expect(reattachable(["a", "b"], ["b", "c"])).toEqual(["a", "b", "c"]);
   // The returning daemon: nothing reported, everything restored.
-  expect(reattachable([], ['c'])).toEqual(['c']);
+  expect(reattachable([], ["c"])).toEqual(["c"]);
   // A machine with nothing to restore is exactly what it always was.
-  expect(reattachable(['a'], [])).toEqual(['a']);
+  expect(reattachable(["a"], [])).toEqual(["a"]);
 });

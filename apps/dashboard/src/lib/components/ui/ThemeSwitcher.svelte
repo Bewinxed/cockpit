@@ -1,24 +1,24 @@
 <script lang="ts">
-  import { IconSun, IconMoon } from '$lib/icons';
-  import { theme, toggleTheme } from '$lib/theme.svelte';
-  import { Button } from '$lib/components/ui/button';
+  import { Button } from "$lib/components/ui/button";
+  import { IconMoon, IconSun } from "$lib/icons";
+  import { theme, toggleTheme } from "$lib/theme.svelte";
 
   const themeLabels = {
-    light: 'Light mode',
-    dark: 'Dark mode',
-    system: 'System',
+    light: "Light mode",
+    dark: "Dark mode",
+    system: "System",
   };
 
-  const isDark = $derived(theme.current === 'dark');
-  const label = $derived(themeLabels[theme.current] || 'Light mode');
+  const isDark = $derived(theme.current === "dark");
+  const label = $derived(themeLabels[theme.current] || "Light mode");
 </script>
 
 <Button
-  variant="ghost"
-  size="icon-sm"
-  onclick={toggleTheme}
-  title={label}
   aria-label={label}
+  onclick={toggleTheme}
+  size="icon-sm"
+  title={label}
+  variant="ghost"
 >
   <span class="icon-swap size-4">
     <span data-active={isDark}><IconMoon class="size-4" /></span>

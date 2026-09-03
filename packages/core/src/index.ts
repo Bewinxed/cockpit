@@ -1,53 +1,45 @@
-import type { FleetSyncReport } from './fleet';
-import type { ToolStatus } from './tools';
+import type { FleetSyncReport } from "./fleet";
+import type { ToolStatus } from "./tools";
 
+// Delegate types: named presets the `delegate` tool's `type` param resolves,
+// so routing is by description instead of a raw model string.
+export * from "./delegate-types";
+// Fleet MCP + skills desired state, sync reports, and the `/` menu (NEW.md §11).
+export * from "./fleet";
 // The harness-neutral spine (2026-08 rework). Whiffle owns these types; the
 // harness adapters (claude, opencode, pi) translate their native events into
 // them, the hub peeks them, the dashboard folds them. See harness.ts for the
 // rules. The `SDK*` names are kept for one release so the dashboard's imports
 // did not all have to move at once; they are neutral types, not the SDK's.
-export * from './harness';
-
-// The workflow-tool catalog and its status/policy shapes (NEW.md §10).
-export * from './tools';
-
-// Fleet MCP + skills desired state, sync reports, and the `/` menu (NEW.md §11).
-export * from './fleet';
-
-// Usage, cost & limits (USAGE-SPEC.md §4). Pure types/math only; `limits.ts`
-// reads credentials with node:fs and lives under the `@whiffle/core/usage/limits`
-// subpath instead.
-export * from './usage';
-
-// Standing instructions the hub enforces on every session: a phrase to watch
-// for, a reply to send back, and an acknowledgement that has to come from the
-// session before the rule goes quiet. The matcher lives here so the hub and the
-// editor's test box decide identically.
-export * from './rules';
-
+export * from "./harness";
 // Hooks the fleet keeps: the lifecycle event, the matcher, and the script the
 // machines run. The matcher's three-way reading lives here so the editor's test
 // box previews exactly what Claude Code will do with it, and `hookProblem` is
 // shared so the hub and the form refuse the same drafts for the same reasons —
 // this is the one row whose convergence executes code, so it is gated twice.
-export * from './hooks';
-
-// Delegate types: named presets the `delegate` tool's `type` param resolves,
-// so routing is by description instead of a raw model string.
-export * from './delegate-types';
-
+export * from "./hooks";
 // How an `AskUserQuestion` answer is shaped, wherever it is answered from —
 // the dashboard, a parent session's `answer_delegate`, the Telegram bridge.
 // Shared because the tool's schema is unforgiving: the answers go back inside
 // the tool's own input or the call fails validation.
-export * from './question';
-// The Ledger Protocol: canonical session streams + acknowledged commands.
-export * from './stream';
-
+export * from "./question";
 // The bounded replay ring behind the Ledger Protocol — SessionRing, lifted
 // from packages/hub/src/stream.ts so sessiond's per-child ring (see
 // sessiond.ts) can reuse the identical class.
-export * from './ring';
+export * from "./ring";
+// Standing instructions the hub enforces on every session: a phrase to watch
+// for, a reply to send back, and an acknowledgement that has to come from the
+// session before the rule goes quiet. The matcher lives here so the hub and the
+// editor's test box decide identically.
+export * from "./rules";
+// The Ledger Protocol: canonical session streams + acknowledged commands.
+export * from "./stream";
+// The workflow-tool catalog and its status/policy shapes (NEW.md §10).
+export * from "./tools";
+// Usage, cost & limits (USAGE-SPEC.md §4). Pure types/math only; `limits.ts`
+// reads credentials with node:fs and lives under the `@whiffle/core/usage/limits`
+// subpath instead.
+export * from "./usage";
 
 // sessiond's protocol types are deliberately NOT re-exported here. That module
 // reaches for `node:os` and `node:path` to derive its endpoint, and this barrel
@@ -59,20 +51,20 @@ export * from './ring';
 // How a session with no given title names itself: its first user message,
 // cleaned. Shared so the hub's derived title and the dashboard's transcript
 // title are the same string, character for character.
-export * from './title';
+export * from "./title";
 
 /** The whole agent↔hub↔dashboard protocol. Adding a verb is a design decision. */
 export type Verb =
-  | 'register'
-  | 'heartbeat'
-  | 'spawn'
-  | 'send'
-  | 'stop'
-  | 'control'
-  | 'frames'
-  | 'fs'
-  | 'usage'
-  | 'subscribe';
+  | "register"
+  | "heartbeat"
+  | "spawn"
+  | "send"
+  | "stop"
+  | "control"
+  | "frames"
+  | "fs"
+  | "usage"
+  | "subscribe";
 
 /**
  * Every message on every hop. `payload` is whatever the verb carries — a neutral
@@ -80,12 +72,12 @@ export type Verb =
  * routes on the envelope fields and peeks only what harness.ts names.
  */
 export interface Envelope<T = unknown> {
-  verb: Verb;
-  machineId: string;
   instanceId?: string;
+  machineId: string;
+  payload: T;
   /** The `requestId` when the payload correlates to a permission or control reply. */
   requestId?: string;
-  payload: T;
+  verb: Verb;
 }
 
 /**
@@ -98,77 +90,12 @@ export interface Envelope<T = unknown> {
  * that is never stored (a side quest's transcript).
  */
 export interface SpawnPayload {
-  instanceId: string;
-  cwd: string;
-  /** Which harness runs the session. Absent = `claude`. */
-  harness?: import('./harness').HarnessKind;
-  /** Harness-specific spawn options, passed through verbatim. */
-  options?: unknown;
-  /**
-   * How the session answers tool permissions. Hoisted out of `options` because
-   * it is the one option the user keeps choosing — and the only one they can
-   * still change afterwards, with a `setPermissionMode` {@link ControlPayload}.
-   */
-  permissionMode?: import('./harness').PermissionMode;
-  /**
-   * Which model answers, from the session's first turn. Hoisted for the same
-   * reason as `permissionMode`. Absent leaves the choice to the harness.
-   */
-  model?: string;
-  /**
-   * How hard that model thinks, and how much it spends doing it. Hoisted for
-   * the same reason again — and it is the third setting a `setEffort`
-   * {@link ControlPayload} can still move mid-session. Absent leaves the level
-   * to the harness, which is not the same as asking for its default: only the
-   * model knows which stops it has.
-   */
-  effort?: import('./harness').EffortLevel;
-  /** The project this session was started from, when it was started from one. */
-  projectId?: string;
-  /**
-   * What the session is for, one line — a delegate's brief headline. Display
-   * only.
-   */
-  title?: string;
-  /**
-   * The session this spawn is a delegate of: the child nests under it in every
-   * rail, and `toolUseId` names the delegating tool call so the parent
-   * transcript can render the round trip.
-   */
-  parent?: { instanceId: string; toolUseId?: string };
-  /**
-   * A side quest (NEW.md §1): throwaway work. `worktree` runs the session in a
-   * detached git worktree of `baseCwd` (the spawn's `cwd` when absent) so the
-   * experiment cannot touch the checkout the mainline session is using.
-   */
-  scratch?: { worktree?: boolean; baseCwd?: string };
   /**
    * Start from a repository instead of a directory that is already there: the
    * agent clones `repo` — `owner/name`, or any URL git understands — into a
    * subdirectory of `baseDir` and runs the session in the clone.
    */
   bootstrap?: { repo: string; baseDir: string };
-  /**
-   * Re-open (or fork) a stored session. `sessionKey` is the harness's own
-   * session id; `fork` reads the origin conversation into a new one; `atMessage`
-   * resumes up to and including that assistant turn (a rewind anchor).
-   */
-  resume?: { sessionKey: string; fork?: boolean; atMessage?: string };
-  /** `false` asks the harness never to store this session's transcript. */
-  persistSession?: boolean;
-  /**
-   * Skill names to load natively before the first prompt. Each harness loads
-   * them via its own mechanism — opencode sends `/skill` commands, claude pushes
-   * them into the input stream — so the delegate session sees the skill the same
-   * way it would if the user had typed the slash command.
-   */
-  skills?: string[];
-  /**
-   * Tools this session may never call, beyond whatever the harness already
-   * denies. Set by a resolved {@link DelegateType}'s own `denyTools`; the
-   * claude adapter merges it into the `disallowedTools` it already assembles.
-   */
-  denyTools?: string[];
   /**
    * Whether this session may spawn sessions of its own (`delegate` and
    * `start_session`). Set by the `delegate` tool's `can_delegate` param; a
@@ -177,6 +104,71 @@ export interface SpawnPayload {
    * on a session nobody delegated (a mainline session may always delegate).
    */
   canDelegate?: boolean;
+  cwd: string;
+  /**
+   * Tools this session may never call, beyond whatever the harness already
+   * denies. Set by a resolved {@link DelegateType}'s own `denyTools`; the
+   * claude adapter merges it into the `disallowedTools` it already assembles.
+   */
+  denyTools?: string[];
+  /**
+   * How hard that model thinks, and how much it spends doing it. Hoisted for
+   * the same reason again — and it is the third setting a `setEffort`
+   * {@link ControlPayload} can still move mid-session. Absent leaves the level
+   * to the harness, which is not the same as asking for its default: only the
+   * model knows which stops it has.
+   */
+  effort?: import("./harness").EffortLevel;
+  /** Which harness runs the session. Absent = `claude`. */
+  harness?: import("./harness").HarnessKind;
+  instanceId: string;
+  /**
+   * Which model answers, from the session's first turn. Hoisted for the same
+   * reason as `permissionMode`. Absent leaves the choice to the harness.
+   */
+  model?: string;
+  /** Harness-specific spawn options, passed through verbatim. */
+  options?: unknown;
+  /**
+   * The session this spawn is a delegate of: the child nests under it in every
+   * rail, and `toolUseId` names the delegating tool call so the parent
+   * transcript can render the round trip.
+   */
+  parent?: { instanceId: string; toolUseId?: string };
+  /**
+   * How the session answers tool permissions. Hoisted out of `options` because
+   * it is the one option the user keeps choosing — and the only one they can
+   * still change afterwards, with a `setPermissionMode` {@link ControlPayload}.
+   */
+  permissionMode?: import("./harness").PermissionMode;
+  /** `false` asks the harness never to store this session's transcript. */
+  persistSession?: boolean;
+  /** The project this session was started from, when it was started from one. */
+  projectId?: string;
+  /**
+   * Correlates the `control_result` frame the agent answers the spawn with, once
+   * the session is in place.
+   */
+  requestId?: string;
+  /**
+   * Re-open (or fork) a stored session. `sessionKey` is the harness's own
+   * session id; `fork` reads the origin conversation into a new one; `atMessage`
+   * resumes up to and including that assistant turn (a rewind anchor).
+   */
+  resume?: { sessionKey: string; fork?: boolean; atMessage?: string };
+  /**
+   * A side quest (NEW.md §1): throwaway work. `worktree` runs the session in a
+   * detached git worktree of `baseCwd` (the spawn's `cwd` when absent) so the
+   * experiment cannot touch the checkout the mainline session is using.
+   */
+  scratch?: { worktree?: boolean; baseCwd?: string };
+  /**
+   * Skill names to load natively before the first prompt. Each harness loads
+   * them via its own mechanism — opencode sends `/skill` commands, claude pushes
+   * them into the input stream — so the delegate session sees the skill the same
+   * way it would if the user had typed the slash command.
+   */
+  skills?: string[];
   /**
    * The session that asked for this spawn — provenance, not nesting. Unlike
    * {@link parent}, it neither nests the child nor routes reports; it is what
@@ -188,48 +180,52 @@ export interface SpawnPayload {
    */
   spawnedBy?: { instanceId?: string; sessionKey?: string };
   /**
-   * Correlates the `control_result` frame the agent answers the spawn with, once
-   * the session is in place.
+   * What the session is for, one line — a delegate's brief headline. Display
+   * only.
    */
-  requestId?: string;
+  title?: string;
 }
 
 /** One repository a machine can {@link SpawnPayload.bootstrap} from. */
 export interface RepoInfo {
-  nameWithOwner: string;
-  visibility: 'PUBLIC' | 'PRIVATE' | 'INTERNAL';
-  updatedAt: string;
   description: string;
+  nameWithOwner: string;
+  updatedAt: string;
+  visibility: "PUBLIC" | "PRIVATE" | "INTERNAL";
 }
 
 /**
  * What the machine-scoped `listRepos` control answers with. The GitHub CLI is
  * the machine's own credential store — whiffle never holds a token.
  */
-export type ReposResult = RepoInfo[] | { error: 'gh-missing' | 'gh-unauthenticated' };
+export type ReposResult =
+  | RepoInfo[]
+  | { error: "gh-missing" | "gh-unauthenticated" };
 
 /** `owner/name`, however the repository was written. */
 export const repoPath = (repo: string): string =>
   repo
     .trim()
-    .replace(/\/+$/, '')
-    .replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+\//i, '')
-    .replace(/^[^/]+@[^:]+:/, '')
-    .replace(/\.git$/, '');
+    .replace(/\/+$/, "")
+    .replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+\//i, "")
+    .replace(/^[^/]+@[^:]+:/, "")
+    .replace(/\.git$/, "");
 
 /** `send`: one turn of input for a live session's prompt stream. */
 export interface SendPayload {
-  instanceId: string;
-  /** The user turn, in the neutral user-message shape every adapter understands. */
-  message: import('./harness').NeutralUserMessage;
   /**
    * Text the user pasted rather than typed, kept out of `message` so the agent
    * can fold it into the turn as quoted material the model won't mistake for
    * the sentence around it.
    */
-  attachments?: { kind: 'text'; name: string; content: string }[];
+  attachments?: { kind: "text"; name: string; content: string }[];
+  /** The instance a fleet-originated send claims as its caller. */
+  from?: string;
   /** Images the turn carries: base64, with no `data:` URI prefix. */
   images?: { mediaType: string; data: string }[];
+  instanceId: string;
+  /** The user turn, in the neutral user-message shape every adapter understands. */
+  message: import("./harness").NeutralUserMessage;
   /**
    * Force delivery: a busy claude session reads it mid-turn via `streamInput`;
    * opencode/pi interrupt the turn and deliver it as the immediate next one. The
@@ -237,8 +233,6 @@ export interface SendPayload {
    * it downgrades to a normal queued send.
    */
   urgent?: boolean;
-  /** The instance a fleet-originated send claims as its caller. */
-  from?: string;
 }
 
 /** `subscribe`: the open sessions a dashboard wants `frame` frames for. */
@@ -256,7 +250,6 @@ export interface SubscribePayload {
  */
 export interface HeartbeatPayload {
   at: number;
-  instances: string[];
   /**
    * Where the machine's deployment clone stands (contract C8), on every beat
    * for the same reason `instances` is: it is a live fact that changes without
@@ -265,17 +258,18 @@ export interface HeartbeatPayload {
    * may be days away. Absent from a daemon whose watcher has never ticked.
    */
   deploy?: DeployInfo;
+  instances: string[];
 }
 
 /** `stop`: interrupt and close a live session. */
 export interface StopPayload {
-  instanceId: string;
   /** Also tear down what the spawn created for a side quest — its git worktree. */
   discard?: boolean;
-  /** Correlates the `control_result` frame a discard's teardown answers with. */
-  requestId?: string;
   /** The instance a fleet-originated stop claims as its caller; the hub honours the call only when the target is that instance's own delegate. */
   from?: string;
+  instanceId: string;
+  /** Correlates the `control_result` frame a discard's teardown answers with. */
+  requestId?: string;
 }
 
 /**
@@ -290,18 +284,18 @@ export interface StopPayload {
  * no `instanceId` and no `harness`, `listSessions` merges every harness.
  */
 export interface ControlPayload {
-  instanceId?: string;
-  /** The harness the machine-scoped call is addressed at; session calls route by instance. */
-  harness?: import('./harness').HarnessKind;
-  requestId: string;
-  method: string;
   args?: unknown[];
   /** The instance a fleet-originated control claims as its caller; the hub honours the call only when the target is that instance's own delegate. */
   from?: string;
+  /** The harness the machine-scoped call is addressed at; session calls route by instance. */
+  harness?: import("./harness").HarnessKind;
+  instanceId?: string;
+  method: string;
+  requestId: string;
 }
 
 /** Settles a parked permission request; args are `[requestId, PermissionResult]`. */
-export const RESOLVE_PERMISSION = 'resolvePermission';
+export const RESOLVE_PERMISSION = "resolvePermission";
 
 /**
  * The tool that asks the reader rather than the machine. Its permission request
@@ -309,7 +303,7 @@ export const RESOLVE_PERMISSION = 'resolvePermission';
  * other: the choices arrive as the request's `input`, and the answer goes back
  * as `updatedInput`.
  */
-export const ASK_USER_QUESTION = 'AskUserQuestion';
+export const ASK_USER_QUESTION = "AskUserQuestion";
 
 /**
  * `fs`: the machine's files, for the cwd picker and light markdown editing
@@ -317,17 +311,17 @@ export const ASK_USER_QUESTION = 'AskUserQuestion';
  * `read` with the file's text, `write` with the byte count it wrote.
  */
 export interface FsPayload {
-  requestId: string;
-  op: 'list' | 'read' | 'write';
-  path: string;
   /** `write` only: the text the file is replaced with. */
   content?: string;
+  op: "list" | "read" | "write";
+  path: string;
+  requestId: string;
 }
 
 /** One dirent of an `fs list`. `size` is 0 for a directory. */
 export interface FsEntry {
+  kind: "dir" | "file";
   name: string;
-  kind: 'dir' | 'file';
   size: number;
 }
 
@@ -336,24 +330,8 @@ export interface FsEntry {
  * and what rides alongside the sessions in an `instances` frame.
  */
 export interface AgentRow {
-  machineId: string;
-  hostname: string;
-  os: string;
-  status: string;
-  /** A `Date` inside the hub, the ISO string it serialises to everywhere else. */
-  lastSeenAt: string | number | Date | null;
   /** `unknown` until a daemon that probes has registered at least once. */
-  auth: import('./harness').AuthState | 'unknown';
-  /** What each installed harness can do, as the daemon reported at register. */
-  harnesses?: import('./harness').HarnessReport[];
-  /**
-   * Last-known workflow-tool status by tool id (NEW.md §10).
-   */
-  tools?: Record<string, ToolStatus>;
-  /**
-   * Last-known fleet-config sync report (NEW.md §11).
-   */
-  fleet?: FleetSyncReport;
+  auth: import("./harness").AuthState | "unknown";
   /**
    * The whiffle build this machine's daemon is running (NEW.md §12).
    */
@@ -367,6 +345,22 @@ export interface AgentRow {
    * the socket that asserted it.
    */
   deploy?: DeployInfo;
+  /**
+   * Last-known fleet-config sync report (NEW.md §11).
+   */
+  fleet?: FleetSyncReport;
+  /** What each installed harness can do, as the daemon reported at register. */
+  harnesses?: import("./harness").HarnessReport[];
+  hostname: string;
+  /** A `Date` inside the hub, the ISO string it serialises to everywhere else. */
+  lastSeenAt: string | number | Date | null;
+  machineId: string;
+  os: string;
+  status: string;
+  /**
+   * Last-known workflow-tool status by tool id (NEW.md §10).
+   */
+  tools?: Record<string, ToolStatus>;
 }
 
 /**
@@ -375,33 +369,39 @@ export interface AgentRow {
  * union's fields are already spoken in {@link DeployInfo.detail}, which is what
  * `describeDeploy` produced for this very state.
  */
-export type DeployKind = 'unmarked' | 'unreachable' | 'current' | 'behind' | 'ahead' | 'diverged';
+export type DeployKind =
+  | "unmarked"
+  | "unreachable"
+  | "current"
+  | "behind"
+  | "ahead"
+  | "diverged";
 
 export interface DeployInfo {
+  /** One sentence, exactly what `describeDeploy(state)` said about it. */
+  detail?: string;
+  /** What the update flow threw, if it threw. */
+  failure?: string;
   /**
    * `diverged` is the one that must survive the trip intact: it means the clone
    * refused to update because a reset would destroy commits nobody else has,
    * and a refusal nobody is shown is the same as no refusal at all.
    */
   kind: DeployKind;
-  /** One sentence, exactly what `describeDeploy(state)` said about it. */
-  detail?: string;
   /** Whether the last poll actually ran the update flow. */
   updated?: boolean;
-  /** What the update flow threw, if it threw. */
-  failure?: string;
 }
 
 /** What a daemon reports about the checkout it was started from. */
 export interface BuildInfo {
-  /** `@whiffle/agent`'s package version. */
-  version: string;
   /** Short git SHA, when the checkout is a git one. */
   commit?: string;
   /** Whether that checkout has uncommitted changes. */
   dirty?: boolean;
   /** When this daemon started, ms epoch. */
   startedAt: number;
+  /** `@whiffle/agent`'s package version. */
+  version: string;
 }
 
 /**
@@ -409,30 +409,30 @@ export interface BuildInfo {
  * happened, not what was asked for.
  */
 export interface UpdateReport {
+  built: boolean;
   from?: string;
-  to?: string;
+  installed: boolean;
   /** The tail of what git said — 'Already up to date.' included. */
   pulled: string;
-  installed: boolean;
-  built: boolean;
   /** Service ids actually restarted. */
   restarted: string[];
   /** Why something asked for did not happen. */
   skipped?: string;
+  to?: string;
 }
 
 /**
  * Turns the machine's checkout into the current one: `git pull`, install,
  * rebuild the dashboard, restart the hub and dashboard services.
  */
-export const UPDATE_WHIFFLE = 'updateWhiffle';
+export const UPDATE_WHIFFLE = "updateWhiffle";
 
 /**
  * Whether this machine's daemon is in the middle of anything — how a restart
  * waits for a good moment instead of cutting a turn in half.
  * Answers `{ busy: number; instances: string[] }`.
  */
-export const AGENT_BUSY = 'agentBusy';
+export const AGENT_BUSY = "agentBusy";
 
 /**
  * What a session row is doing, right now, as the hub last heard it.
@@ -453,68 +453,18 @@ export const AGENT_BUSY = 'agentBusy';
  * - `discarded` — a side quest torn down on purpose; gone for good.
  */
 export type InstanceStatus =
-  | 'starting'
-  | 'running'
-  | 'sleeping'
-  | 'stopped'
-  | 'discarded'
-  | 'unknown'
-  | 'error';
+  | "starting"
+  | "running"
+  | "sleeping"
+  | "stopped"
+  | "discarded"
+  | "unknown"
+  | "error";
 
 /**
  * A session the hub knows about — one row of its `instances` table.
  */
 export interface InstanceRow {
-  id: string;
-  machineId: string;
-  cwd: string;
-  status: InstanceStatus;
-  /** The harness's own session id, once the session has named itself. */
-  sessionId: string | null;
-  /** Which harness owns {@link sessionId} — what a resume and a catalog read route on. */
-  harness?: string | null;
-  /** The instance this one is a delegate of; absent for a mainline session. */
-  parentInstanceId?: string | null;
-  /** The delegating tool call, so the parent transcript can render the round trip. */
-  parentToolUseId?: string | null;
-  /** Set when the session was started from a project page. */
-  projectId?: string | null;
-  /**
-   * What the session is for, as its {@link SpawnPayload.title} said — a
-   * delegate's brief headline. Null on a session that was started without one.
-   */
-  title?: string | null;
-  /**
-   * The name the session's first user message gave it, derived once by the hub.
-   * A listing already answers {@link title} with this when nothing named the
-   * row, so a reader never watches the label change as the transcript arrives.
-   */
-  derivedTitle?: string | null;
-  /** `scratch` for a side quest; absent from a hub that predates the column. */
-  kind?: string;
-  /**
-   * How the session answers tool permissions and which model answers, as of its
-   * last spawn, switch or `init`. Null on a session that has never said.
-   */
-  permissionMode?: string | null;
-  model?: string | null;
-  /**
-   * The effort level its last spawn or switch asked for. No `init` frame reports
-   * effort back, so unlike its two neighbours this row is the only record of it
-   * — and what a restart has to read to hand the session back as it was.
-   */
-  effort?: string | null;
-  /**
-   * Whether the session may spawn delegates of its own — `false` on a leaf
-   * delegate (spawned with `can_delegate: false`, the default). Null on a
-   * session nobody delegated, or on a hub that predates the column: both read
-   * as allowed.
-   */
-  canDelegate?: boolean | null;
-  /** What killed the session, on a row the agent reported as `error`. */
-  lastError?: string | null;
-  /** When the row last moved. */
-  updatedAt?: string | number | Date | null;
   /**
    * The supervisor's standing autopilot for this session, set from the
    * composer popover. `null` means never configured; disabling keeps the
@@ -522,6 +472,56 @@ export interface InstanceRow {
    * it. Absent on a hub that predates the column.
    */
   autopilot?: { enabled: boolean; prompt: string; updatedAt: number } | null;
+  /**
+   * Whether the session may spawn delegates of its own — `false` on a leaf
+   * delegate (spawned with `can_delegate: false`, the default). Null on a
+   * session nobody delegated, or on a hub that predates the column: both read
+   * as allowed.
+   */
+  canDelegate?: boolean | null;
+  cwd: string;
+  /**
+   * The name the session's first user message gave it, derived once by the hub.
+   * A listing already answers {@link title} with this when nothing named the
+   * row, so a reader never watches the label change as the transcript arrives.
+   */
+  derivedTitle?: string | null;
+  /**
+   * The effort level its last spawn or switch asked for. No `init` frame reports
+   * effort back, so unlike its two neighbours this row is the only record of it
+   * — and what a restart has to read to hand the session back as it was.
+   */
+  effort?: string | null;
+  /** Which harness owns {@link sessionId} — what a resume and a catalog read route on. */
+  harness?: string | null;
+  id: string;
+  /** `scratch` for a side quest; absent from a hub that predates the column. */
+  kind?: string;
+  /** What killed the session, on a row the agent reported as `error`. */
+  lastError?: string | null;
+  machineId: string;
+  model?: string | null;
+  /** The instance this one is a delegate of; absent for a mainline session. */
+  parentInstanceId?: string | null;
+  /** The delegating tool call, so the parent transcript can render the round trip. */
+  parentToolUseId?: string | null;
+  /**
+   * How the session answers tool permissions and which model answers, as of its
+   * last spawn, switch or `init`. Null on a session that has never said.
+   */
+  permissionMode?: string | null;
+  /** Set when the session was started from a project page. */
+  projectId?: string | null;
+  /** The harness's own session id, once the session has named itself. */
+  sessionId: string | null;
+  status: InstanceStatus;
+  /**
+   * What the session is for, as its {@link SpawnPayload.title} said — a
+   * delegate's brief headline. Null on a session that was started without one.
+   */
+  title?: string | null;
+  /** When the row last moved. */
+  updatedAt?: string | number | Date | null;
 }
 
 /**
@@ -538,22 +538,22 @@ export interface InstanceRow {
  * one home both sides already share.
  */
 export interface SupervisorEvent {
+  createdAt: number;
   /** The hub's row id — what a fold deduplicates on and orders by. */
   id: number;
   instanceId: string;
-  /** Which mechanism produced the verdict. */
-  source: 'rule' | 'autopilot';
-  /** The rule that fired, for `source: 'rule'`; null for autopilot. */
-  ruleId: string | null;
-  verdict: 'silent' | 'reply' | 'escalate' | 'ask' | 'error' | 'skipped';
+  latencyMs: number | null;
   /** Sent into the session (`reply`) or shown to the operator (`escalate`/`ask`); null for the rest. */
   message: string | null;
-  /** The supervisor's own one-line rationale — logged, never sent to the session. */
-  note: string | null;
   /** Which model answered, when one did. */
   model: string | null;
-  latencyMs: number | null;
-  createdAt: number;
+  /** The supervisor's own one-line rationale — logged, never sent to the session. */
+  note: string | null;
+  /** The rule that fired, for `source: 'rule'`; null for autopilot. */
+  ruleId: string | null;
+  /** Which mechanism produced the verdict. */
+  source: "rule" | "autopilot";
+  verdict: "silent" | "reply" | "escalate" | "ask" | "error" | "skipped";
 }
 
 /**
@@ -565,23 +565,25 @@ export interface SupervisorEvent {
  * signals separate so a reader can still tell "blocked" from "working".
  */
 export interface SessionPulse {
-  instanceId: string;
-  busy: boolean;
   /** Coarse now-state the rail draws without frames. */
-  activity: 'working' | 'blocked' | 'idle';
-  currentTool: { name: string; glance: string } | null;
-  runningSubagents: number;
+  activity: "working" | "blocked" | "idle";
   /** ms epoch of the last frame that changed this pulse. */
   at: number;
+  busy: boolean;
+  currentTool: { name: string; glance: string } | null;
+  instanceId: string;
+  runningSubagents: number;
 }
 
 /**
  * What the hub records on a session whose daemon restarted out from under it.
  */
-export const RESTART_RESUMABLE = 'The agent restarted; this session did not survive it.';
+export const RESTART_RESUMABLE =
+  "The agent restarted; this session did not survive it.";
 
 /** And what it records when there is nothing to go back to. */
-export const RESTART_LOST = 'The agent restarted, and this session left nothing to resume from.';
+export const RESTART_LOST =
+  "The agent restarted, and this session left nothing to resume from.";
 
 /**
  * `frames`: everything a session produces, flowing agent→hub→dashboard. The
@@ -590,30 +592,30 @@ export const RESTART_LOST = 'The agent restarted, and this session left nothing 
  */
 export type FramePayload =
   | {
-      kind: 'frame';
+      kind: "frame";
       instanceId: string;
-      harness: import('./harness').HarnessKind;
-      message: import('./harness').NeutralMessage;
+      harness: import("./harness").HarnessKind;
+      message: import("./harness").NeutralMessage;
     }
   | {
       /**
        * Hub-originated: every session it still lists, pushed whenever one of the
        * rows moves.
        */
-      kind: 'instances';
+      kind: "instances";
       instances: InstanceRow[];
       agents: AgentRow[];
     }
   | {
-      kind: 'permission_request';
+      kind: "permission_request";
       instanceId: string;
-      harness: import('./harness').HarnessKind;
+      harness: import("./harness").HarnessKind;
       requestId: string;
       toolName: string;
       input: Record<string, unknown>;
-      suggestions?: import('./harness').PermissionUpdate[];
+      suggestions?: import("./harness").PermissionUpdate[];
       /** `tool` for a permission, `question` for an AskUserQuestion-shaped prompt. */
-      requestKind?: 'tool' | 'question';
+      requestKind?: "tool" | "question";
     }
   | {
       /**
@@ -621,12 +623,12 @@ export type FramePayload =
        * agent usage report (USAGE-SPEC.md §6.4). Small by design — the heavy
        * aggregates are pulled over REST.
        */
-      kind: 'usage';
-      limits: import('./usage').UsageLimitsReading[];
+      kind: "usage";
+      limits: import("./usage").UsageLimitsReading[];
     }
   | {
       /** No `instanceId` when the call it answers was machine-scoped. */
-      kind: 'control_result';
+      kind: "control_result";
       instanceId?: string;
       requestId: string;
       ok: boolean;
@@ -635,7 +637,7 @@ export type FramePayload =
     }
   | {
       /** Hub-originated routing failures (e.g. target machine offline). */
-      kind: 'error';
+      kind: "error";
       instanceId?: string;
       requestId?: string;
       verb?: Verb;
@@ -648,7 +650,7 @@ export type FramePayload =
        * to the bridge; the owner replying to it reaches the session, as with
        * any bridged message.
        */
-      kind: 'user_message';
+      kind: "user_message";
       instanceId: string;
       text: string;
     }
@@ -658,7 +660,7 @@ export type FramePayload =
        * Broadcast — every dashboard wants the rail's word on every session, not
        * only the ones it has open.
        */
-      kind: 'pulse';
+      kind: "pulse";
       instanceId: string;
       pulse: SessionPulse;
     };
@@ -670,7 +672,7 @@ export const WHIFFLE_HUB_PORT = 3456;
  * applies it when the session names itself and clears it when the quest is
  * kept; the catalogs the rails read hide what wears it.
  */
-export const WHIFFLE_SCRATCH_TAG = 'whiffle-scratch';
+export const WHIFFLE_SCRATCH_TAG = "whiffle-scratch";
 
 /**
  * Every environment variable whiffle reads, by the name it is spelled on a
@@ -688,41 +690,41 @@ export const WHIFFLE_SCRATCH_TAG = 'whiffle-scratch';
  * the opencode child process).
  */
 export const WHIFFLE_ENV = {
-  hubUrl: 'WHIFFLE_HUB_URL',
-  hubPort: 'WHIFFLE_HUB_PORT',
-  machineId: 'WHIFFLE_MACHINE_ID',
+  hubUrl: "WHIFFLE_HUB_URL",
+  hubPort: "WHIFFLE_HUB_PORT",
+  machineId: "WHIFFLE_MACHINE_ID",
   /** `1` stops the hub advertising itself over mDNS. */
-  noMdns: 'WHIFFLE_NO_MDNS',
+  noMdns: "WHIFFLE_NO_MDNS",
   /**
    * Overrides the socket `sessiondEndpoint()` derives — the daemon listens on
    * it and every client dials it, so both ends must read the same variable.
    */
-  sessiondEndpoint: 'WHIFFLE_SESSIOND_ENDPOINT',
+  sessiondEndpoint: "WHIFFLE_SESSIOND_ENDPOINT",
   /** Where the links the bridge sends point. */
-  dashboardUrl: 'WHIFFLE_DASHBOARD_URL',
+  dashboardUrl: "WHIFFLE_DASHBOARD_URL",
   /** The bot the hub reaches its owner's Telegram on. */
-  telegramToken: 'WHIFFLE_TELEGRAM_TOKEN',
+  telegramToken: "WHIFFLE_TELEGRAM_TOKEN",
   /** Telegram's API origin, for pointing the bridge at a proxy. */
-  telegramApi: 'WHIFFLE_TELEGRAM_API',
-  telegramAsrUrl: 'WHIFFLE_TELEGRAM_ASR_URL',
-  telegramAsrModel: 'WHIFFLE_TELEGRAM_ASR_MODEL',
-  telegramAsrMode: 'WHIFFLE_TELEGRAM_ASR_MODE',
+  telegramApi: "WHIFFLE_TELEGRAM_API",
+  telegramAsrUrl: "WHIFFLE_TELEGRAM_ASR_URL",
+  telegramAsrModel: "WHIFFLE_TELEGRAM_ASR_MODEL",
+  telegramAsrMode: "WHIFFLE_TELEGRAM_ASR_MODE",
   /** Where the hub's SQLite file lives, overriding the default data dir. */
-  dbPath: 'WHIFFLE_DB_PATH',
+  dbPath: "WHIFFLE_DB_PATH",
   /** The deployment clone the daemon watches (PLAN.md contract C8). */
-  deployRoot: 'WHIFFLE_DEPLOY_ROOT',
+  deployRoot: "WHIFFLE_DEPLOY_ROOT",
   /** How often that clone is polled, in seconds. */
-  deployPoll: 'WHIFFLE_DEPLOY_POLL',
+  deployPoll: "WHIFFLE_DEPLOY_POLL",
   /** Which service manager the installer targets: `systemd`, `launchd`, … */
-  serviceMode: 'WHIFFLE_SERVICE_MODE',
+  serviceMode: "WHIFFLE_SERVICE_MODE",
   /** The npm registry installs and self-updates go through. */
-  registry: 'WHIFFLE_REGISTRY',
+  registry: "WHIFFLE_REGISTRY",
   /** The OpenAI-compatible router the supervisor calls for verdicts. */
-  supervisorUrl: 'WHIFFLE_SUPERVISOR_URL',
+  supervisorUrl: "WHIFFLE_SUPERVISOR_URL",
   /** Which model on that router answers — an alias, when the router has one. */
-  supervisorModel: 'WHIFFLE_SUPERVISOR_MODEL',
+  supervisorModel: "WHIFFLE_SUPERVISOR_MODEL",
   /** The router's API key, when it asks for one. Absent for a local router. */
-  supervisorKey: 'WHIFFLE_SUPERVISOR_KEY',
+  supervisorKey: "WHIFFLE_SUPERVISOR_KEY",
 } as const;
 
 /** One of {@link WHIFFLE_ENV}'s variable names. */
@@ -738,10 +740,10 @@ export type WhiffleEnvVar = (typeof WHIFFLE_ENV)[keyof typeof WHIFFLE_ENV];
  */
 export const readEnv = (
   name: WhiffleEnvVar,
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = process.env
 ): string | undefined => env[name];
 
 /**
  * The mDNS service the hub advertises and `whiffle` browses for.
  */
-export const WHIFFLE_MDNS_TYPE = 'whiffle';
+export const WHIFFLE_MDNS_TYPE = "whiffle";

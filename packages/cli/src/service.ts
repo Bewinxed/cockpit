@@ -1,11 +1,11 @@
-import type { AgentRow } from '@whiffle/core';
-import { readEnv, WHIFFLE_ENV, WHIFFLE_HUB_PORT } from '@whiffle/core';
-import { sessiondEndpoint } from '@whiffle/core/sessiond';
-import { migrateLegacyDb } from '@whiffle/hub/src/migrate-db';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { chmod } from 'node:fs/promises';
-import { homedir, platform } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { chmod } from "node:fs/promises";
+import { homedir, platform } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import type { AgentRow } from "@whiffle/core";
+import { readEnv, WHIFFLE_ENV, WHIFFLE_HUB_PORT } from "@whiffle/core";
+import { sessiondEndpoint } from "@whiffle/core/sessiond";
+import { migrateLegacyDb } from "@whiffle/hub/src/migrate-db";
 
 /**
  * The whole stack, as four services this machine can run for you, in the order
@@ -14,32 +14,43 @@ import { dirname, join, resolve } from 'node:path';
  * four. `sessiond` sits before `agent` on purpose — it owns the harness
  * children, so the daemon that talks to it comes up second (design §11).
  */
-export type ServiceId = 'hub' | 'dashboard' | 'sessiond' | 'agent';
+export type ServiceId = "hub" | "dashboard" | "sessiond" | "agent";
 
-export const SERVICE_IDS: readonly ServiceId[] = ['hub', 'dashboard', 'sessiond', 'agent'];
+export const SERVICE_IDS: readonly ServiceId[] = [
+  "hub",
+  "dashboard",
+  "sessiond",
+  "agent",
+];
 
 export const isServiceId = (value: string): value is ServiceId =>
   SERVICE_IDS.includes(value as ServiceId);
 
-export type ServiceAction = 'install' | 'uninstall' | 'restart' | 'status' | 'logs';
+export type ServiceAction =
+  | "install"
+  | "uninstall"
+  | "restart"
+  | "status"
+  | "logs";
 
 export const SERVICE_ACTIONS: readonly ServiceAction[] = [
-  'install',
-  'uninstall',
-  'restart',
-  'status',
-  'logs',
+  "install",
+  "uninstall",
+  "restart",
+  "status",
+  "logs",
 ];
 
-export const isServiceAction = (value: string | undefined): value is ServiceAction =>
-  SERVICE_ACTIONS.includes(value as ServiceAction);
+export const isServiceAction = (
+  value: string | undefined
+): value is ServiceAction => SERVICE_ACTIONS.includes(value as ServiceAction);
 
 /**
  * Which flavour of the stack a machine is running: the built artefacts, or the
  * checkout as you are editing it. Only the hub and the dashboard have a dev
  * flavour — see {@link DEV}.
  */
-export type ServiceMode = 'prod' | 'dev';
+export type ServiceMode = "prod" | "dev";
 
 /**
  * Written into a dev unit and read back out of it by `status`, which is the only
@@ -56,16 +67,16 @@ const unitName = (id: ServiceId): string => `whiffle-${id}.service`;
 const label = (id: ServiceId): string => `dev.whiffle.${id}`;
 
 const SYSTEMD_DIR = join(
-  process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'),
-  'systemd',
-  'user'
+  process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
+  "systemd",
+  "user"
 );
 
 const systemdPath = (id: ServiceId): string => join(SYSTEMD_DIR, unitName(id));
 const launchAgentPath = (id: ServiceId): string =>
-  join(homedir(), 'Library', 'LaunchAgents', `${label(id)}.plist`);
+  join(homedir(), "Library", "LaunchAgents", `${label(id)}.plist`);
 const launchAgentLog = (id: ServiceId): string =>
-  join(homedir(), 'Library', 'Logs', `whiffle-${id}.log`);
+  join(homedir(), "Library", "Logs", `whiffle-${id}.log`);
 
 /**
  * The checkout this CLI is running from. The hub and the dashboard are served
@@ -75,16 +86,20 @@ const launchAgentLog = (id: ServiceId): string =>
 const repoRoot = (): string => {
   let dir = dirname(Bun.main);
   while (dir !== dirname(dir)) {
-    const manifest = join(dir, 'package.json');
+    const manifest = join(dir, "package.json");
     if (existsSync(manifest)) {
-      const { workspaces } = JSON.parse(readFileSync(manifest, 'utf8')) as { workspaces?: unknown };
-      if (workspaces) return dir;
+      const { workspaces } = JSON.parse(readFileSync(manifest, "utf8")) as {
+        workspaces?: unknown;
+      };
+      if (workspaces) {
+        return dir;
+      }
     }
     dir = dirname(dir);
   }
   // Nothing on the way up called itself the workspace root, so fall back to
   // where this file sits inside one: packages/cli/src/cli.ts.
-  return resolve(dirname(Bun.main), '..', '..', '..');
+  return resolve(dirname(Bun.main), "..", "..", "..");
 };
 
 const ROOT = repoRoot();
@@ -106,13 +121,12 @@ export const CHECKOUT_ROOT = ROOT;
  * so `whiffle service install` is unchanged.
  */
 interface Layout {
-  readonly root: string;
-  readonly hubEntry: string;
-  readonly sessiondEntry: string;
-  readonly dashboardDir: string;
-  readonly dashboardEntry: string;
+  /** The `whiffle` entry point the agent unit runs `up` with. */
+  readonly cliEntry: string;
   /** What {@link dashboardEntry} imports — the adapter-node output, and the part that can be missing. */
   readonly dashboardBuild: string;
+  readonly dashboardDir: string;
+  readonly dashboardEntry: string;
   /**
    * The dashboard's `dev` script is `vite dev`, and this is that vite. Named
    * outright because `ExecStart=` is not a shell: it cannot resolve a `.bin`
@@ -120,21 +134,30 @@ interface Layout {
    * back under vite.config.ts, where `status` cannot follow it.
    */
   readonly dashboardVite: string;
-  /** The `whiffle` entry point the agent unit runs `up` with. */
-  readonly cliEntry: string;
+  readonly hubEntry: string;
+  readonly root: string;
+  readonly sessiondEntry: string;
 }
 
 const layoutFor = (
   root: string,
-  cliEntry: string = join(root, 'packages', 'cli', 'src', 'cli.ts')
+  cliEntry: string = join(root, "packages", "cli", "src", "cli.ts")
 ): Layout => ({
   root,
-  hubEntry: join(root, 'packages', 'hub', 'src', 'index.ts'),
-  sessiondEntry: join(root, 'packages', 'sessiond', 'src', 'main.ts'),
-  dashboardDir: join(root, 'apps', 'dashboard'),
-  dashboardEntry: join(root, 'apps', 'dashboard', 'serve.js'),
-  dashboardBuild: join(root, 'apps', 'dashboard', 'build', 'handler.js'),
-  dashboardVite: join(root, 'apps', 'dashboard', 'node_modules', 'vite', 'bin', 'vite.js'),
+  hubEntry: join(root, "packages", "hub", "src", "index.ts"),
+  sessiondEntry: join(root, "packages", "sessiond", "src", "main.ts"),
+  dashboardDir: join(root, "apps", "dashboard"),
+  dashboardEntry: join(root, "apps", "dashboard", "serve.js"),
+  dashboardBuild: join(root, "apps", "dashboard", "build", "handler.js"),
+  dashboardVite: join(
+    root,
+    "apps",
+    "dashboard",
+    "node_modules",
+    "vite",
+    "bin",
+    "vite.js"
+  ),
   cliEntry,
 });
 
@@ -149,8 +172,8 @@ const HERE = layoutFor(ROOT, Bun.main);
  * Where the dashboard listens. Read from the installing shell so a second
  * machine can differ, with the defaults this one's browser expects.
  */
-const DASHBOARD_PORT = process.env.PORT ?? '3000';
-const DASHBOARD_HOST = process.env.HOST ?? '0.0.0.0';
+const DASHBOARD_PORT = process.env.PORT ?? "3000";
+const DASHBOARD_HOST = process.env.HOST ?? "0.0.0.0";
 
 /**
  * The PATH the installing shell had. A launchd job otherwise inherits a nearly
@@ -159,20 +182,20 @@ const DASHBOARD_HOST = process.env.HOST ?? '0.0.0.0';
  * the Claude Code shim would not start.
  */
 const servicePath = (): string => {
-  const inherited = (process.env.PATH ?? '').split(':').filter(Boolean);
+  const inherited = (process.env.PATH ?? "").split(":").filter(Boolean);
   // Installing over SSH inherits a thin PATH with no Homebrew, so a service
   // installed remotely would lose git, gh and node. Union the usual homes with
   // whatever the installing shell had, keeping the shell's order first.
   const usual = [
     `${homedir()}/.bun/bin`,
-    '/opt/homebrew/bin',
-    '/usr/local/bin',
-    '/usr/bin',
-    '/bin',
-    '/usr/sbin',
-    '/sbin',
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+    "/usr/sbin",
+    "/sbin",
   ];
-  return [...new Set([...inherited, ...usual])].join(':');
+  return [...new Set([...inherited, ...usual])].join(":");
 };
 
 /**
@@ -183,11 +206,14 @@ const servicePath = (): string => {
  * `XDG_CONFIG_HOME` above.
  */
 const dataDir = (): string =>
-  platform() === 'darwin'
-    ? join(homedir(), 'Library', 'Application Support', 'whiffle')
-    : join(process.env.XDG_DATA_HOME ?? join(homedir(), '.local', 'share'), 'whiffle');
+  platform() === "darwin"
+    ? join(homedir(), "Library", "Application Support", "whiffle")
+    : join(
+        process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
+        "whiffle"
+      );
 
-const DEFAULT_DB_PATH = join(dataDir(), 'whiffle.db');
+const DEFAULT_DB_PATH = join(dataDir(), "whiffle.db");
 
 /** How long a liveness probe is worth waiting for before it has said enough. */
 const PROBE_TIMEOUT_MS = 2000;
@@ -197,34 +223,42 @@ const hubOrigin = (): string =>
 
 /** A probe answers or it does not; nothing it finds is worth throwing over. */
 const probeJson = async <T>(url: string): Promise<T | undefined> => {
-  const answer = await fetch(url, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) }).catch(
-    () => undefined
-  );
-  if (!answer?.ok) return undefined;
+  const answer = await fetch(url, {
+    signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+  }).catch(() => undefined);
+  if (!answer?.ok) {
+    return undefined;
+  }
   return (await answer.json().catch(() => undefined)) as T | undefined;
 };
 
 const probeHub = async (): Promise<string> => {
   const health = await probeJson<{ version: string }>(`${hubOrigin()}/health`);
-  return health ? `${hubOrigin()} answers /health (hub ${health.version})` : `no answer from ${hubOrigin()}/health`;
+  return health
+    ? `${hubOrigin()} answers /health (hub ${health.version})`
+    : `no answer from ${hubOrigin()}/health`;
 };
 
 const probeDashboard = async (): Promise<string> => {
   const url = `http://${DASHBOARD_HOST}:${DASHBOARD_PORT}/`;
-  const answer = await fetch(url, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) }).catch(
-    () => undefined
-  );
-  return answer ? `${url} answers (HTTP ${answer.status})` : `no answer from ${url}`;
+  const answer = await fetch(url, {
+    signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+  }).catch(() => undefined);
+  return answer
+    ? `${url} answers (HTTP ${answer.status})`
+    : `no answer from ${url}`;
 };
 
 const probeAgent = async (): Promise<string | undefined> => {
   const agents = await probeJson<AgentRow[]>(`${hubOrigin()}/api/agents`);
   // A worker machine's hub is somewhere else on the tailnet, so no hub here is
   // not a verdict on the daemon — it is a question this machine cannot answer.
-  if (!agents) return undefined;
+  if (!agents) {
+    return undefined;
+  }
   // Imported here rather than at the top so the other two probes, and every
   // other verb, never pay for the agent SDK.
-  const { machineId } = await import('@whiffle/agent');
+  const { machineId } = await import("@whiffle/agent");
   const id = await machineId();
   const self = agents.find((agent) => agent.machineId === id);
   return self
@@ -247,27 +281,42 @@ const sessiondSocket = (): string =>
  */
 const probeSessiond = async (): Promise<string | undefined> => {
   const endpoint = sessiondSocket();
-  if (platform() === 'win32') return undefined;
-  if (!existsSync(endpoint)) return `no socket at ${endpoint}`;
-  const socket = await Bun.connect({ unix: endpoint, socket: { data: () => {} } }).catch(
-    () => undefined
-  );
-  if (!socket) return `stale socket at ${endpoint} — nothing is listening`;
+  if (platform() === "win32") {
+    return undefined;
+  }
+  if (!existsSync(endpoint)) {
+    return `no socket at ${endpoint}`;
+  }
+  const socket = await Bun.connect({
+    unix: endpoint,
+    socket: { data: () => {} },
+  }).catch(() => undefined);
+  if (!socket) {
+    return `stale socket at ${endpoint} — nothing is listening`;
+  }
   socket.end();
   return `${endpoint} accepts connections`;
 };
 
 export interface ServiceSpec {
-  readonly id: ServiceId;
-  readonly mode: ServiceMode;
-  /** systemd `Description=`. */
-  readonly description: string;
-  readonly command: readonly string[];
-  /** On top of PATH, which every service gets. */
-  readonly environment: Readonly<Record<string, string>>;
-  readonly workingDirectory: string;
   /** systemd ordering only — launchd has none, see {@link plist}. */
   readonly after: readonly string[];
+  /**
+   * Asked before anything is written. A returned line is a warning worth
+   * printing; a throw refuses the install outright.
+   */
+  readonly check?: () => string | undefined;
+  readonly command: readonly string[];
+  /** systemd `Description=`. */
+  readonly description: string;
+  /** On top of PATH, which every service gets. */
+  readonly environment: Readonly<Record<string, string>>;
+  readonly id: ServiceId;
+  /** Printed after a LaunchAgent install, for the one service that has more to say. */
+  readonly launchAgentNote?: readonly string[];
+  readonly mode: ServiceMode;
+  /** Whether the service is really up, which the init system does not know. */
+  readonly probe: () => Promise<string | undefined>;
   /**
    * Hard dependencies: systemd `Requires=`. A unit here is one the service
    * genuinely cannot work without, so its failure must take this one down
@@ -275,7 +324,6 @@ export interface ServiceSpec {
    * "start it too, but carry on without it".
    */
   readonly requires?: readonly string[];
-  readonly wants: readonly string[];
   /**
    * Whether a clean exit is still a fault. It is for a server, which has no
    * reason to stop; it is not for the daemon, which exits 0 when it is
@@ -283,15 +331,8 @@ export interface ServiceSpec {
    */
   readonly restartOnSuccess: boolean;
   readonly restartSec: number;
-  /**
-   * Asked before anything is written. A returned line is a warning worth
-   * printing; a throw refuses the install outright.
-   */
-  readonly check?: () => string | undefined;
-  /** Printed after a LaunchAgent install, for the one service that has more to say. */
-  readonly launchAgentNote?: readonly string[];
-  /** Whether the service is really up, which the init system does not know. */
-  readonly probe: () => Promise<string | undefined>;
+  readonly wants: readonly string[];
+  readonly workingDirectory: string;
 }
 
 const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
@@ -303,137 +344,139 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
     dashboardBuild: DASHBOARD_BUILD,
   } = layout;
   return {
-  hub: {
-    id: 'hub',
-    mode: 'prod',
-    description: 'Whiffle hub',
-    // `bun run --filter '@whiffle/hub' start` needs a shell for the quoting and
-    // a cwd for the workspace lookup; the entry point needs neither and boots
-    // the same process.
-    command: [process.execPath, HUB_ENTRY],
-    environment: {
-      // The hub's DB_PATH defaults to `./whiffle.db` — relative to wherever it
-      // was started. A unit that leaves this unset opens a second, empty
-      // database in whatever directory the init system chose, and the fleet
-      // comes up blank with nothing to say why. Point it at the platform data
-      // dir (C9: ~/.local/share/whiffle on linux, ~/Library/Application
-      // Support/whiffle on darwin) rather than the checkout: the hub's own
-      // boot migration (see packages/hub/src/index.ts) carries an existing
-      // in-tree database there the first time it finds one.
-      [WHIFFLE_ENV.dbPath]: DEFAULT_DB_PATH, // ~/.local/share/whiffle or ~/Library/Application Support/whiffle
+    hub: {
+      id: "hub",
+      mode: "prod",
+      description: "Whiffle hub",
+      // `bun run --filter '@whiffle/hub' start` needs a shell for the quoting and
+      // a cwd for the workspace lookup; the entry point needs neither and boots
+      // the same process.
+      command: [process.execPath, HUB_ENTRY],
+      environment: {
+        // The hub's DB_PATH defaults to `./whiffle.db` — relative to wherever it
+        // was started. A unit that leaves this unset opens a second, empty
+        // database in whatever directory the init system chose, and the fleet
+        // comes up blank with nothing to say why. Point it at the platform data
+        // dir (C9: ~/.local/share/whiffle on linux, ~/Library/Application
+        // Support/whiffle on darwin) rather than the checkout: the hub's own
+        // boot migration (see packages/hub/src/index.ts) carries an existing
+        // in-tree database there the first time it finds one.
+        [WHIFFLE_ENV.dbPath]: DEFAULT_DB_PATH, // ~/.local/share/whiffle or ~/Library/Application Support/whiffle
+      },
+      workingDirectory: ROOT,
+      after: ["network-online.target"],
+      wants: [],
+      restartOnSuccess: true,
+      restartSec: 2,
+      check: (): undefined => {
+        if (!existsSync(HUB_ENTRY)) {
+          throw new ServiceError(
+            `no hub at ${HUB_ENTRY} — is ${ROOT} a whiffle checkout?`
+          );
+        }
+      },
+      probe: probeHub,
     },
-    workingDirectory: ROOT,
-    after: ['network-online.target'],
-    wants: [],
-    restartOnSuccess: true,
-    restartSec: 2,
-    check: () => {
-      if (!existsSync(HUB_ENTRY)) {
-        throw new ServiceError(`no hub at ${HUB_ENTRY} — is ${ROOT} a whiffle checkout?`);
-      }
-      return undefined;
+
+    dashboard: {
+      id: "dashboard",
+      mode: "prod",
+      description: "Whiffle dashboard",
+      command: [process.execPath, DASHBOARD_ENTRY],
+      environment: { PORT: DASHBOARD_PORT, HOST: DASHBOARD_HOST },
+      workingDirectory: ROOT,
+      after: [unitName("hub")],
+      wants: [unitName("hub")],
+      restartOnSuccess: true,
+      restartSec: 2,
+      // A missing build is a build away, so the unit goes in either way and says
+      // what is left to do — refusing here would only mean installing twice.
+      //
+      // What is checked is the BUILD, not the entry: the entry is `serve.js`, a
+      // checked-in file that is always present, and the thing that can actually
+      // be absent is the `build/handler.js` it imports.
+      check: () =>
+        existsSync(DASHBOARD_BUILD)
+          ? undefined
+          : `no dashboard build at ${DASHBOARD_BUILD}, so its service will restart until there is one.\nMake it with \`bun run --filter '@whiffle/dashboard' build\`.`,
+      probe: probeDashboard,
     },
-    probe: probeHub,
-  },
 
-  dashboard: {
-    id: 'dashboard',
-    mode: 'prod',
-    description: 'Whiffle dashboard',
-    command: [process.execPath, DASHBOARD_ENTRY],
-    environment: { PORT: DASHBOARD_PORT, HOST: DASHBOARD_HOST },
-    workingDirectory: ROOT,
-    after: [unitName('hub')],
-    wants: [unitName('hub')],
-    restartOnSuccess: true,
-    restartSec: 2,
-    // A missing build is a build away, so the unit goes in either way and says
-    // what is left to do — refusing here would only mean installing twice.
-    //
-    // What is checked is the BUILD, not the entry: the entry is `serve.js`, a
-    // checked-in file that is always present, and the thing that can actually
-    // be absent is the `build/handler.js` it imports.
-    check: () =>
-      existsSync(DASHBOARD_BUILD)
-        ? undefined
-        : `no dashboard build at ${DASHBOARD_BUILD}, so its service will restart until there is one.\nMake it with \`bun run --filter '@whiffle/dashboard' build\`.`,
-    probe: probeDashboard,
-  },
-
-  /**
-   * The per-machine process keeper. It is listed before the daemon because the
-   * daemon dials it; under service management the daemon must never spawn one
-   * itself (design §11 — a self-spawned sessiond lands in the *agent's* cgroup
-   * and dies with the next agent restart).
-   *
-   * `KillMode` is deliberately left at systemd's default of `control-group`:
-   * this is the one unit whose children must die with it. sessiond holds their
-   * pipe ends, so a dead sessiond leaves claude processes that nobody can read,
-   * write to, or reattach — orphans still burning tokens against a full, unread
-   * stdout pipe, which is strictly worse than dead children. The cgroup kill is
-   * also what makes recovery simple: systemd tears down the remainder, the
-   * fresh sessiond starts on a new epoch with an empty register, and `restore()`
-   * runs. `whiffle-agent.service` needs no KillMode tuning at all once the
-   * children live over here — its restart is free by construction. So
-   * {@link unit} emits no `KillMode=` for anybody, and that absence is the
-   * decision, not an oversight.
-   */
-  sessiond: {
-    id: 'sessiond',
-    mode: 'prod',
-    description: 'Whiffle sessiond',
-    command: [process.execPath, SESSIOND_ENTRY],
-    environment: {},
-    // Not the checkout: sessiond spawns children with a cwd the agent hands it
-    // per child, and nothing it does resolves against its own.
-    workingDirectory: homedir(),
-    // No hub, no network: sessiond talks to one unix socket on this machine and
-    // to the processes it owns. It is the one service that can come up alone.
-    after: [],
-    wants: [],
-    // Draining on SIGTERM and exiting 0 is sessiond doing as it was told; only a
-    // crash is worth restarting for (design §11: `Restart=on-failure`).
-    restartOnSuccess: false,
-    restartSec: 2,
-    check: () => {
-      if (!existsSync(SESSIOND_ENTRY)) {
-        throw new ServiceError(`no sessiond at ${SESSIOND_ENTRY} — is ${ROOT} a whiffle checkout?`);
-      }
-      return undefined;
-    },
-    probe: probeSessiond,
-  },
-
-  agent: {
-    id: 'agent',
-    mode: 'prod',
-    description: 'Whiffle agent',
     /**
-     * This same CLI, `up`, under the same Bun that is running right now.
-     * Installing from a checkout therefore installs that checkout, which is
-     * what someone testing a branch means by it.
+     * The per-machine process keeper. It is listed before the daemon because the
+     * daemon dials it; under service management the daemon must never spawn one
+     * itself (design §11 — a self-spawned sessiond lands in the *agent's* cgroup
+     * and dies with the next agent restart).
+     *
+     * `KillMode` is deliberately left at systemd's default of `control-group`:
+     * this is the one unit whose children must die with it. sessiond holds their
+     * pipe ends, so a dead sessiond leaves claude processes that nobody can read,
+     * write to, or reattach — orphans still burning tokens against a full, unread
+     * stdout pipe, which is strictly worse than dead children. The cgroup kill is
+     * also what makes recovery simple: systemd tears down the remainder, the
+     * fresh sessiond starts on a new epoch with an empty register, and `restore()`
+     * runs. `whiffle-agent.service` needs no KillMode tuning at all once the
+     * children live over here — its restart is free by construction. So
+     * {@link unit} emits no `KillMode=` for anybody, and that absence is the
+     * decision, not an oversight.
      */
-    command: [process.execPath, layout.cliEntry, 'up'],
-    environment: {},
-    workingDirectory: homedir(),
-    // The hub is soft: the daemon reconnects with backoff and works through an
-    // outage. sessiond is NOT — since the claude bridge became the only spawn
-    // path (C7: no flag, no in-process fallback), a daemon without it is up and
-    // unable to start a single session, failing one spawn at a time. That is
-    // the quiet failure this build exists to remove, so sessiond is
-    // `Requires=`: if it cannot start, the agent does not either, and systemd
-    // says why in one place instead of the operator finding out per session.
-    after: [unitName('hub'), unitName('sessiond')],
-    wants: [unitName('hub')],
-    requires: [unitName('sessiond')],
-    restartOnSuccess: false,
-    restartSec: 5,
-    launchAgentNote: [
-      'A LaunchAgent runs inside your desktop session, so it can read the login',
-      'keychain Claude Code keeps its credentials in. No token needed.',
-    ],
-    probe: probeAgent,
-  },
+    sessiond: {
+      id: "sessiond",
+      mode: "prod",
+      description: "Whiffle sessiond",
+      command: [process.execPath, SESSIOND_ENTRY],
+      environment: {},
+      // Not the checkout: sessiond spawns children with a cwd the agent hands it
+      // per child, and nothing it does resolves against its own.
+      workingDirectory: homedir(),
+      // No hub, no network: sessiond talks to one unix socket on this machine and
+      // to the processes it owns. It is the one service that can come up alone.
+      after: [],
+      wants: [],
+      // Draining on SIGTERM and exiting 0 is sessiond doing as it was told; only a
+      // crash is worth restarting for (design §11: `Restart=on-failure`).
+      restartOnSuccess: false,
+      restartSec: 2,
+      check: (): undefined => {
+        if (!existsSync(SESSIOND_ENTRY)) {
+          throw new ServiceError(
+            `no sessiond at ${SESSIOND_ENTRY} — is ${ROOT} a whiffle checkout?`
+          );
+        }
+      },
+      probe: probeSessiond,
+    },
+
+    agent: {
+      id: "agent",
+      mode: "prod",
+      description: "Whiffle agent",
+      /**
+       * This same CLI, `up`, under the same Bun that is running right now.
+       * Installing from a checkout therefore installs that checkout, which is
+       * what someone testing a branch means by it.
+       */
+      command: [process.execPath, layout.cliEntry, "up"],
+      environment: {},
+      workingDirectory: homedir(),
+      // The hub is soft: the daemon reconnects with backoff and works through an
+      // outage. sessiond is NOT — since the claude bridge became the only spawn
+      // path (C7: no flag, no in-process fallback), a daemon without it is up and
+      // unable to start a single session, failing one spawn at a time. That is
+      // the quiet failure this build exists to remove, so sessiond is
+      // `Requires=`: if it cannot start, the agent does not either, and systemd
+      // says why in one place instead of the operator finding out per session.
+      after: [unitName("hub"), unitName("sessiond")],
+      wants: [unitName("hub")],
+      requires: [unitName("sessiond")],
+      restartOnSuccess: false,
+      restartSec: 5,
+      launchAgentNote: [
+        "A LaunchAgent runs inside your desktop session, so it can read the login",
+        "keychain Claude Code keeps its credentials in. No token needed.",
+      ],
+      probe: probeAgent,
+    },
   };
 };
 
@@ -450,32 +493,48 @@ const SERVICES = servicesFor(HERE);
  */
 // sessiond is absent for the same reason and more sharply: restarting it kills
 // every harness child in its cgroup, so a source edit must never bounce it.
-const devFor = (layout: Layout): Partial<Record<ServiceId, Partial<ServiceSpec>>> => {
-  const { hubEntry: HUB_ENTRY, dashboardDir: DASHBOARD_DIR, dashboardVite: DASHBOARD_VITE } =
-    layout;
+const devFor = (
+  layout: Layout
+): Partial<Record<ServiceId, Partial<ServiceSpec>>> => {
+  const {
+    hubEntry: HUB_ENTRY,
+    dashboardDir: DASHBOARD_DIR,
+    dashboardVite: DASHBOARD_VITE,
+  } = layout;
   return {
-  hub: {
-    command: [process.execPath, '--watch', HUB_ENTRY],
-  },
-  dashboard: {
-    // vite reads its config out of the working directory, which is the app, not
-    // the workspace root; `--port`/`--host` then override what that config says
-    // so the dev flavour answers where the prod one did. Vite runs under node,
-    // not Bun: under Bun its `ws: true` proxy never completes the upgrade, so
-    // the dashboard socket hangs in CONNECTING and the UI reads as an empty
-    // fleet — node is also what `bun run dev` always gave it via the shebang.
-    command: [Bun.which('node') ?? 'node', DASHBOARD_VITE, 'dev', '--port', DASHBOARD_PORT, '--host', DASHBOARD_HOST],
-    workingDirectory: DASHBOARD_DIR,
-    check: () => {
-      if (!existsSync(DASHBOARD_VITE)) {
-        throw new ServiceError(`no vite at ${DASHBOARD_VITE} — run \`bun install\` in ${ROOT} first.`);
-      }
-      if (!Bun.which('node')) {
-        throw new ServiceError(`vite's dev server needs node on PATH, and there is none.`);
-      }
-      return undefined;
+    hub: {
+      command: [process.execPath, "--watch", HUB_ENTRY],
     },
-  },
+    dashboard: {
+      // vite reads its config out of the working directory, which is the app, not
+      // the workspace root; `--port`/`--host` then override what that config says
+      // so the dev flavour answers where the prod one did. Vite runs under node,
+      // not Bun: under Bun its `ws: true` proxy never completes the upgrade, so
+      // the dashboard socket hangs in CONNECTING and the UI reads as an empty
+      // fleet — node is also what `bun run dev` always gave it via the shebang.
+      command: [
+        Bun.which("node") ?? "node",
+        DASHBOARD_VITE,
+        "dev",
+        "--port",
+        DASHBOARD_PORT,
+        "--host",
+        DASHBOARD_HOST,
+      ],
+      workingDirectory: DASHBOARD_DIR,
+      check: (): undefined => {
+        if (!existsSync(DASHBOARD_VITE)) {
+          throw new ServiceError(
+            `no vite at ${DASHBOARD_VITE} — run \`bun install\` in ${ROOT} first.`
+          );
+        }
+        if (!Bun.which("node")) {
+          throw new ServiceError(
+            `vite's dev server needs node on PATH, and there is none.`
+          );
+        }
+      },
+    },
   };
 };
 
@@ -484,25 +543,36 @@ const DEV = devFor(HERE);
 /** Whether `--dev` makes this service watch its own source. */
 const watches = (id: ServiceId): boolean => id in DEV;
 
-const specFor = (id: ServiceId, mode: ServiceMode, layout: Layout = HERE): ServiceSpec => {
+const specFor = (
+  id: ServiceId,
+  mode: ServiceMode,
+  layout: Layout = HERE
+): ServiceSpec => {
   const services = layout === HERE ? SERVICES : servicesFor(layout);
   const base = services[id];
-  if (mode === 'prod') return base;
+  if (mode === "prod") {
+    return base;
+  }
   // The daemon has no dev flavour to merge, and still carries the mode: it was
   // installed by the same command, and `status` should say so.
   const dev = layout === HERE ? DEV : devFor(layout);
-  return { ...base, ...dev[id], mode, description: `${base.description} (dev)` };
+  return {
+    ...base,
+    ...dev[id],
+    mode,
+    description: `${base.description} (dev)`,
+  };
 };
 
 const environment = (spec: ServiceSpec): [string, string][] =>
   Object.entries({
     PATH: servicePath(),
     ...spec.environment,
-    ...(spec.mode === 'dev' ? { [MODE_ENV]: spec.mode } : {}),
+    ...(spec.mode === "dev" ? { [MODE_ENV]: spec.mode } : {}),
   });
 
 const xml = (value: string): string =>
-  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /**
  * launchd has no ordering: each service is bootstrapped on its own, and the hub
@@ -524,11 +594,15 @@ const orderingComment = (spec: ServiceSpec): string => {
     .map((target) => /^whiffle-(.+)\.service$/.exec(target)?.[1])
     .filter((id): id is string => id !== undefined && isServiceId(id))
     .map((id) => label(id as ServiceId));
-  if (siblings.length === 0) return '';
-  return `\n  <!-- ordering: starts after ${siblings.join(', ')} — launchd has no ordering, so this is recorded, not enforced -->`;
+  if (siblings.length === 0) {
+    return "";
+  }
+  return `\n  <!-- ordering: starts after ${siblings.join(", ")} — launchd has no ordering, so this is recorded, not enforced -->`;
 };
 
-const plist = (spec: ServiceSpec): string => `<?xml version="1.0" encoding="UTF-8"?>
+const plist = (
+  spec: ServiceSpec
+): string => `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>${orderingComment(spec)}
@@ -536,14 +610,14 @@ const plist = (spec: ServiceSpec): string => `<?xml version="1.0" encoding="UTF-
   <string>${xml(label(spec.id))}</string>
   <key>ProgramArguments</key>
   <array>
-${spec.command.map((argument) => `    <string>${xml(argument)}</string>`).join('\n')}
+${spec.command.map((argument) => `    <string>${xml(argument)}</string>`).join("\n")}
   </array>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
 ${
   spec.restartOnSuccess
-    ? '  <true/>'
+    ? "  <true/>"
     : `  <dict>
     <key>SuccessfulExit</key>
     <false/>
@@ -552,8 +626,11 @@ ${
   <key>EnvironmentVariables</key>
   <dict>
 ${environment(spec)
-  .map(([key, value]) => `    <key>${xml(key)}</key>\n    <string>${xml(value)}</string>`)
-  .join('\n')}
+  .map(
+    ([key, value]) =>
+      `    <key>${xml(key)}</key>\n    <string>${xml(value)}</string>`
+  )
+  .join("\n")}
   </dict>
   <key>WorkingDirectory</key>
   <string>${xml(spec.workingDirectory)}</string>
@@ -578,16 +655,16 @@ ${[
   ...(spec.requires ?? []).map((target) => `Requires=${target}`),
   ...spec.wants.map((target) => `Wants=${target}`),
   ...spec.after.map((target) => `After=${target}`),
-  'StartLimitIntervalSec=0',
-].join('\n')}
+  "StartLimitIntervalSec=0",
+].join("\n")}
 
 [Service]
-ExecStart=${spec.command.join(' ')}
+ExecStart=${spec.command.join(" ")}
 WorkingDirectory=${spec.workingDirectory}
 ${environment(spec)
   .map(([key, value]) => `Environment=${key}=${value}`)
-  .join('\n')}
-Restart=${spec.restartOnSuccess ? 'always' : 'on-failure'}
+  .join("\n")}
+Restart=${spec.restartOnSuccess ? "always" : "on-failure"}
 RestartSec=${spec.restartSec}
 
 [Install]
@@ -596,8 +673,13 @@ WantedBy=default.target
 
 const run = async (argv: string[]) => Bun.$`${argv}`.quiet().nothrow();
 
-const failed = (what: string, result: Awaited<ReturnType<typeof run>>): ServiceError =>
-  new ServiceError(`${what} failed: ${result.stderr.toString().trim() || `exit ${result.exitCode}`}`);
+const failed = (
+  what: string,
+  result: Awaited<ReturnType<typeof run>>
+): ServiceError =>
+  new ServiceError(
+    `${what} failed: ${result.stderr.toString().trim() || `exit ${result.exitCode}`}`
+  );
 
 const guiDomain = (): string => `gui/${process.getuid?.() ?? 0}`;
 
@@ -608,11 +690,13 @@ const guiDomain = (): string => `gui/${process.getuid?.() ?? 0}`;
  */
 const launchctlHas = async (subcommand: string): Promise<boolean> => {
   // `launchctl help` writes its subcommand list to stderr on some releases.
-  const help = await run(['launchctl', 'help']);
-  return `${help.stdout.toString()}${help.stderr.toString()}`.includes(subcommand);
+  const help = await run(["launchctl", "help"]);
+  return `${help.stdout.toString()}${help.stderr.toString()}`.includes(
+    subcommand
+  );
 };
 
-const hasBootstrap = (): Promise<boolean> => launchctlHas('bootstrap');
+const hasBootstrap = (): Promise<boolean> => launchctlHas("bootstrap");
 
 /**
  * A service definition someone else can rewrite is a service someone else can
@@ -636,16 +720,25 @@ const loadLaunchAgent = async (
 ): Promise<void> => {
   const path = launchAgentPath(spec.id);
   // launchd refuses to bootstrap a label it already knows.
-  await run(['launchctl', 'bootout', `${guiDomain()}/${label(spec.id)}`]);
+  await run(["launchctl", "bootout", `${guiDomain()}/${label(spec.id)}`]);
 
   if (bootstrap) {
-    const bootstrapped = await run(['launchctl', 'bootstrap', guiDomain(), path]);
-    if (bootstrapped.exitCode !== 0) throw failed('launchctl bootstrap', bootstrapped);
+    const bootstrapped = await run([
+      "launchctl",
+      "bootstrap",
+      guiDomain(),
+      path,
+    ]);
+    if (bootstrapped.exitCode !== 0) {
+      throw failed("launchctl bootstrap", bootstrapped);
+    }
     note(`bootstrapped into ${guiDomain()}`);
   } else {
-    const loaded = await run(['launchctl', 'load', '-w', path]);
-    if (loaded.exitCode !== 0) throw failed('launchctl load', loaded);
-    note('loaded (legacy launchctl)');
+    const loaded = await run(["launchctl", "load", "-w", path]);
+    if (loaded.exitCode !== 0) {
+      throw failed("launchctl load", loaded);
+    }
+    note("loaded (legacy launchctl)");
   }
 };
 
@@ -656,7 +749,9 @@ const installLaunchAgents = async (
   const bootstrap = await hasBootstrap();
 
   for (const [index, spec] of specs.entries()) {
-    if (index > 0) note('');
+    if (index > 0) {
+      note("");
+    }
     const path = launchAgentPath(spec.id);
     await writeUnit(path, plist(spec));
     note(`wrote ${path}`);
@@ -665,8 +760,10 @@ const installLaunchAgents = async (
 
     note(`logs ${launchAgentLog(spec.id)}`);
     if (spec.launchAgentNote) {
-      note('');
-      for (const line of spec.launchAgentNote) note(line);
+      note("");
+      for (const line of spec.launchAgentNote) {
+        note(line);
+      }
     }
   }
 };
@@ -678,9 +775,14 @@ const uninstallLaunchAgents = async (
   const bootstrap = await hasBootstrap();
   for (const spec of specs) {
     const path = launchAgentPath(spec.id);
-    if (bootstrap) await run(['launchctl', 'bootout', `${guiDomain()}/${label(spec.id)}`]);
-    else await run(['launchctl', 'unload', '-w', path]);
-    await Bun.file(path).delete().catch(() => {});
+    if (bootstrap) {
+      await run(["launchctl", "bootout", `${guiDomain()}/${label(spec.id)}`]);
+    } else {
+      await run(["launchctl", "unload", "-w", path]);
+    }
+    await Bun.file(path)
+      .delete()
+      .catch(() => {});
     note(`removed ${path}`);
   }
 };
@@ -691,11 +793,15 @@ const uninstallLaunchAgents = async (
  * fix. Only worth saying when it is actually off.
  */
 const lingerHint = async (note: (line: string) => void): Promise<void> => {
-  const user = process.env.USER ?? '';
-  const shown = await run(['loginctl', 'show-user', user, '--property=Linger']);
-  if (shown.exitCode !== 0 || shown.stdout.toString().includes('Linger=yes')) return;
-  note('');
-  note(`This user has no persistent session, so the services stop at logout. Fix with:`);
+  const user = process.env.USER ?? "";
+  const shown = await run(["loginctl", "show-user", user, "--property=Linger"]);
+  if (shown.exitCode !== 0 || shown.stdout.toString().includes("Linger=yes")) {
+    return;
+  }
+  note("");
+  note(
+    "This user has no persistent session, so the services stop at logout. Fix with:"
+  );
   note(`  sudo loginctl enable-linger ${user}`);
 };
 
@@ -710,12 +816,22 @@ const installSystemdUnits = async (
 
   // Once for the set: systemd re-reads every file it was handed, and enabling a
   // unit it has not read yet is what makes an install look like it did nothing.
-  const reloaded = await run(['systemctl', '--user', 'daemon-reload']);
-  if (reloaded.exitCode !== 0) throw failed('systemctl --user daemon-reload', reloaded);
+  const reloaded = await run(["systemctl", "--user", "daemon-reload"]);
+  if (reloaded.exitCode !== 0) {
+    throw failed("systemctl --user daemon-reload", reloaded);
+  }
 
   for (const spec of specs) {
-    const enabled = await run(['systemctl', '--user', 'enable', '--now', unitName(spec.id)]);
-    if (enabled.exitCode !== 0) throw failed('systemctl --user enable --now', enabled);
+    const enabled = await run([
+      "systemctl",
+      "--user",
+      "enable",
+      "--now",
+      unitName(spec.id),
+    ]);
+    if (enabled.exitCode !== 0) {
+      throw failed("systemctl --user enable --now", enabled);
+    }
     note(`enabled and started ${unitName(spec.id)}`);
     note(`logs journalctl --user -u ${unitName(spec.id)} -f`);
   }
@@ -728,11 +844,13 @@ const uninstallSystemdUnits = async (
   note: (line: string) => void
 ): Promise<void> => {
   for (const spec of specs) {
-    await run(['systemctl', '--user', 'disable', '--now', unitName(spec.id)]);
-    await Bun.file(systemdPath(spec.id)).delete().catch(() => {});
+    await run(["systemctl", "--user", "disable", "--now", unitName(spec.id)]);
+    await Bun.file(systemdPath(spec.id))
+      .delete()
+      .catch(() => {});
     note(`removed ${systemdPath(spec.id)}`);
   }
-  await run(['systemctl', '--user', 'daemon-reload']);
+  await run(["systemctl", "--user", "daemon-reload"]);
 };
 
 /** What the hub reports for one machine's daemon. */
@@ -747,34 +865,35 @@ interface BusyReport {
  * could not be asked at all — it is down, or it is old enough not to have the
  * route. A hub that cannot answer is never read as an idle one.
  */
-const agentBusy = async (): Promise<number | 'unknown'> => {
+const agentBusy = async (): Promise<number | "unknown"> => {
   // Imported here rather than at the top so no other verb pays for the agent SDK.
-  const { machineId } = await import('@whiffle/agent');
+  const { machineId } = await import("@whiffle/agent");
   const report = await probeJson<BusyReport>(
     `${hubOrigin()}/api/agents/${await machineId()}/busy`
   );
-  return typeof report?.busy === 'number' ? report.busy : 'unknown';
+  return typeof report?.busy === "number" ? report.busy : "unknown";
 };
 
 export interface RestartRequest {
   /** What {@link agentBusy} found, or `0` for a service that hosts no sessions. */
-  readonly busy: number | 'unknown';
-  readonly whenIdle: boolean;
+  readonly busy: number | "unknown";
   readonly force: boolean;
   /**
    * Which session-hosting service is being restarted. Only the wording of a
    * refusal depends on it — the gate itself is the same one, which is the
    * point: sessiond earns the daemon's protection by going through here.
    */
-  readonly id?: 'agent' | 'sessiond';
+  readonly id?: "agent" | "sessiond";
+  readonly whenIdle: boolean;
 }
 
 export type RestartDecision =
-  | { readonly kind: 'go' }
-  | { readonly kind: 'wait'; readonly busy: number }
-  | { readonly kind: 'refuse'; readonly reason: string };
+  | { readonly kind: "go" }
+  | { readonly kind: "wait"; readonly busy: number }
+  | { readonly kind: "refuse"; readonly reason: string };
 
-const sessions = (count: number): string => `${count} session${count === 1 ? '' : 's'}`;
+const sessions = (count: number): string =>
+  `${count} session${count === 1 ? "" : "s"}`;
 
 /**
  * What restarting each session-hosting service actually costs, said in the
@@ -782,9 +901,10 @@ const sessions = (count: number): string => `${count} session${count === 1 ? '' 
  * relaying, while sessiond takes the harness children down with it — the
  * `KillMode=control-group` on its own unit, doing exactly what it is for.
  */
-const RESTART_COST: Record<'agent' | 'sessiond', string> = {
-  agent: 'a restart ends that work',
-  sessiond: 'a restart kills the harness children in its cgroup and ends that work',
+const RESTART_COST: Record<"agent" | "sessiond", string> = {
+  agent: "a restart ends that work",
+  sessiond:
+    "a restart kills the harness children in its cgroup and ends that work",
 };
 
 /**
@@ -797,19 +917,25 @@ export const restartDecision = ({
   busy,
   whenIdle,
   force,
-  id = 'agent',
+  id = "agent",
 }: RestartRequest): RestartDecision => {
-  if (force) return { kind: 'go' };
-  if (busy === 'unknown') {
+  if (force) {
+    return { kind: "go" };
+  }
+  if (busy === "unknown") {
     return {
-      kind: 'refuse',
+      kind: "refuse",
       reason: `could not ask the hub whether this machine is busy, and restarting the ${id} blind ends whatever turn is in flight. Restart anyway with --force.`,
     };
   }
-  if (busy === 0) return { kind: 'go' };
-  if (whenIdle) return { kind: 'wait', busy };
+  if (busy === 0) {
+    return { kind: "go" };
+  }
+  if (whenIdle) {
+    return { kind: "wait", busy };
+  }
   return {
-    kind: 'refuse',
+    kind: "refuse",
     reason: `the ${id} on this machine is mid-turn in ${sessions(busy)}, and ${RESTART_COST[id]}. Wait for it to finish with --when-idle, or restart anyway with --force.`,
   };
 };
@@ -824,11 +950,17 @@ const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
  * count is its own line.
  */
 const waiting = (line: string): void => {
-  if (process.stdout.isTTY) process.stdout.write(`\r\u001b[2K${line}`);
-  else console.log(line);
+  if (process.stdout.isTTY) {
+    process.stdout.write(`\r\u001b[2K${line}`);
+  } else {
+    console.log(line);
+  }
 };
 
-const waitForIdle = async (busy: number, note: (line: string) => void): Promise<void> => {
+const waitForIdle = async (
+  busy: number,
+  note: (line: string) => void
+): Promise<void> => {
   const deadline = Date.now() + IDLE_TIMEOUT_MS;
   let outstanding = busy;
   try {
@@ -837,12 +969,14 @@ const waitForIdle = async (busy: number, note: (line: string) => void): Promise<
       await Bun.sleep(IDLE_POLL_MS);
       const now = await agentBusy();
       // The hub going away mid-wait is the same not-knowing as never reaching it.
-      if (now === 'unknown') {
+      if (now === "unknown") {
         throw new ServiceError(
-          'the hub stopped answering while waiting, so the agent was left alone. Restart anyway with --force.'
+          "the hub stopped answering while waiting, so the agent was left alone. Restart anyway with --force."
         );
       }
-      if (now === 0) break;
+      if (now === 0) {
+        break;
+      }
       outstanding = now;
       if (Date.now() > deadline) {
         throw new ServiceError(
@@ -852,9 +986,11 @@ const waitForIdle = async (busy: number, note: (line: string) => void): Promise<
     }
   } finally {
     // Whatever happened, the line that was rewriting itself is finished with.
-    if (process.stdout.isTTY) process.stdout.write('\n');
+    if (process.stdout.isTTY) {
+      process.stdout.write("\n");
+    }
   }
-  note('every session finished');
+  note("every session finished");
 };
 
 /**
@@ -863,7 +999,7 @@ const waitForIdle = async (busy: number, note: (line: string) => void): Promise<
  * the daemon is relaying live turns, and sessiond owns the processes producing
  * them.
  */
-const HOSTS_SESSIONS: readonly ServiceId[] = ['sessiond', 'agent'];
+const HOSTS_SESSIONS: readonly ServiceId[] = ["sessiond", "agent"];
 
 /**
  * Asked before a session-hosting service is restarted. One machine's busy count
@@ -872,23 +1008,25 @@ const HOSTS_SESSIONS: readonly ServiceId[] = ['sessiond', 'agent'];
  */
 const clearToRestart = async (
   spec: ServiceSpec,
-  { whenIdle, force }: Pick<RestartRequest, 'whenIdle' | 'force'>,
+  { whenIdle, force }: Pick<RestartRequest, "whenIdle" | "force">,
   note: (line: string) => void
 ): Promise<void> => {
-  if (!HOSTS_SESSIONS.includes(spec.id)) return;
+  if (!HOSTS_SESSIONS.includes(spec.id)) {
+    return;
+  }
   const busy = await agentBusy();
   const decision = restartDecision({
     busy,
     whenIdle,
     force,
-    id: spec.id as 'agent' | 'sessiond',
+    id: spec.id as "agent" | "sessiond",
   });
   switch (decision.kind) {
-    case 'go':
+    case "go":
       return;
-    case 'refuse':
+    case "refuse":
       throw new ServiceError(decision.reason);
-    case 'wait':
+    case "wait":
       return waitForIdle(decision.busy, note);
   }
 };
@@ -898,11 +1036,20 @@ const restartLaunchAgent = async (
   note: (line: string) => void
 ): Promise<void> => {
   if (!existsSync(launchAgentPath(spec.id))) {
-    throw new ServiceError(`${spec.id} is not installed — \`whiffle service install ${spec.id}\` first.`);
+    throw new ServiceError(
+      `${spec.id} is not installed — \`whiffle service install ${spec.id}\` first.`
+    );
   }
-  if (await launchctlHas('kickstart')) {
-    const kicked = await run(['launchctl', 'kickstart', '-k', `${guiDomain()}/${label(spec.id)}`]);
-    if (kicked.exitCode !== 0) throw failed('launchctl kickstart -k', kicked);
+  if (await launchctlHas("kickstart")) {
+    const kicked = await run([
+      "launchctl",
+      "kickstart",
+      "-k",
+      `${guiDomain()}/${label(spec.id)}`,
+    ]);
+    if (kicked.exitCode !== 0) {
+      throw failed("launchctl kickstart -k", kicked);
+    }
   } else {
     await loadLaunchAgent(spec, await hasBootstrap(), note);
   }
@@ -914,10 +1061,19 @@ const restartSystemdUnit = async (
   note: (line: string) => void
 ): Promise<void> => {
   if (!existsSync(systemdPath(spec.id))) {
-    throw new ServiceError(`${spec.id} is not installed — \`whiffle service install ${spec.id}\` first.`);
+    throw new ServiceError(
+      `${spec.id} is not installed — \`whiffle service install ${spec.id}\` first.`
+    );
   }
-  const restarted = await run(['systemctl', '--user', 'restart', unitName(spec.id)]);
-  if (restarted.exitCode !== 0) throw failed('systemctl --user restart', restarted);
+  const restarted = await run([
+    "systemctl",
+    "--user",
+    "restart",
+    unitName(spec.id),
+  ]);
+  if (restarted.exitCode !== 0) {
+    throw failed("systemctl --user restart", restarted);
+  }
   note(`restarted ${unitName(spec.id)}`);
 };
 
@@ -925,77 +1081,122 @@ const restartSystemdUnit = async (
  * The mode a service was installed in, read back from the unit it was installed
  * as — nothing else remembers it.
  */
-const installedMode = async (path: string): Promise<ServiceMode | undefined> => {
+const installedMode = async (
+  path: string
+): Promise<ServiceMode | undefined> => {
   const file = Bun.file(path);
-  if (!(await file.exists())) return undefined;
-  return (await file.text()).includes(MODE_ENV) ? 'dev' : 'prod';
+  if (!(await file.exists())) {
+    return undefined;
+  }
+  return (await file.text()).includes(MODE_ENV) ? "dev" : "prod";
 };
 
 const modeLine = async (spec: ServiceSpec, path: string): Promise<string> => {
   const installed = await installedMode(path);
-  if (!installed) return 'not installed';
-  if (installed === 'prod') return 'prod';
-  return watches(spec.id) ? 'dev (watching)' : 'dev (never watched)';
+  if (!installed) {
+    return "not installed";
+  }
+  if (installed === "prod") {
+    return "prod";
+  }
+  return watches(spec.id) ? "dev (watching)" : "dev (never watched)";
 };
 
 const launchAgentStatus = async (
   spec: ServiceSpec,
   note: (line: string) => void
 ): Promise<void> => {
-  const listed = await run(['launchctl', 'list', label(spec.id)]);
+  const listed = await run(["launchctl", "list", label(spec.id)]);
   const pid = /"PID"\s*=\s*(\d+)/.exec(listed.stdout.toString())?.[1];
   note(`service  ${spec.id} (${label(spec.id)})`);
   note(`unit     ${launchAgentPath(spec.id)}`);
   note(
-    `state    ${listed.exitCode !== 0 ? 'not loaded' : pid ? `running (pid ${pid})` : 'loaded, not running'}`
+    `state    ${listed.exitCode === 0 ? (pid ? `running (pid ${pid})` : "loaded, not running") : "not loaded"}`
   );
   note(`mode     ${await modeLine(spec, launchAgentPath(spec.id))}`);
   const live = await spec.probe();
-  if (live) note(`live     ${live}`);
+  if (live) {
+    note(`live     ${live}`);
+  }
   note(`logs     ${launchAgentLog(spec.id)}`);
 };
 
-const systemdStatus = async (spec: ServiceSpec, note: (line: string) => void): Promise<void> => {
-  const active = await run(['systemctl', '--user', 'is-active', unitName(spec.id)]);
-  const enabled = await run(['systemctl', '--user', 'is-enabled', unitName(spec.id)]);
+const systemdStatus = async (
+  spec: ServiceSpec,
+  note: (line: string) => void
+): Promise<void> => {
+  const active = await run([
+    "systemctl",
+    "--user",
+    "is-active",
+    unitName(spec.id),
+  ]);
+  const enabled = await run([
+    "systemctl",
+    "--user",
+    "is-enabled",
+    unitName(spec.id),
+  ]);
   note(`service  ${spec.id} (${unitName(spec.id)})`);
   note(`unit     ${systemdPath(spec.id)}`);
-  note(`state    ${active.stdout.toString().trim() || 'unknown'} (${enabled.stdout.toString().trim() || 'not installed'})`);
+  note(
+    `state    ${active.stdout.toString().trim() || "unknown"} (${enabled.stdout.toString().trim() || "not installed"})`
+  );
   note(`mode     ${await modeLine(spec, systemdPath(spec.id))}`);
   const live = await spec.probe();
-  if (live) note(`live     ${live}`);
+  if (live) {
+    note(`live     ${live}`);
+  }
   note(`logs     journalctl --user -u ${unitName(spec.id)} -f`);
 };
 
 /** How many lines of a service's history are worth reading without asking for more. */
 const LOG_TAIL_LINES = 200;
 
-const launchAgentLogs = async (spec: ServiceSpec, follow: boolean): Promise<void> => {
+const launchAgentLogs = async (
+  spec: ServiceSpec,
+  follow: boolean
+): Promise<void> => {
   const path = launchAgentLog(spec.id);
   if (!(await Bun.file(path).exists())) {
     throw new ServiceError(`no log yet at ${path} — is the service installed?`);
   }
-  const tail = follow ? ['tail', '-n', `${LOG_TAIL_LINES}`, '-f'] : ['tail', '-n', `${LOG_TAIL_LINES}`];
-  await Bun.spawn([...tail, path], { stdio: ['inherit', 'inherit', 'inherit'] }).exited;
+  const tail = follow
+    ? ["tail", "-n", `${LOG_TAIL_LINES}`, "-f"]
+    : ["tail", "-n", `${LOG_TAIL_LINES}`];
+  await Bun.spawn([...tail, path], { stdio: ["inherit", "inherit", "inherit"] })
+    .exited;
 };
 
-const systemdLogs = async (spec: ServiceSpec, follow: boolean): Promise<void> => {
-  const journal = ['journalctl', '--user', '-u', unitName(spec.id), '-n', `${LOG_TAIL_LINES}`];
-  if (follow) journal.push('-f');
-  await Bun.spawn(journal, { stdio: ['inherit', 'inherit', 'inherit'] }).exited;
+const systemdLogs = async (
+  spec: ServiceSpec,
+  follow: boolean
+): Promise<void> => {
+  const journal = [
+    "journalctl",
+    "--user",
+    "-u",
+    unitName(spec.id),
+    "-n",
+    `${LOG_TAIL_LINES}`,
+  ];
+  if (follow) {
+    journal.push("-f");
+  }
+  await Bun.spawn(journal, { stdio: ["inherit", "inherit", "inherit"] }).exited;
 };
 
 export interface ServiceOptions {
+  follow: boolean;
+  /** `restart` only: interrupt them, or restart without knowing whether it will. */
+  force: boolean;
   /** Which services the verb acts on. `logs` reads exactly one. */
   ids: readonly ServiceId[];
   /** Which flavour `install` writes. Every other verb reads the mode off disk. */
   mode: ServiceMode;
-  follow: boolean;
+  note: (line: string) => void;
   /** `restart` only: wait for the daemon's sessions rather than refusing. */
   whenIdle: boolean;
-  /** `restart` only: interrupt them, or restart without knowing whether it will. */
-  force: boolean;
-  note: (line: string) => void;
 }
 
 /**
@@ -1007,42 +1208,62 @@ export const service = async (
   { ids, mode, follow, whenIdle, force, note }: ServiceOptions
 ): Promise<void> => {
   const host = platform();
-  if (host !== 'darwin' && host !== 'linux') {
-    throw new ServiceError(`whiffle service does not know how to manage a service on ${host}`);
+  if (host !== "darwin" && host !== "linux") {
+    throw new ServiceError(
+      `whiffle service does not know how to manage a service on ${host}`
+    );
   }
-  const mac = host === 'darwin';
+  const mac = host === "darwin";
   const specs = ids.map((id) => specFor(id, mode));
 
   switch (action) {
-    case 'install': {
+    case "install": {
       // Every check first, so a refusal costs nothing rather than leaving half
       // the stack installed.
-      const warnings = specs.flatMap((spec) => spec.check?.()?.split('\n') ?? []);
-      for (const line of warnings) note(line);
-      if (warnings.length > 0) note('');
-      return mac ? installLaunchAgents(specs, note) : installSystemdUnits(specs, note);
+      const warnings = specs.flatMap(
+        (spec) => spec.check?.()?.split("\n") ?? []
+      );
+      for (const line of warnings) {
+        note(line);
+      }
+      if (warnings.length > 0) {
+        note("");
+      }
+      return mac
+        ? installLaunchAgents(specs, note)
+        : installSystemdUnits(specs, note);
     }
-    case 'uninstall':
-      return mac ? uninstallLaunchAgents(specs, note) : uninstallSystemdUnits(specs, note);
-    case 'restart':
+    case "uninstall":
+      return mac
+        ? uninstallLaunchAgents(specs, note)
+        : uninstallSystemdUnits(specs, note);
+    case "restart":
       for (const [index, spec] of specs.entries()) {
-        if (index > 0) note('');
+        if (index > 0) {
+          note("");
+        }
         // Asked per service and not up front, so the two that are safe to bounce
         // are already back up by the time the daemon's question is answered.
         await clearToRestart(spec, { whenIdle, force }, note);
-        await (mac ? restartLaunchAgent(spec, note) : restartSystemdUnit(spec, note));
+        await (mac
+          ? restartLaunchAgent(spec, note)
+          : restartSystemdUnit(spec, note));
       }
       return;
-    case 'status':
+    case "status":
       for (const [index, spec] of specs.entries()) {
-        if (index > 0) note('');
+        if (index > 0) {
+          note("");
+        }
         await (mac ? launchAgentStatus(spec, note) : systemdStatus(spec, note));
       }
       return;
-    case 'logs': {
+    case "logs": {
       const [spec] = specs;
       if (!spec || specs.length > 1) {
-        throw new ServiceError(`whiffle service logs reads one service: ${SERVICE_IDS.join(', ')}`);
+        throw new ServiceError(
+          `whiffle service logs reads one service: ${SERVICE_IDS.join(", ")}`
+        );
       }
       return mac ? launchAgentLogs(spec, follow) : systemdLogs(spec, follow);
     }
@@ -1054,7 +1275,7 @@ export const service = async (
  * {@link platform}; the renderer below takes it as an argument so both
  * artefacts can be read — and tested — from either kind of machine.
  */
-export type ServiceInit = 'systemd' | 'launchd';
+export type ServiceInit = "systemd" | "launchd";
 
 /**
  * The exact text `install` would write for a service, without writing it. The
@@ -1072,7 +1293,7 @@ export const serviceDefinition = (
   root?: string
 ): string => {
   const spec = specFor(id, mode, root === undefined ? HERE : layoutFor(root));
-  return init === 'systemd' ? unit(spec) : plist(spec);
+  return init === "systemd" ? unit(spec) : plist(spec);
 };
 
 /**
@@ -1093,19 +1314,23 @@ export interface LedgerEntry {
  * cgroup gives the same guarantee for free, and this file is not consulted.
  */
 export const sessiondLedgerPath = (): string =>
-  join(dirname(sessiondSocket()), 'sessiond-children.json');
+  join(dirname(sessiondSocket()), "sessiond-children.json");
 
-export const readSessiondLedger = async (path = sessiondLedgerPath()): Promise<LedgerEntry[]> => {
+export const readSessiondLedger = async (
+  path = sessiondLedgerPath()
+): Promise<LedgerEntry[]> => {
   const parsed = await Bun.file(path)
     .json()
     .catch(() => undefined);
-  if (!Array.isArray(parsed)) return [];
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
   return parsed.filter(
     (entry): entry is LedgerEntry =>
-      typeof entry === 'object' &&
+      typeof entry === "object" &&
       entry !== null &&
-      typeof (entry as LedgerEntry).pid === 'number' &&
-      typeof (entry as LedgerEntry).startTicks === 'string'
+      typeof (entry as LedgerEntry).pid === "number" &&
+      typeof (entry as LedgerEntry).startTicks === "string"
   );
 };
 
@@ -1124,9 +1349,14 @@ export const writeSessiondLedger = async (
  * after which field 3 is token 0 and field 22 is token 19.
  */
 export const parseProcStartTicks = (stat: string): string | undefined => {
-  const close = stat.lastIndexOf(')');
-  if (close < 0) return undefined;
-  const fields = stat.slice(close + 1).trim().split(/\s+/);
+  const close = stat.lastIndexOf(")");
+  if (close < 0) {
+    return undefined;
+  }
+  const fields = stat
+    .slice(close + 1)
+    .trim()
+    .split(/\s+/);
   return fields[19];
 };
 
@@ -1136,10 +1366,14 @@ export const parseProcStartTicks = (stat: string): string | undefined => {
  * number the kernel hands out again, and killing a recycled one is killing a
  * stranger's process.
  */
-export const processStartMarker = async (pid: number): Promise<string | undefined> => {
-  if (platform() === 'darwin') {
-    const shown = await run(['ps', '-o', 'lstart=', '-p', `${pid}`]);
-    if (shown.exitCode !== 0) return undefined;
+export const processStartMarker = async (
+  pid: number
+): Promise<string | undefined> => {
+  if (platform() === "darwin") {
+    const shown = await run(["ps", "-o", "lstart=", "-p", `${pid}`]);
+    if (shown.exitCode !== 0) {
+      return undefined;
+    }
     return shown.stdout.toString().trim() || undefined;
   }
   const stat = await Bun.file(`/proc/${pid}/stat`)
@@ -1161,7 +1395,9 @@ export const liveOrphans = async (
 ): Promise<LedgerEntry[]> => {
   const alive: LedgerEntry[] = [];
   for (const entry of entries) {
-    if ((await marker(entry.pid)) === entry.startTicks) alive.push(entry);
+    if ((await marker(entry.pid)) === entry.startTicks) {
+      alive.push(entry);
+    }
   }
   return alive;
 };
@@ -1198,17 +1434,23 @@ export const sweepSessiondOrphans = async (
   path = sessiondLedgerPath()
 ): Promise<LedgerEntry[]> => {
   const entries = await readSessiondLedger(path);
-  if (entries.length === 0) return [];
+  if (entries.length === 0) {
+    return [];
+  }
   const orphans = await liveOrphans(entries);
   for (const orphan of orphans) {
-    signalOrphan(orphan, 'SIGTERM');
-    note(`sweeping orphaned child pid ${orphan.pid} left by a previous sessiond`);
+    signalOrphan(orphan, "SIGTERM");
+    note(
+      `sweeping orphaned child pid ${orphan.pid} left by a previous sessiond`
+    );
   }
   if (orphans.length > 0) {
     await Bun.sleep(ORPHAN_GRACE_MS);
     // Re-checked rather than assumed: the pid may have exited on the SIGTERM
     // and been handed straight back out, and the start time is what says so.
-    for (const stubborn of await liveOrphans(orphans)) signalOrphan(stubborn, 'SIGKILL');
+    for (const stubborn of await liveOrphans(orphans)) {
+      signalOrphan(stubborn, "SIGKILL");
+    }
   }
   await Bun.file(path)
     .delete()
@@ -1240,21 +1482,21 @@ export const sweepSessiondOrphans = async (
  * channel agree on a constant, and neither package may depend on the other.
  */
 export const deployRoot = (): string =>
-  readEnv(WHIFFLE_ENV.deployRoot) ?? join(homedir(), '.whiffle', 'app');
+  readEnv(WHIFFLE_ENV.deployRoot) ?? join(homedir(), ".whiffle", "app");
 
 /** The marker that licenses an automatic pull. Its absence is the safety property. */
-export const DEPLOY_MARKER = '.whiffle-deploy';
+export const DEPLOY_MARKER = ".whiffle-deploy";
 
 /** The branch a deployment clone tracks. */
-export const DEPLOY_BRANCH = 'main';
+export const DEPLOY_BRANCH = "main";
 
 /** Written to `<root>/.whiffle-deploy`, read by the daemon's poller. */
 export interface DeployMarker {
-  readonly root: string;
-  readonly origin: string;
   readonly branch: string;
   readonly createdAt: string;
   readonly createdBy: string;
+  readonly origin: string;
+  readonly root: string;
 }
 
 /** One shelled-out step of the init, so a test can watch the sequence. */
@@ -1263,11 +1505,16 @@ export interface DeployStep {
   readonly cwd: string;
 }
 
-export type StepRunner = (step: DeployStep) => Promise<{ ok: boolean; said: string }>;
+export type StepRunner = (
+  step: DeployStep
+) => Promise<{ ok: boolean; said: string }>;
 
 const runStep: StepRunner = async ({ argv, cwd }) => {
   const ran = await Bun.$`${argv}`.cwd(cwd).quiet().nothrow();
-  const said = (ran.stderr.toString().trim() || ran.stdout.toString().trim()).split('\n').slice(-4).join('\n');
+  const said = (ran.stderr.toString().trim() || ran.stdout.toString().trim())
+    .split("\n")
+    .slice(-4)
+    .join("\n");
   return { ok: ran.exitCode === 0, said };
 };
 
@@ -1279,38 +1526,41 @@ export interface RenderedUnit {
 }
 
 export interface DeployInitResult {
-  readonly root: string;
-  readonly origin: string;
   readonly branch: string;
   /** The clone's HEAD after init, short. */
   readonly head: string;
   readonly marker: DeployMarker;
+  readonly origin: string;
+  readonly root: string;
   readonly units: readonly RenderedUnit[];
 }
 
 export interface DeployInitOptions {
-  readonly root?: string;
-  /** The remote to clone. Defaults to this checkout's `origin`. */
-  readonly origin?: string;
   readonly branch?: string;
-  /** Which services this machine runs from the clone. Defaults to all of them. */
-  readonly ids?: readonly ServiceId[];
-  readonly note: (line: string) => void;
-  /**
-   * Injected by the tests. This verb clones, installs, builds and then hands
-   * units to systemd; a test has to be able to prove the *layout* it produces
-   * without spending ten minutes on a build or touching an init system.
-   */
-  readonly run?: StepRunner;
-  /** Injected for the same reason: nothing in a test may reach `systemctl`. */
-  readonly install?: (specs: readonly ServiceSpec[], note: (line: string) => void) => Promise<void>;
   /**
    * Where the fleet's database should end up, and where this checkout's legacy
    * one still sits. Both default to the real paths; named so a test can prove
    * the move without going near the operator's own database.
    */
   readonly dbPath?: string;
+  /** Which services this machine runs from the clone. Defaults to all of them. */
+  readonly ids?: readonly ServiceId[];
+  /** Injected for the same reason: nothing in a test may reach `systemctl`. */
+  readonly install?: (
+    specs: readonly ServiceSpec[],
+    note: (line: string) => void
+  ) => Promise<void>;
   readonly legacyDb?: string;
+  readonly note: (line: string) => void;
+  /** The remote to clone. Defaults to this checkout's `origin`. */
+  readonly origin?: string;
+  readonly root?: string;
+  /**
+   * Injected by the tests. This verb clones, installs, builds and then hands
+   * units to systemd; a test has to be able to prove the *layout* it produces
+   * without spending ten minutes on a build or touching an init system.
+   */
+  readonly run?: StepRunner;
 }
 
 const step = async (
@@ -1322,7 +1572,9 @@ const step = async (
 ): Promise<string> => {
   note(`${what}…`);
   const ran = await runner({ argv, cwd });
-  if (!ran.ok) throw new ServiceError(`${what} failed: ${ran.said || argv.join(' ')}`);
+  if (!ran.ok) {
+    throw new ServiceError(`${what} failed: ${ran.said || argv.join(" ")}`);
+  }
   return ran.said;
 };
 
@@ -1334,17 +1586,24 @@ const step = async (
  * `.gitignore` that would have to be carried in the repository itself.
  */
 const excludeMarker = async (root: string): Promise<void> => {
-  const path = join(root, '.git', 'info', 'exclude');
+  const path = join(root, ".git", "info", "exclude");
   const existing = await Bun.file(path)
     .text()
-    .catch(() => '');
-  if (existing.split('\n').includes(DEPLOY_MARKER)) return;
-  await Bun.write(path, `${existing.endsWith('\n') || existing === '' ? existing : `${existing}\n`}${DEPLOY_MARKER}\n`);
+    .catch(() => "");
+  if (existing.split("\n").includes(DEPLOY_MARKER)) {
+    return;
+  }
+  await Bun.write(
+    path,
+    `${existing.endsWith("\n") || existing === "" ? existing : `${existing}\n`}${DEPLOY_MARKER}\n`
+  );
 };
 
 /** A directory that exists and holds something is not a place to clone into. */
 const occupied = (root: string): boolean => {
-  if (!existsSync(root)) return false;
+  if (!existsSync(root)) {
+    return false;
+  }
   try {
     return readdirSync(root).length > 0;
   } catch {
@@ -1371,26 +1630,33 @@ export const deployInit = async ({
   run: runner = runStep,
   install,
   dbPath = DEFAULT_DB_PATH,
-  legacyDb = join(ROOT, 'packages', 'hub', 'whiffle.db'),
+  legacyDb = join(ROOT, "packages", "hub", "whiffle.db"),
 }: DeployInitOptions): Promise<DeployInitResult> => {
   const host = platform();
-  if (host !== 'darwin' && host !== 'linux') {
-    throw new ServiceError(`whiffle deploy does not know how to install services on ${host}`);
+  if (host !== "darwin" && host !== "linux") {
+    throw new ServiceError(
+      `whiffle deploy does not know how to install services on ${host}`
+    );
   }
 
   const marked = existsSync(join(root, DEPLOY_MARKER));
   if (occupied(root) && !marked) {
     throw new ServiceError(
       `${root} already exists and is not a deployment clone (no ${DEPLOY_MARKER}). ` +
-        `Refusing to touch it — move it aside, or point elsewhere with WHIFFLE_DEPLOY_ROOT.`
+        "Refusing to touch it — move it aside, or point elsewhere with WHIFFLE_DEPLOY_ROOT."
     );
   }
 
   let remote: string;
   if (origin === undefined) {
-    const found = await runner({ argv: ['git', 'remote', 'get-url', 'origin'], cwd: ROOT });
+    const found = await runner({
+      argv: ["git", "remote", "get-url", "origin"],
+      cwd: ROOT,
+    });
     if (!found.ok) {
-      throw new ServiceError(`no origin remote in ${ROOT}, so there is nothing to clone from`);
+      throw new ServiceError(
+        `no origin remote in ${ROOT}, so there is nothing to clone from`
+      );
     }
     remote = found.said.trim();
   } else {
@@ -1401,11 +1667,17 @@ export const deployInit = async ({
     // Re-running init on an existing clone catches it up rather than starting
     // over: cloning again would throw away a checkout the services are running.
     note(`${root} is already a deployment clone; bringing it up to ${branch}`);
-    await step(runner, `git fetch origin ${branch}`, ['git', 'fetch', 'origin', branch], root, note);
+    await step(
+      runner,
+      `git fetch origin ${branch}`,
+      ["git", "fetch", "origin", branch],
+      root,
+      note
+    );
     await step(
       runner,
       `git merge --ff-only origin/${branch}`,
-      ['git', 'merge', '--ff-only', `origin/${branch}`],
+      ["git", "merge", "--ff-only", `origin/${branch}`],
       root,
       note
     );
@@ -1415,7 +1687,7 @@ export const deployInit = async ({
       `cloning ${remote} (${branch}) into ${root}`,
       // `root` is absolute and git creates the leading directories itself, so
       // the cwd only has to be somewhere that exists.
-      ['git', 'clone', '--branch', branch, '--single-branch', remote, root],
+      ["git", "clone", "--branch", branch, "--single-branch", remote, root],
       ROOT,
       note
     );
@@ -1441,35 +1713,51 @@ export const deployInit = async ({
     origin: remote,
     branch,
     createdAt: new Date().toISOString(),
-    createdBy: 'whiffle deploy init',
+    createdBy: "whiffle deploy init",
   };
-  await Bun.write(join(root, DEPLOY_MARKER), `${JSON.stringify(marker, null, 2)}\n`);
+  await Bun.write(
+    join(root, DEPLOY_MARKER),
+    `${JSON.stringify(marker, null, 2)}\n`
+  );
   await chmod(join(root, DEPLOY_MARKER), 0o600);
   note(`wrote ${join(root, DEPLOY_MARKER)}`);
 
-  await step(runner, 'bun install', [process.execPath, 'install'], root, note);
-  if (ids.includes('dashboard')) {
+  await step(runner, "bun install", [process.execPath, "install"], root, note);
+  if (ids.includes("dashboard")) {
     await step(
       runner,
-      'building the dashboard',
-      [process.execPath, 'run', '--filter', '@whiffle/dashboard', 'build'],
+      "building the dashboard",
+      [process.execPath, "run", "--filter", "@whiffle/dashboard", "build"],
       root,
       note
     );
   }
 
   const layout = layoutFor(root);
-  const specs = ids.map((id) => specFor(id, 'prod', layout));
-  const mac = host === 'darwin';
+  const specs = ids.map((id) => specFor(id, "prod", layout));
+  const mac = host === "darwin";
   const units: RenderedUnit[] = specs.map((spec) => ({
     id: spec.id,
     path: mac ? launchAgentPath(spec.id) : systemdPath(spec.id),
     text: mac ? plist(spec) : unit(spec),
   }));
 
-  await (install ?? (mac ? installLaunchAgents : installSystemdUnits))([...specs], note);
+  await (install ?? (mac ? installLaunchAgents : installSystemdUnits))(
+    [...specs],
+    note
+  );
 
-  const head = await runner({ argv: ['git', 'rev-parse', '--short', 'HEAD'], cwd: root });
+  const head = await runner({
+    argv: ["git", "rev-parse", "--short", "HEAD"],
+    cwd: root,
+  });
 
-  return { root, origin: remote, branch, head: head.said.trim(), marker, units };
+  return {
+    root,
+    origin: remote,
+    branch,
+    head: head.said.trim(),
+    marker,
+    units,
+  };
 };

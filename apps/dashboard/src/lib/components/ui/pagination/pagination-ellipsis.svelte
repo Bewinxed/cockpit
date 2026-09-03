@@ -1,23 +1,25 @@
 <script lang="ts">
-	import { HugeiconsIcon } from "@hugeicons/svelte"
-	import { MoreHorizontalCircle01Icon } from '@hugeicons/core-free-icons';
-	import { cn, type WithElementRef, type WithoutChildren } from "$lib/utils.js";
-	import type { HTMLAttributes } from "svelte/elements";
+  import { MoreHorizontalCircle01Icon } from "@hugeicons/core-free-icons";
+  import { HugeiconsIcon } from "@hugeicons/svelte";
+  import type { HTMLAttributes } from "svelte/elements";
+  import { cn, type WithElementRef, type WithoutChildren } from "$lib/utils.js";
 
-	let {
-		ref = $bindable(null),
-		class: className,
-		...restProps
-	}: WithoutChildren<WithElementRef<HTMLAttributes<HTMLSpanElement>>> = $props();
+  let {
+    ref = $bindable(null),
+    class: className,
+    ...restProps
+  }: WithoutChildren<
+    WithElementRef<HTMLAttributes<HTMLSpanElement>>
+  > = $props();
 </script>
 
 <span
-	bind:this={ref}
-	aria-hidden="true"
-	data-slot="pagination-ellipsis"
-	class={cn("size-9 items-center justify-center [&_svg:not([class*='size-'])]:size-4 flex items-center justify-center", className)}
-	{...restProps}
+  aria-hidden="true"
+  class={cn("size-9 items-center justify-center [&_svg:not([class*='size-'])]:size-4 flex items-center justify-center", className)}
+  data-slot="pagination-ellipsis"
+  bind:this={ref}
+  {...restProps}
 >
-	<HugeiconsIcon icon={MoreHorizontalCircle01Icon} strokeWidth={2}  />
-	<span class="sr-only">More pages</span>
+  <HugeiconsIcon icon={MoreHorizontalCircle01Icon} strokeWidth={2} />
+  <span class="sr-only">More pages</span>
 </span>

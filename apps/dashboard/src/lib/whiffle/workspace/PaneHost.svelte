@@ -9,14 +9,14 @@
    * than collapsed, so a transcript that measures before its first dock
    * measures a real viewport and not a zero one.
    */
-  import { untrack } from 'svelte';
-  import SessionPane from '../SessionPane.svelte';
-  import { workspace, contextOf } from './workspace.svelte';
-  import { slots, dock, paneViews } from './dock.svelte';
-  import type { HistorySource } from '../client.svelte';
+  import { untrack } from "svelte";
+  import type { HistorySource } from "../client.svelte";
+  import SessionPane from "../SessionPane.svelte";
+  import { dock, paneViews, slots } from "./dock.svelte";
+  import { contextOf, workspace } from "./workspace.svelte";
 
   let {
-    entryId = '',
+    entryId = "",
     entryTail = null,
     entryHistory = null,
   }: {
@@ -33,8 +33,17 @@
     const open = new Set(workspace.openIds);
     untrack(() => {
       const keep = hosted.filter((id) => open.has(id));
-      for (const id of asked) if (open.has(id) && !keep.includes(id)) keep.push(id);
-      if (keep.length !== hosted.length || keep.some((id, i) => id !== hosted[i])) hosted = keep;
+      for (const id of asked) {
+        if (open.has(id) && !keep.includes(id)) {
+          keep.push(id);
+        }
+      }
+      if (
+        keep.length !== hosted.length ||
+        keep.some((id, i) => id !== hosted[i])
+      ) {
+        hosted = keep;
+      }
     });
   });
 </script>
@@ -46,17 +55,17 @@
     {@const isActive = leaf?.active === id}
     <div class="hosted" use:dock={id}>
       <SessionPane
-        viewId={id}
         browsing={ctx?.machine ?? null}
         browsingCwd={ctx?.cwd ?? ''}
         browsingHarness={ctx?.harness ?? 'claude'}
-        serverTail={id === entryId ? entryTail : null}
-        serverHistory={id === entryId ? entryHistory : null}
-        visible={slots.get(id)?.shown ?? false}
         focused={isActive && leaf?.id === workspace.focusedLeafId}
         hideHeader
-        view={paneViews[id] ?? 'chat'}
         onview={(v) => (paneViews[id] = v)}
+        serverHistory={id === entryId ? entryHistory : null}
+        serverTail={id === entryId ? entryTail : null}
+        view={paneViews[id] ?? 'chat'}
+        viewId={id}
+        visible={slots.get(id)?.shown ?? false}
       />
     </div>
   {/each}

@@ -1,17 +1,16 @@
 <script lang="ts">
-	import { Calendar as CalendarPrimitive } from "bits-ui";
-	import { cn } from "$lib/utils.js";
+  import { Calendar as CalendarPrimitive } from "bits-ui";
+  import { cn } from "$lib/utils.js";
 
-	let {
-		ref = $bindable(null),
-		class: className,
-		...restProps
-	}: CalendarPrimitive.DayProps = $props();
+  let {
+    ref = $bindable(null),
+    class: className,
+    ...restProps
+  }: CalendarPrimitive.DayProps = $props();
 </script>
 
 <CalendarPrimitive.Day
-	bind:ref
-	class={cn(
+  class={cn(
 		"flex size-(--cell-size) flex-col items-center justify-center gap-1 rounded-(--cell-radius) p-0 leading-none font-normal whitespace-nowrap select-none",
 		"[&:last-child[data-selected=true]_button]:rounded-r-(--cell-radius)",
 		"not-data-selected:hover:bg-accent/50 not-data-selected:hover:text-accent-foreground",
@@ -29,5 +28,6 @@
 		"[&>span]:text-xs [&>span]:opacity-70",
 		className
 	)}
-	{...restProps}
+  bind:ref
+  {...restProps}
 />

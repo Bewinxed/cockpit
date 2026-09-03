@@ -22,8 +22,8 @@
  * main thread is doing. When it lands the inline transforms are cleared and
  * the stylesheet's parking places take over again.
  */
-import { flushSync } from 'svelte';
-import { workspace, type LeafNode } from './workspace.svelte';
+import { flushSync } from "svelte";
+import { type LeafNode, workspace } from "./workspace.svelte";
 
 /** Travel before the pair is taken to mean anything. */
 const SLOP = 8;
@@ -49,7 +49,7 @@ const RESIST_MAX = 0.25;
 const SETTLE = 0.4;
 const BOUNCE = 0;
 const MASS = 1;
-const STIFFNESS = (2 * Math.PI / SETTLE) ** 2;
+const STIFFNESS = ((2 * Math.PI) / SETTLE) ** 2;
 const DAMPING = (4 * Math.PI * (1 - BOUNCE)) / SETTLE;
 /**
  * The settle is integrated at this step, in seconds, for at most this long,
@@ -69,13 +69,16 @@ const LAND = 0.06;
 /** Velocity samples older than this say nothing about the release. */
 const VELOCITY_WINDOW = 80;
 
-type Phase = 'idle' | 'armed' | 'claimed';
+type Phase = "idle" | "armed" | "claimed";
 /** One point of the integrated settle: seconds since release, px, px/s. */
 type Sample = { t: number; x: number; v: number };
 /** A card in view: its element and its distance from the focus. */
 type Card = { el: HTMLElement; delta: number };
 
-export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => string) {
+export function createDeck(
+  getLeaves: () => LeafNode[],
+  getFocusedId: () => string
+) {
   let lifted = $state(false);
   let dragging = $state(false);
 
@@ -86,7 +89,7 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
   let root: HTMLElement | null = null;
   let offset = 0;
   let height = 0;
-  let phase: Phase = 'idle';
+  let phase: Phase = "idle";
   let startX = 0;
   let startY = 0;
   /** Where the focused card was when the fingers took hold — mid-settle, not 0. */
@@ -102,8 +105,8 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
   let held: number | null = null;
 
   const reduced = () =>
-    typeof window !== 'undefined' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const midpoint = (touches: TouchList) => ({
     x: (touches[0].clientX + touches[1].clientX) / 2,
@@ -112,11 +115,15 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
 
   /** The cards the stylesheet parks a card away or in place, by their current deltas. */
   const gather = (): Card[] => {
-    if (!root) return [];
+    if (!root) {
+      return [];
+    }
     const found: Card[] = [];
-    for (const el of root.querySelectorAll<HTMLElement>('[data-leaf]')) {
+    for (const el of root.querySelectorAll<HTMLElement>("[data-leaf]")) {
       const delta = Number(el.dataset.delta);
-      if (Math.abs(delta) <= 1) found.push({ el, delta });
+      if (Math.abs(delta) <= 1) {
+        found.push({ el, delta });
+      }
     }
     return found;
   };
@@ -125,17 +132,25 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
   const rest = (delta: number) => delta * (height + GAP);
 
   const paint = (x: number) => {
-    for (const { el, delta } of cards) el.style.transform = `translate3d(0, ${rest(delta) + x}px, 0)`;
+    for (const { el, delta } of cards) {
+      el.style.transform = `translate3d(0, ${rest(delta) + x}px, 0)`;
+    }
   };
 
   const clear = () => {
-    for (const { el } of cards) el.style.transform = '';
+    for (const { el } of cards) {
+      el.style.transform = "";
+    }
   };
 
   const stopSettle = () => {
-    for (const animation of animations) animation.cancel();
+    for (const animation of animations) {
+      animation.cancel();
+    }
     animations = [];
-    if (landing !== null) clearTimeout(landing);
+    if (landing !== null) {
+      clearTimeout(landing);
+    }
     landing = null;
   };
 
@@ -151,11 +166,17 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
   const progress = (): Sample | null => {
     const animation = animations[cards.findIndex((card) => card.delta === 0)];
     const at = animation?.currentTime;
-    if (typeof at !== 'number' || path.length === 0) return null;
+    if (typeof at !== "number" || path.length === 0) {
+      return null;
+    }
     const now = at / 1000;
     const i = path.findIndex((sample) => sample.t >= now);
-    if (i < 0) return path[path.length - 1];
-    if (i === 0) return path[0];
+    if (i < 0) {
+      return path[path.length - 1];
+    }
+    if (i === 0) {
+      return path[0];
+    }
     const a = path[i - 1];
     const b = path[i];
     const f = (now - a.t) / (b.t - a.t);
@@ -175,7 +196,9 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
       t += STEP;
       const done = (Math.abs(x) < 0.5 && Math.abs(v) < 20) || t >= MAX_SETTLE;
       out.push(done ? { t, x: 0, v: 0 } : { t, x, v });
-      if (done) return out;
+      if (done) {
+        return out;
+      }
     }
   };
 
@@ -194,7 +217,9 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
 
   /** Release velocity in px/s, from the samples of the last few dozen ms. */
   const releaseVelocity = () => {
-    if (samples.length < 2) return 0;
+    if (samples.length < 2) {
+      return 0;
+    }
     const last = samples[samples.length - 1];
     let first = samples[0];
     for (const sample of samples) {
@@ -221,7 +246,9 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
 
     const kept: Sample[] = [path[0]];
     for (let i = 1; i < path.length - 1; i++) {
-      if ((path[i].t - kept[kept.length - 1].t) * 1000 >= KEYFRAME_MS) kept.push(path[i]);
+      if ((path[i].t - kept[kept.length - 1].t) * 1000 >= KEYFRAME_MS) {
+        kept.push(path[i]);
+      }
     }
     kept.push(path[path.length - 1]);
 
@@ -231,7 +258,7 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
           transform: `translate3d(0, ${rest(delta) + sample.x}px, 0)`,
           offset: sample.t / duration,
         })),
-        { duration: duration * 1000, easing: 'linear', fill: 'forwards' }
+        { duration: duration * 1000, easing: "linear", fill: "forwards" }
       )
     );
     const focused = animations[cards.findIndex((card) => card.delta === 0)];
@@ -245,7 +272,9 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
     const mine = animations;
     focused.finished.then(
       () => {
-        if (animations === mine) land();
+        if (animations === mine) {
+          land();
+        }
       },
       () => {}
     );
@@ -253,7 +282,9 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
     const touchdown =
       path.find(
         (sample, i) =>
-          i > 0 && Math.abs(sample.x) < height * LAND && Math.abs(sample.v) < Math.abs(path[i - 1].v)
+          i > 0 &&
+          Math.abs(sample.x) < height * LAND &&
+          Math.abs(sample.v) < Math.abs(path[i - 1].v)
       ) ?? path[path.length - 1];
     landing = setTimeout(() => {
       lifted = false;
@@ -263,7 +294,9 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
 
   /** Fingers landing on a settling stack stop it where it is. */
   function hold() {
-    if (animations.length === 0) return;
+    if (animations.length === 0) {
+      return;
+    }
     const at = progress();
     stopSettle();
     if (!at) {
@@ -277,7 +310,9 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
 
   /** The pair that stopped the settle left without moving it: let it go on. */
   function resume() {
-    if (held === null) return;
+    if (held === null) {
+      return;
+    }
     const velocity = held;
     held = null;
     spring(velocity);
@@ -339,27 +374,34 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
         if (event.touches.length !== 2) {
           // A third finger ends the drag rather than joining it: the pair
           // that was being tracked is gone, and the midpoint would jump.
-          if (phase === 'claimed') release();
-          else if (phase === 'armed') resume();
-          phase = 'idle';
+          if (phase === "claimed") {
+            release();
+          } else if (phase === "armed") {
+            resume();
+          }
+          phase = "idle";
           return;
         }
         event.preventDefault();
-        if (phase === 'claimed') return;
+        if (phase === "claimed") {
+          return;
+        }
         const mid = midpoint(event.touches);
         startX = mid.x;
         startY = mid.y;
         samples = [{ y: mid.y, t: performance.now() }];
-        phase = 'armed';
+        phase = "armed";
         hold();
       };
 
       const onMove = (event: TouchEvent) => {
-        if (phase === 'idle') return;
+        if (phase === "idle") {
+          return;
+        }
         if (event.touches.length !== 2) {
-          if (phase === 'armed') {
+          if (phase === "armed") {
             resume();
-            phase = 'idle';
+            phase = "idle";
           }
           return;
         }
@@ -368,10 +410,14 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
         const dy = mid.y - startY;
 
         samples.push({ y: mid.y, t: performance.now() });
-        if (samples.length > 5) samples.shift();
+        if (samples.length > 5) {
+          samples.shift();
+        }
 
-        if (phase === 'armed') {
-          if (Math.abs(dy) <= SLOP || Math.abs(dy) <= Math.abs(dx) * SLOPE) return;
+        if (phase === "armed") {
+          if (Math.abs(dy) <= SLOP || Math.abs(dy) <= Math.abs(dx) * SLOPE) {
+            return;
+          }
           // Taking hold mid-settle picks the card up where the pair stopped
           // it; the settle is dropped, not rewound.
           held = null;
@@ -380,7 +426,7 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
           cards = gather();
           lifted = true;
           dragging = true;
-          phase = 'claimed';
+          phase = "claimed";
         }
 
         event.preventDefault();
@@ -393,24 +439,27 @@ export function createDeck(getLeaves: () => LeafNode[], getFocusedId: () => stri
       };
 
       const onEnd = () => {
-        if (phase === 'claimed') release();
-        else if (phase === 'armed') resume();
-        phase = 'idle';
+        if (phase === "claimed") {
+          release();
+        } else if (phase === "armed") {
+          resume();
+        }
+        phase = "idle";
       };
 
-      node.addEventListener('touchstart', onStart, { passive: false });
-      node.addEventListener('touchmove', onMove, { passive: false });
-      node.addEventListener('touchend', onEnd, { passive: true });
-      node.addEventListener('touchcancel', onEnd, { passive: true });
+      node.addEventListener("touchstart", onStart, { passive: false });
+      node.addEventListener("touchmove", onMove, { passive: false });
+      node.addEventListener("touchend", onEnd, { passive: true });
+      node.addEventListener("touchcancel", onEnd, { passive: true });
 
       return {
         destroy() {
           stopSettle();
           root = null;
-          node.removeEventListener('touchstart', onStart);
-          node.removeEventListener('touchmove', onMove);
-          node.removeEventListener('touchend', onEnd);
-          node.removeEventListener('touchcancel', onEnd);
+          node.removeEventListener("touchstart", onStart);
+          node.removeEventListener("touchmove", onMove);
+          node.removeEventListener("touchend", onEnd);
+          node.removeEventListener("touchcancel", onEnd);
         },
       };
     },

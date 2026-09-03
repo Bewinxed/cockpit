@@ -7,7 +7,7 @@
  * design (§6) reuses the same class for its per-child stdout ring.
  */
 
-import type { SessionStreamEvent } from './stream';
+import type { SessionStreamEvent } from "./stream";
 
 /**
  * Events kept per session for replay. A reconnect the user notices is a few
@@ -58,7 +58,9 @@ export class SessionRing {
 
   /** The earliest seq still in the ring; 0 when nothing has been recorded. */
   get oldest(): number {
-    if (this.#head === 0) return 0;
+    if (this.#head === 0) {
+      return 0;
+    }
     return Math.max(this.#floor, this.#head - this.#size + 1);
   }
 
@@ -88,9 +90,15 @@ export class SessionRing {
    * belong to a dead epoch); or the number is not a sequence at all.
    */
   canReplay(afterSeq: number): boolean {
-    if (!Number.isInteger(afterSeq) || afterSeq < 0) return false;
-    if (afterSeq > this.#head) return false;
-    if (this.#head === 0) return true;
+    if (!Number.isInteger(afterSeq) || afterSeq < 0) {
+      return false;
+    }
+    if (afterSeq > this.#head) {
+      return false;
+    }
+    if (this.#head === 0) {
+      return true;
+    }
     return afterSeq >= this.oldest - 1;
   }
 

@@ -7,72 +7,86 @@
  * and a different one arrives, which is the honest picture of a placeholder
  * being replaced by a fact.
  */
-import { expect, test } from 'bun:test';
-import type { QueuedMessage } from '@whiffle/core';
-import type { Message } from '../types';
-import type { SessionState } from '../client.svelte';
-import { buildRows } from './rows';
+import { expect, test } from "bun:test";
+import type { QueuedMessage } from "@whiffle/core";
+import type { SessionState } from "../client.svelte";
+import type { Message } from "../types";
+import { buildRows } from "./rows";
 
 const queued = (queueId: string, text: string): QueuedMessage => ({
   queueId,
   text,
-  timestamp: '2026-08-27T10:00:00.000Z',
+  timestamp: "2026-08-27T10:00:00.000Z",
 });
 
 const said = (content: string): Message => ({
   id: `m:${content}`,
-  instanceId: 'i1',
-  type: 'assistant',
+  instanceId: "i1",
+  type: "assistant",
   content,
 });
 
 const stateWith = (over: Partial<SessionState>): SessionState =>
   ({
-    instanceId: 'i1',
+    instanceId: "i1",
     messages: [],
     subagents: {},
     queued: [],
-    streaming: '',
+    streaming: "",
     openBlock: null,
-    thinkingStream: '',
+    thinkingStream: "",
     thinkingClosing: false,
     currentTool: null,
     ...over,
   }) as SessionState;
 
-test('a queued message becomes its own row, keyed by its queue id', () => {
-  const rows = buildRows(stateWith({ queued: [queued('q-1', 'ship it')] }));
+test("a queued message becomes its own row, keyed by its queue id", () => {
+  const rows = buildRows(stateWith({ queued: [queued("q-1", "ship it")] }));
   expect(rows).toHaveLength(1);
-  expect(rows[0].kind).toBe('queued');
-  expect(rows[0].key).toBe('qd:q-1');
-  if (rows[0].kind === 'queued') expect(rows[0].queued.text).toBe('ship it');
+  expect(rows[0].kind).toBe("queued");
+  expect(rows[0].key).toBe("qd:q-1");
+  if (rows[0].kind === "queued") {
+    expect(rows[0].queued.text).toBe("ship it");
+  }
 });
 
-test('queued rows sit after the conversation AND after the live tail', () => {
+test("queued rows sit after the conversation AND after the live tail", () => {
   const rows = buildRows(
     stateWith({
-      messages: [said('working on it')],
-      streaming: 'still going',
-      queued: [queued('q-1', 'first'), queued('q-2', 'second')],
+      messages: [said("working on it")],
+      streaming: "still going",
+      queued: [queued("q-1", "first"), queued("q-2", "second")],
     })
   );
-  expect(rows.map((row) => row.kind)).toEqual(['single', 'stream', 'queued', 'queued']);
+  expect(rows.map((row) => row.kind)).toEqual([
+    "single",
+    "stream",
+    "queued",
+    "queued",
+  ]);
   // Oldest first: the queue is a queue, and it drains in that order.
-  expect(rows.slice(2).map((row) => row.key)).toEqual(['qd:q-1', 'qd:q-2']);
+  expect(rows.slice(2).map((row) => row.key)).toEqual(["qd:q-1", "qd:q-2"]);
 });
 
-test('a queued row never shares a key with the turn that replaces it', () => {
+test("a queued row never shares a key with the turn that replaces it", () => {
   // The real turn is keyed by its SDK uuid; the queued row by `qd:` + queue id.
   // Nothing should ever ask the transcript to morph one into the other.
-  const real: Message = { id: 'uuid-1', instanceId: 'i1', type: 'user', content: 'ship it' };
-  const rows = buildRows(stateWith({ messages: [real], queued: [queued('q-1', 'ship it')] }));
+  const real: Message = {
+    id: "uuid-1",
+    instanceId: "i1",
+    type: "user",
+    content: "ship it",
+  };
+  const rows = buildRows(
+    stateWith({ messages: [real], queued: [queued("q-1", "ship it")] })
+  );
   const keys = rows.map((row) => row.key);
   expect(new Set(keys).size).toBe(keys.length);
-  expect(keys).toEqual(['uuid-1', 'qd:q-1']);
+  expect(keys).toEqual(["uuid-1", "qd:q-1"]);
 });
 
-test('an empty queue adds nothing at all', () => {
-  expect(buildRows(stateWith({ messages: [said('done')] }))).toHaveLength(1);
+test("an empty queue adds nothing at all", () => {
+  expect(buildRows(stateWith({ messages: [said("done")] }))).toHaveLength(1);
 });
 
 /**
@@ -94,9 +108,13 @@ test('an empty queue adds nothing at all', () => {
  * latch, the first fails and the gate can be reconsidered on purpose rather
  * than by accident.
  */
-test('virtua freezes its render range at ssrCount until a scroll clears it', async () => {
-  const { createVirtualStore } = (await import('virtua/unstable_core')) as {
-    createVirtualStore: (len: number, itemSize?: number, ssrCount?: number) => {
+test("virtua freezes its render range at ssrCount until a scroll clears it", async () => {
+  const { createVirtualStore } = (await import("virtua/unstable_core")) as {
+    createVirtualStore: (
+      len: number,
+      itemSize?: number,
+      ssrCount?: number
+    ) => {
       $getRange: () => [number, number];
     };
   };
@@ -106,11 +124,15 @@ test('virtua freezes its render range at ssrCount until a scroll clears it', asy
   expect(store.$getRange()).toEqual([0, 2]);
 });
 
-test('the transcript hands ssrCount to the server render only', async () => {
-  const source = await Bun.file(new URL('./Transcript.svelte', import.meta.url)).text();
+test("the transcript hands ssrCount to the server render only", async () => {
+  const source = await Bun.file(
+    new URL("./Transcript.svelte", import.meta.url)
+  ).text();
   // The prop reaches the Virtualizer by shorthand, so the gate IS the binding:
   // the literal `ssrCount={built.rows.length}` must never come back.
-  expect(source).toContain('const ssrCount = $derived(browser ? undefined : built.rows.length);');
-  expect(source).toContain('{ssrCount}>');
-  expect(source).not.toContain('ssrCount={built.rows.length}>');
+  expect(source).toContain(
+    "const ssrCount = $derived(browser ? undefined : built.rows.length);"
+  );
+  expect(source).toMatch(/^\s*\{ssrCount\}\s*$/m);
+  expect(source).not.toMatch(/ssrCount=\{built\.rows\.length\}/);
 });

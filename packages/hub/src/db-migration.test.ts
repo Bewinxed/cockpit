@@ -1,8 +1,14 @@
-import { afterEach, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { migrateLegacyDb } from './index';
+import { afterEach, expect, test } from "bun:test";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { migrateLegacyDb } from "./index";
 
 /**
  * Scratch directories only, per the C9 leaf brief — this exercises the move
@@ -11,23 +17,25 @@ import { migrateLegacyDb } from './index';
 let scratch: string;
 
 afterEach(() => {
-  if (scratch) rmSync(scratch, { recursive: true, force: true });
+  if (scratch) {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 });
 
 const setup = () => {
-  scratch = mkdtempSync(join(tmpdir(), 'whiffle-db-migration-'));
+  scratch = mkdtempSync(join(tmpdir(), "whiffle-db-migration-"));
   return {
-    legacy: join(scratch, 'legacy', 'whiffle.db'),
-    target: join(scratch, 'data', 'whiffle', 'whiffle.db'),
+    legacy: join(scratch, "legacy", "whiffle.db"),
+    target: join(scratch, "data", "whiffle", "whiffle.db"),
   };
 };
 
-test('legacy present, target absent: db, wal and shm all move', () => {
+test("legacy present, target absent: db, wal and shm all move", () => {
   const { legacy, target } = setup();
-  mkdirSync(join(scratch, 'legacy'), { recursive: true });
-  writeFileSync(legacy, 'db');
-  writeFileSync(`${legacy}-wal`, 'wal');
-  writeFileSync(`${legacy}-shm`, 'shm');
+  mkdirSync(join(scratch, "legacy"), { recursive: true });
+  writeFileSync(legacy, "db");
+  writeFileSync(`${legacy}-wal`, "wal");
+  writeFileSync(`${legacy}-shm`, "shm");
 
   migrateLegacyDb(target, legacy);
 
@@ -39,11 +47,11 @@ test('legacy present, target absent: db, wal and shm all move', () => {
   expect(existsSync(`${legacy}-shm`)).toBe(false);
 });
 
-test('second boot after a move is a no-op', () => {
+test("second boot after a move is a no-op", () => {
   const { legacy, target } = setup();
-  mkdirSync(join(scratch, 'legacy'), { recursive: true });
-  writeFileSync(legacy, 'db');
-  writeFileSync(`${legacy}-wal`, 'wal');
+  mkdirSync(join(scratch, "legacy"), { recursive: true });
+  writeFileSync(legacy, "db");
+  writeFileSync(`${legacy}-wal`, "wal");
   migrateLegacyDb(target, legacy);
   expect(existsSync(target)).toBe(true);
 
@@ -55,12 +63,12 @@ test('second boot after a move is a no-op', () => {
   expect(existsSync(legacy)).toBe(false);
 });
 
-test('target already present: legacy file is left untouched', () => {
+test("target already present: legacy file is left untouched", () => {
   const { legacy, target } = setup();
-  mkdirSync(join(scratch, 'legacy'), { recursive: true });
-  mkdirSync(join(scratch, 'data', 'whiffle'), { recursive: true });
-  writeFileSync(legacy, 'stale-legacy');
-  writeFileSync(target, 'live-target');
+  mkdirSync(join(scratch, "legacy"), { recursive: true });
+  mkdirSync(join(scratch, "data", "whiffle"), { recursive: true });
+  writeFileSync(legacy, "stale-legacy");
+  writeFileSync(target, "live-target");
 
   migrateLegacyDb(target, legacy);
 

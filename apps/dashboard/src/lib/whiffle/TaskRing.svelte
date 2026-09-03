@@ -10,7 +10,6 @@
    */
   interface Props {
     done?: number;
-    total?: number;
     /**
      * The session is working and there is no plan to measure it against. The
      * ring turns a short arc instead of filling one: alive is the whole claim,
@@ -18,18 +17,27 @@
      */
     indeterminate?: boolean;
     /** 16px beside a session title, 12px in a board row. */
-    size?: 'sm' | 'md';
+    size?: "sm" | "md";
     style?: string;
+    total?: number;
   }
 
-  let { done = 0, total = 0, indeterminate = false, size = 'md', style }: Props = $props();
+  let {
+    done = 0,
+    total = 0,
+    indeterminate = false,
+    size = "md",
+    style,
+  }: Props = $props();
 
-  const box = $derived(size === 'md' ? 16 : 12);
-  const stroke = $derived(size === 'md' ? 1.5 : 1.25);
+  const box = $derived(size === "md" ? 16 : 12);
+  const stroke = $derived(size === "md" ? 1.5 : 1.25);
   const radius = $derived((box - stroke) / 2);
   const circumference = $derived(2 * Math.PI * radius);
   const finished = $derived(total > 0 && done >= total);
-  const offset = $derived(circumference * (1 - Math.min(done, total) / Math.max(total, 1)));
+  const offset = $derived(
+    circumference * (1 - Math.min(done, total) / Math.max(total, 1))
+  );
 </script>
 
 <!-- Nothing planned and nothing running draws nothing: an empty ring is a
@@ -37,33 +45,33 @@
      different claim. -->
 {#if total > 0 || indeterminate}
   <svg
-    class="task-ring shrink-0"
-    width={box}
-    height={box}
-    viewBox="0 0 {box} {box}"
     aria-hidden="true"
+    class="task-ring shrink-0"
+    height={box}
     {style}
+    viewBox="0 0 {box} {box}"
+    width={box}
   >
     {#if indeterminate}
       <circle
         class="stroke-border"
         cx={box / 2}
         cy={box / 2}
-        r={radius}
         fill="none"
+        r={radius}
         stroke-width={stroke}
       />
       <circle
         class="spin"
-        data-motion-loop
         cx={box / 2}
         cy={box / 2}
-        r={radius}
+        data-motion-loop
         fill="none"
+        r={radius}
         stroke="currentColor"
-        stroke-width={stroke}
-        stroke-linecap="round"
         stroke-dasharray="{circumference * 0.3} {circumference}"
+        stroke-linecap="round"
+        stroke-width={stroke}
       />
     {:else}
       <g data-shown={!finished}>
@@ -71,8 +79,8 @@
           class="stroke-border"
           cx={box / 2}
           cy={box / 2}
-          r={radius}
           fill="none"
+          r={radius}
           stroke-width={stroke}
         />
         <!-- Wound from the top, as a clock is read. -->
@@ -80,24 +88,24 @@
           class="arc"
           cx={box / 2}
           cy={box / 2}
-          r={radius}
           fill="none"
+          r={radius}
           stroke="currentColor"
-          stroke-width={stroke}
-          stroke-linecap="round"
           stroke-dasharray={circumference}
           stroke-dashoffset={offset}
+          stroke-linecap="round"
+          stroke-width={stroke}
           transform="rotate(-90 {box / 2} {box / 2})"
         />
       </g>
       <g class="text-success" data-shown={finished}>
         <polyline
-          points="{box * 0.28},{box * 0.53} {box * 0.43},{box * 0.69} {box * 0.72},{box * 0.34}"
           fill="none"
+          points="{box * 0.28},{box * 0.53} {box * 0.43},{box * 0.69} {box * 0.72},{box * 0.34}"
           stroke="currentColor"
-          stroke-width={stroke * 1.2}
           stroke-linecap="round"
           stroke-linejoin="round"
+          stroke-width={stroke * 1.2}
         />
       </g>
     {/if}
@@ -117,7 +125,7 @@
       scale 160ms var(--e-in);
   }
 
-  .task-ring g[data-shown='false'] {
+  .task-ring g[data-shown="false"] {
     opacity: 0;
     scale: 0.6;
   }
@@ -142,7 +150,7 @@
       transition-duration: 120ms;
     }
 
-    .task-ring g[data-shown='false'] {
+    .task-ring g[data-shown="false"] {
       scale: 1;
     }
   }

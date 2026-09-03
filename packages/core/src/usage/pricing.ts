@@ -1,5 +1,5 @@
-import snapshot from './pricing-snapshot.json';
-import type { UsageTokens } from './types';
+import snapshot from "./pricing-snapshot.json";
+import type { UsageTokens } from "./types";
 
 /**
  * Cost basis for one model, in USD per token. models.dev publishes per-million
@@ -8,28 +8,28 @@ import type { UsageTokens } from './types';
  * pricing.rs:916-922).
  */
 export interface ModelRates {
+  cacheRead: number;
+  cacheWrite: number;
   input: number;
   output: number;
-  cacheWrite: number;
-  cacheRead: number;
 }
 
 interface SnapshotModel {
+  cacheRead?: number;
+  cacheWrite?: number;
   input: number;
   output: number;
-  cacheWrite?: number;
-  cacheRead?: number;
 }
 
 interface PricingSnapshot {
   generatedAt?: string;
-  source?: string;
   models: Record<string, SnapshotModel>;
+  source?: string;
 }
 
 const PER_MILLION = 1_000_000;
 const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
-const MODELS_DEV_URL = 'https://models.dev/api.json';
+const MODELS_DEV_URL = "https://models.dev/api.json";
 
 /**
  * Alias table ported from ccusage `pricing_alias` (pricing.rs:2072-2078), the
@@ -37,8 +37,8 @@ const MODELS_DEV_URL = 'https://models.dev/api.json';
  * today; this stays ready for them.
  */
 const MODEL_ALIASES: Record<string, string> = {
-  'gpt-5.6': 'gpt-5.6-sol',
-  'gpt-5.3-spark': 'gpt-5.3-codex-spark',
+  "gpt-5.6": "gpt-5.6-sol",
+  "gpt-5.3-spark": "gpt-5.3-codex-spark",
 };
 
 const RATES: Map<string, ModelRates> = new Map();
@@ -52,8 +52,10 @@ function loadFromSnapshot(json: PricingSnapshot): void {
     RATES.set(id, {
       input,
       output,
-      cacheWrite: m.cacheWrite !== undefined ? m.cacheWrite / PER_MILLION : input * 1.25,
-      cacheRead: m.cacheRead !== undefined ? m.cacheRead / PER_MILLION : input * 0.1,
+      cacheWrite:
+        m.cacheWrite === undefined ? input * 1.25 : m.cacheWrite / PER_MILLION,
+      cacheRead:
+        m.cacheRead === undefined ? input * 0.1 : m.cacheRead / PER_MILLION,
     });
   }
 }
@@ -72,24 +74,32 @@ export const missingPricing = new Set<string>();
  */
 export function resolveRates(modelId: string): ModelRates | null {
   const exact = RATES.get(modelId);
-  if (exact) return exact;
+  if (exact) {
+    return exact;
+  }
 
   const alias = MODEL_ALIASES[modelId];
   if (alias) {
     const aliased = RATES.get(alias);
-    if (aliased) return aliased;
+    if (aliased) {
+      return aliased;
+    }
   }
 
-  const normalized = modelId.replace(/[.@]/g, '-');
+  const normalized = modelId.replace(/[.@]/g, "-");
   if (normalized !== modelId) {
     const match = RATES.get(normalized);
-    if (match) return match;
+    if (match) {
+      return match;
+    }
   }
 
-  const slash = modelId.lastIndexOf('/');
+  const slash = modelId.lastIndexOf("/");
   if (slash !== -1) {
     const bare = RATES.get(modelId.slice(slash + 1));
-    if (bare) return bare;
+    if (bare) {
+      return bare;
+    }
   }
 
   return null;
@@ -120,7 +130,9 @@ export function costForUsage(modelId: string, tokens: UsageTokens): number {
  */
 export async function refreshPricing(): Promise<number> {
   const now = Date.now();
-  if (now - lastRefreshAttempt < REFRESH_INTERVAL_MS) return RATES.size;
+  if (now - lastRefreshAttempt < REFRESH_INTERVAL_MS) {
+    return RATES.size;
+  }
   lastRefreshAttempt = now;
 
   let res: Response;
@@ -129,7 +141,9 @@ export async function refreshPricing(): Promise<number> {
   } catch {
     return RATES.size;
   }
-  if (!res.ok) return RATES.size;
+  if (!res.ok) {
+    return RATES.size;
+  }
 
   let raw: unknown;
   try {
@@ -139,7 +153,9 @@ export async function refreshPricing(): Promise<number> {
   }
 
   const filtered = filterModelsDev(raw);
-  if (Object.keys(filtered.models).length === 0) return RATES.size;
+  if (Object.keys(filtered.models).length === 0) {
+    return RATES.size;
+  }
   loadFromSnapshot(filtered);
   return RATES.size;
 }
@@ -149,21 +165,36 @@ function filterModelsDev(raw: unknown): PricingSnapshot {
   type Provider = {
     models?: Record<
       string,
-      { cost?: { input?: number; output?: number; cache_write?: number; cache_read?: number } }
+      {
+        cost?: {
+          input?: number;
+          output?: number;
+          cache_write?: number;
+          cache_read?: number;
+        };
+      }
     >;
   };
-  const providers = ['anthropic', 'opencode', 'opencode-go'];
+  const providers = ["anthropic", "opencode", "opencode-go"];
   const models: Record<string, SnapshotModel> = {};
   for (const provider of providers) {
     const catalog = (raw as Record<string, Provider>)[provider];
-    if (!catalog?.models) continue;
-    const prefix = provider === 'opencode-go' ? 'opencode-go/' : '';
+    if (!catalog?.models) {
+      continue;
+    }
+    const prefix = provider === "opencode-go" ? "opencode-go/" : "";
     for (const [id, m] of Object.entries(catalog.models)) {
       const cost = m.cost;
-      if (!cost || cost.input === undefined || cost.output === undefined) continue;
+      if (!cost || cost.input === undefined || cost.output === undefined) {
+        continue;
+      }
       const entry: SnapshotModel = { input: cost.input, output: cost.output };
-      if (cost.cache_write !== undefined) entry.cacheWrite = cost.cache_write;
-      if (cost.cache_read !== undefined) entry.cacheRead = cost.cache_read;
+      if (cost.cache_write !== undefined) {
+        entry.cacheWrite = cost.cache_write;
+      }
+      if (cost.cache_read !== undefined) {
+        entry.cacheRead = cost.cache_read;
+      }
       models[prefix + id] = entry;
     }
   }

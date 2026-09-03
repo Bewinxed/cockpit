@@ -7,45 +7,42 @@
     "packages/*"
   ],
   "scripts": {
+    "agent": "bun run --filter '@whiffle/agent' start",
+    "build": "bun run --filter '*' build",
+    "db:push": "bun run --filter '@whiffle/hub' db:push",
     "dev": "bun run dev:dashboard",
-    "dev:dashboard": "bun run --filter '@whiffle/dashboard' dev",
-    "dev:hub": "bun run --filter '@whiffle/hub' dev",
     "dev:agent": "bun run --filter '@whiffle/agent' dev",
     "dev:all": "bun run --filter '*' dev",
-    "build": "bun run --filter '*' build",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "typecheck": "bun run --filter '*' typecheck",
+    "dev:dashboard": "bun run --filter '@whiffle/dashboard' dev",
+    "dev:hub": "bun run --filter '@whiffle/hub' dev",
     "hub": "bun run --filter '@whiffle/hub' dev",
-    "agent": "bun run --filter '@whiffle/agent' start",
-    "whiffle": "bun packages/cli/src/cli.ts",
-    "db:push": "bun run --filter '@whiffle/hub' db:push",
-    "smoke:insecure": "node scripts/insecure-origin-smoke.mjs",
-    "lint:changed": "git diff --name-only --diff-filter=ACMR HEAD -- 'apps/dashboard/src/**/*.ts' 'apps/dashboard/src/**/*.svelte' | xargs -r eslint",
-    "test": "bun test",
+    "lint": "ultracite check",
+    "lint:changed": "git diff --name-only --diff-filter=ACMR HEAD | xargs -r bunx biome check",
+    "lint:fix": "ultracite fix",
     "release:build": "bun scripts/build-release.mjs",
-    "release:pack": "bun scripts/build-release.mjs && cd release && npm pack"
+    "release:pack": "bun scripts/build-release.mjs && cd release && npm pack",
+    "smoke:insecure": "node scripts/insecure-origin-smoke.mjs",
+    "test": "bun test",
+    "typecheck": "bun run --filter '*' typecheck",
+    "whiffle": "bun packages/cli/src/cli.ts"
   },
   "overrides": {
-    "vite": "npm:rolldown-vite@latest",
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "vite": "npm:rolldown-vite@latest"
+  },
+  "dependencies": {
+    "torph": "^0.1.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.2",
+    "@biomejs/biome": "2.5.9",
     "@types/bun": "latest",
     "@types/node": "^22.19.0",
-    "eslint": "^9.39.2",
-    "eslint-plugin-svelte": "^3.14.0",
-    "globals": "^17.0.0",
     "playwright-core": "^1.62.1",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.53.0"
+    "ultracite": "7.10.7"
   },
   "patchedDependencies": {
     "svelte-streamdown@3.1.2": "patches/svelte-streamdown@3.1.2.patch",
     "virtua@0.50.0": "patches/virtua@0.50.0.patch"
-  },
-  "dependencies": {
-    "torph": "^0.1.0"
   }
 }

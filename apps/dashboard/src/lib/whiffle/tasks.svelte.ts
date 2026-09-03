@@ -8,46 +8,47 @@
  * stale and the disk answers the question again. Files-as-truth (NEW.md §1) —
  * whiffle stores none of this.
  */
-import type { FsEntry, HarnessKind } from '@whiffle/core';
-import { browser } from '$app/environment';
-import { whiffle, machineControl, machineFs } from './client.svelte';
+import type { FsEntry, HarnessKind } from "@whiffle/core";
+import { browser } from "$app/environment";
+import { machineControl, machineFs, whiffle } from "./client.svelte";
 
 export interface SessionTask {
-  id: string;
-  subject: string;
-  description?: string;
   activeForm?: string;
-  status: 'pending' | 'in_progress' | 'completed';
-  owner?: string;
-  blocks: string[];
   blockedBy: string[];
+  blocks: string[];
+  description?: string;
+  id: string;
+  owner?: string;
+  status: "pending" | "in_progress" | "completed";
+  subject: string;
 }
 
 export interface TaskSnapshot {
-  tasks: SessionTask[];
-  fetchedAt: number;
-  loading: boolean;
   /** The machine could not be asked at all. A session with no ledger is not this. */
   failed?: boolean;
+  fetchedAt: number;
+  loading: boolean;
+  tasks: SessionTask[];
 }
 
 /**
  * The two calls that write the ledger. `TaskGet` and `TaskList` only read it,
  * so they change nothing and stay ordinary tool calls in the transcript.
  */
-export const TASK_LEDGER_TOOLS = new Set(['TaskCreate', 'TaskUpdate']);
+export const TASK_LEDGER_TOOLS = new Set(["TaskCreate", "TaskUpdate"]);
 
 // Module scope, so the header pill, the board row and the peek pane are all
 // reading one answer per session rather than each fetching their own.
 const snapshots = $state<Record<string, TaskSnapshot>>({});
 
 /** This session's ledger as it was last read, or nothing if it never was. */
-export const tasksOf = (viewId: string): TaskSnapshot | null => snapshots[viewId] ?? null;
+export const tasksOf = (viewId: string): TaskSnapshot | null =>
+  snapshots[viewId] ?? null;
 
 /** A turn's worth of `TaskUpdate`s arrives as a burst; read the directory once. */
 const DEBOUNCE_MS = 300;
 /** How long a reading stands before a plain refresh asks the machine again. */
-const FRESH_MS = 5_000;
+const FRESH_MS = 5000;
 
 const scheduled = new Map<string, ReturnType<typeof setTimeout>>();
 const running = new Map<string, Promise<void>>();
@@ -56,7 +57,9 @@ const stale = new Set<string>();
 
 /** Reads the ledger, unless one read recently enough is already on screen. */
 export function refreshTasks(viewId: string): void {
-  if (!browser || scheduled.has(viewId)) return;
+  if (!browser || scheduled.has(viewId)) {
+    return;
+  }
   scheduled.set(
     viewId,
     setTimeout(() => {
@@ -75,7 +78,9 @@ export function invalidateTasks(viewId: string): void {
 async function read(viewId: string): Promise<void> {
   // A read already out is the answer to this one too.
   const inflight = running.get(viewId);
-  if (inflight) return inflight;
+  if (inflight) {
+    return inflight;
+  }
 
   // A board row's session has never been opened, so it has no view state — but
   // the registry already knows which machine it runs on and which SDK session
@@ -84,20 +89,30 @@ async function read(viewId: string): Promise<void> {
   const row = whiffle.instances.find((instance) => instance.id === viewId);
   const machineId = session?.machineId || row?.machineId;
   const sessionId = session?.sessionId || row?.sessionId;
-  const harness = (session?.harness ?? (row?.harness as HarnessKind | null | undefined) ?? 'claude') as HarnessKind;
+  const harness = (session?.harness ??
+    (row?.harness as HarnessKind | null | undefined) ??
+    "claude") as HarnessKind;
   const cwd = session?.cwd || row?.cwd;
-  if (!machineId || !sessionId) return;
+  if (!(machineId && sessionId)) {
+    return;
+  }
 
   const invalidated = stale.delete(viewId);
   const current = snapshots[viewId];
-  if (!invalidated && current && Date.now() - current.fetchedAt < FRESH_MS) return;
+  if (!invalidated && current && Date.now() - current.fetchedAt < FRESH_MS) {
+    return;
+  }
 
-  const work = fetchLedger(viewId, machineId, sessionId, harness, cwd).finally(() => {
-    running.delete(viewId);
-    // An edit that landed mid-read was answered by a listing taken before it,
-    // so the ledger this just published is already one revision behind.
-    if (stale.has(viewId)) refreshTasks(viewId);
-  });
+  const work = fetchLedger(viewId, machineId, sessionId, harness, cwd).finally(
+    () => {
+      running.delete(viewId);
+      // An edit that landed mid-read was answered by a listing taken before it,
+      // so the ledger this just published is already one revision behind.
+      if (stale.has(viewId)) {
+        refreshTasks(viewId);
+      }
+    }
+  );
   running.set(viewId, work);
   return work;
 }
@@ -109,14 +124,18 @@ async function fetchLedger(
   harness: HarnessKind,
   cwd?: string
 ): Promise<void> {
-  snapshots[viewId] = { tasks: snapshots[viewId]?.tasks ?? [], fetchedAt: 0, loading: true };
+  snapshots[viewId] = {
+    tasks: snapshots[viewId]?.tasks ?? [],
+    fetchedAt: 0,
+    loading: true,
+  };
 
   // opencode keeps its plan in a native `todo` list on the server; pi has none.
-  if (harness === 'opencode') {
+  if (harness === "opencode") {
     try {
       const tasks = await machineControl<SessionTask[]>(
         machineId,
-        'getTodos',
+        "getTodos",
         [sessionId, cwd || undefined],
         undefined,
         harness
@@ -127,7 +146,7 @@ async function fetchLedger(
     }
     return;
   }
-  if (harness === 'pi') {
+  if (harness === "pi") {
     publish(viewId, []);
     return;
   }
@@ -143,7 +162,7 @@ async function fetchLedger(
   const dir = `${home}/.claude/tasks/${sessionId}`;
   let entries: FsEntry[];
   try {
-    entries = await machineFs<FsEntry[]>(machineId, 'list', dir);
+    entries = await machineFs<FsEntry[]>(machineId, "list", dir);
   } catch {
     // A session that has never written a task has no directory. The daemon
     // reports that the way it reports anything else, and both mean "no plan".
@@ -151,11 +170,15 @@ async function fetchLedger(
     return;
   }
 
-  const files = entries.filter((entry) => entry.kind === 'file' && entry.name.endsWith('.json'));
+  const files = entries.filter(
+    (entry) => entry.kind === "file" && entry.name.endsWith(".json")
+  );
   const parsed = await Promise.all(
     files.map(async (file) => {
       try {
-        return parseTask(await machineFs<string>(machineId, 'read', `${dir}/${file.name}`));
+        return parseTask(
+          await machineFs<string>(machineId, "read", `${dir}/${file.name}`)
+        );
       } catch {
         // One unreadable or half-written file is not a reason to lose the plan.
         return null;
@@ -177,36 +200,47 @@ function publish(viewId: string, tasks: SessionTask[], failed?: boolean): void {
 
 function parseTask(text: string): SessionTask | null {
   const raw = JSON.parse(text) as Partial<SessionTask>;
-  if (typeof raw.id !== 'string' || typeof raw.subject !== 'string') return null;
+  if (typeof raw.id !== "string" || typeof raw.subject !== "string") {
+    return null;
+  }
   return {
     id: raw.id,
     subject: raw.subject,
     description: raw.description,
     activeForm: raw.activeForm,
-    status: raw.status === 'in_progress' || raw.status === 'completed' ? raw.status : 'pending',
+    status:
+      raw.status === "in_progress" || raw.status === "completed"
+        ? raw.status
+        : "pending",
     owner: raw.owner,
     blocks: raw.blocks ?? [],
     blockedBy: raw.blockedBy ?? [],
   };
 }
 
-const HOME_KEY = 'whiffle-machine-home';
+const HOME_KEY = "whiffle-machine-home";
 
 /** `/home/<user>` or `/Users/<user>` — the prefix every path on a machine shares. */
 const HOME_PREFIX = /^(\/(?:home|Users)\/[^/]+)/;
 
 /** Directories that sit beside a home in `/home` or `/Users` and are not one. */
-const NOT_A_HOME = new Set(['Shared', 'lost+found']);
+const NOT_A_HOME = new Set(["Shared", "lost+found"]);
 
 // debt: the daemon register payload should carry `home`; delete this heuristic then.
 const homes = new Map<string, string>(Object.entries(readHomeCache()));
 const probes = new Map<string, Promise<string | null>>();
 
 function readHomeCache(): Record<string, string> {
-  if (!browser) return {};
+  if (!browser) {
+    return {};
+  }
   try {
-    const stored = JSON.parse(localStorage.getItem(HOME_KEY) ?? '{}') as unknown;
-    return stored && typeof stored === 'object' ? (stored as Record<string, string>) : {};
+    const stored = JSON.parse(
+      localStorage.getItem(HOME_KEY) ?? "{}"
+    ) as unknown;
+    return stored && typeof stored === "object"
+      ? (stored as Record<string, string>)
+      : {};
   } catch {
     return {};
   }
@@ -214,7 +248,9 @@ function readHomeCache(): Record<string, string> {
 
 function remember(machineId: string, home: string): string {
   homes.set(machineId, home);
-  if (browser) localStorage.setItem(HOME_KEY, JSON.stringify(Object.fromEntries(homes)));
+  if (browser) {
+    localStorage.setItem(HOME_KEY, JSON.stringify(Object.fromEntries(homes)));
+  }
   return home;
 }
 
@@ -229,13 +265,19 @@ function remember(machineId: string, home: string): string {
  */
 export async function homeOf(machineId: string): Promise<string | null> {
   const known = homes.get(machineId);
-  if (known) return known;
+  if (known) {
+    return known;
+  }
 
   const guessed = guessHome(machineId);
-  if (guessed) return remember(machineId, guessed);
+  if (guessed) {
+    return remember(machineId, guessed);
+  }
 
   const probing = probes.get(machineId);
-  if (probing) return probing;
+  if (probing) {
+    return probing;
+  }
   const probe = probeHome(machineId).finally(() => probes.delete(machineId));
   probes.set(machineId, probe);
   return probe;
@@ -243,27 +285,38 @@ export async function homeOf(machineId: string): Promise<string | null> {
 
 function guessHome(machineId: string): string | null {
   const cwds = [
-    ...whiffle.instances.filter((row) => row.machineId === machineId).map((row) => row.cwd),
-    ...whiffle.catalogOf(machineId).map((info) => info.cwd ?? ''),
+    ...whiffle.instances
+      .filter((row) => row.machineId === machineId)
+      .map((row) => row.cwd),
+    ...whiffle.catalogOf(machineId).map((info) => info.cwd ?? ""),
   ];
   for (const cwd of cwds) {
     const match = HOME_PREFIX.exec(cwd);
-    if (match) return match[1];
+    if (match) {
+      return match[1];
+    }
   }
   return null;
 }
 
 async function probeHome(machineId: string): Promise<string | null> {
-  const os = whiffle.machines.find((machine) => machine.machineId === machineId)?.os ?? '';
-  const root = os.startsWith('darwin') ? '/Users' : '/home';
+  const os =
+    whiffle.machines.find((machine) => machine.machineId === machineId)?.os ??
+    "";
+  const root = os.startsWith("darwin") ? "/Users" : "/home";
   try {
-    const entries = await machineFs<FsEntry[]>(machineId, 'list', root);
+    const entries = await machineFs<FsEntry[]>(machineId, "list", root);
     const candidates = entries.filter(
-      (entry) => entry.kind === 'dir' && !entry.name.startsWith('.') && !NOT_A_HOME.has(entry.name)
+      (entry) =>
+        entry.kind === "dir" &&
+        !entry.name.startsWith(".") &&
+        !NOT_A_HOME.has(entry.name)
     );
     // Two accounts and the answer is a coin toss, so the ledger goes unread
     // rather than read out of somebody else's home.
-    if (candidates.length !== 1) return null;
+    if (candidates.length !== 1) {
+      return null;
+    }
     return remember(machineId, `${root}/${candidates[0].name}`);
   } catch {
     return null;
@@ -277,9 +330,10 @@ export function taskProgress(snapshot: TaskSnapshot): {
   current: SessionTask | null;
 } {
   return {
-    done: snapshot.tasks.filter((task) => task.status === 'completed').length,
+    done: snapshot.tasks.filter((task) => task.status === "completed").length,
     total: snapshot.tasks.length,
-    current: snapshot.tasks.find((task) => task.status === 'in_progress') ?? null,
+    current:
+      snapshot.tasks.find((task) => task.status === "in_progress") ?? null,
   };
 }
 
@@ -287,11 +341,16 @@ export function taskProgress(snapshot: TaskSnapshot): {
  * The task standing in this one's way, if one still is. A blocker that has
  * left the ledger was deleted, and work nobody has to do blocks nothing.
  */
-export function blockerOf(task: SessionTask, tasks: SessionTask[]): string | null {
-  if (task.status === 'completed') return null;
+export function blockerOf(
+  task: SessionTask,
+  tasks: SessionTask[]
+): string | null {
+  if (task.status === "completed") {
+    return null;
+  }
   return (
     task.blockedBy.find((id) =>
-      tasks.some((other) => other.id === id && other.status !== 'completed')
+      tasks.some((other) => other.id === id && other.status !== "completed")
     ) ?? null
   );
 }

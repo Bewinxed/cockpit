@@ -7,8 +7,6 @@
  * `instances` frames say what came of it.
  */
 import {
-  MARKETPLACE_CATALOG,
-  parseAgentFrontMatter,
   type ConfigInspection,
   type FleetAgent,
   type FleetConfig,
@@ -18,14 +16,16 @@ import {
   type FleetPlugin,
   type FleetSkillMeta,
   type FsEntry,
+  MARKETPLACE_CATALOG,
   type MachineMemorySet,
   type MarketplacePluginInfo,
   type McpHttpServerConfig,
   type McpSSEServerConfig,
-} from '@whiffle/core';
-import { CONTROL_TIMEOUT_MS } from '$lib/config';
-import { machineControl, machineFs, type Machine } from './client.svelte';
-import { homeOf } from './tasks.svelte';
+  parseAgentFrontMatter,
+} from "@whiffle/core";
+import { CONTROL_TIMEOUT_MS } from "$lib/config";
+import { type Machine, machineControl, machineFs } from "./client.svelte";
+import { homeOf } from "./tasks.svelte";
 
 /** The fleet's user-scope CLAUDE.md, as the hub stores it (NEW.md §11). */
 export interface FleetMemoryRow {
@@ -49,13 +49,12 @@ export interface FleetMemoryDocRow extends FleetMemoryRow {
  * and a catalog read should not weigh megabytes.
  */
 export interface FleetSnapshot {
-  config: FleetConfig;
-  skills: FleetSkillMeta[];
   /**
    * The subagents, file and all: a definition is a page of markdown, so the
    * editor is seeded from this read rather than fetching each one again.
    */
   agents: FleetAgent[];
+  config: FleetConfig;
   /** Null while the fleet keeps no memory, which is where every fleet starts. */
   memory: FleetMemoryRow | null;
   /**
@@ -64,6 +63,7 @@ export interface FleetSnapshot {
    * subagents are — each one is a page of markdown.
    */
   memoryDocs: FleetMemoryDocRow[];
+  skills: FleetSkillMeta[];
   /** Machines the hub could not write the subagents to, by machineId → why. */
   unpushable: Record<string, string>;
 }
@@ -85,20 +85,31 @@ const NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
  * form does too — a refusal you can read before you click beats one after.
  */
 const RESERVED = [
-  'workspace',
-  'claude-in-chrome',
-  'computer-use',
-  'claude preview',
-  'claude browser',
+  "workspace",
+  "claude-in-chrome",
+  "computer-use",
+  "claude preview",
+  "claude browser",
 ];
 
 /** Why this name cannot be used, in a sentence, or nothing when it can. */
-export function mcpNameProblem(name: string, taken: readonly string[] = []): string | undefined {
+export function mcpNameProblem(
+  name: string,
+  taken: readonly string[] = []
+): string | undefined {
   const trimmed = name.trim();
-  if (!trimmed) return 'Give the server a name.';
-  if (!NAME_PATTERN.test(trimmed)) return 'Letters, digits, dashes and underscores only.';
-  if (RESERVED.includes(trimmed.toLowerCase())) return `Claude Code keeps “${trimmed}” for itself.`;
-  if (taken.includes(trimmed)) return `There is already a server called “${trimmed}”.`;
+  if (!trimmed) {
+    return "Give the server a name.";
+  }
+  if (!NAME_PATTERN.test(trimmed)) {
+    return "Letters, digits, dashes and underscores only.";
+  }
+  if (RESERVED.includes(trimmed.toLowerCase())) {
+    return `Claude Code keeps “${trimmed}” for itself.`;
+  }
+  if (taken.includes(trimmed)) {
+    return `There is already a server called “${trimmed}”.`;
+  }
   return undefined;
 }
 
@@ -108,34 +119,41 @@ export function mcpNameProblem(name: string, taken: readonly string[] = []): str
  * fills stays editable.
  */
 export function suggestMcpName(pkg: string): string {
-  const segment = pkg.trim().split('/').pop() ?? '';
-  const at = segment.lastIndexOf('@');
+  const segment = pkg.trim().split("/").pop() ?? "";
+  const at = segment.lastIndexOf("@");
   const bare = at > 0 ? segment.slice(0, at) : segment;
-  return bare.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+  return bare.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
 /** Remote servers are the ones with an endpoint; stdio's `type` is optional. */
 export const isRemoteMcp = (
   config: FleetMcpConfig
-): config is McpHttpServerConfig | McpSSEServerConfig => 'url' in config;
+): config is McpHttpServerConfig | McpSSEServerConfig => "url" in config;
 
 /** The one line a row shows: the command it runs, or the endpoint it calls. */
 export const describeMcp = (config: FleetMcpConfig): string =>
-  isRemoteMcp(config) ? config.url : [config.command, ...(config.args ?? [])].join(' ');
+  isRemoteMcp(config)
+    ? config.url
+    : [config.command, ...(config.args ?? [])].join(" ");
 
 /**
  * Splits an args field the naive way — on whitespace, with no quoting. Args
  * with spaces in them are rare enough that the form says so rather than
  * shipping a shell parser nobody asked for.
  */
-export const splitArgs = (line: string): string[] => line.trim().split(/\s+/).filter(Boolean);
+export const splitArgs = (line: string): string[] =>
+  line.trim().split(/\s+/).filter(Boolean);
 
 /** Drops the blank rows a key/value editor always ends up carrying. */
-export function pairsToRecord(rows: readonly { key: string; value: string }[]): Record<string, string> {
+export function pairsToRecord(
+  rows: readonly { key: string; value: string }[]
+): Record<string, string> {
   const record: Record<string, string> = {};
   for (const row of rows) {
     const key = row.key.trim();
-    if (key) record[key] = row.value;
+    if (key) {
+      record[key] = row.value;
+    }
   }
   return record;
 }
@@ -145,7 +163,7 @@ export const recordToPairs = (
   record: Record<string, string> | undefined
 ): { key: string; value: string }[] => [
   ...Object.entries(record ?? {}).map(([key, value]) => ({ key, value })),
-  { key: '', value: '' },
+  { key: "", value: "" },
 ];
 
 /** The charset skill names are held to, on the hub and here. */
@@ -160,28 +178,37 @@ const SKILL_SCHEME = /^(?:skills:|github:|npm:|https?:\/\/)/;
  * they surround.
  */
 const WRAPPERS = new Set([
-  'bunx',
-  'bun',
-  'npx',
-  'npm',
-  'pnpm',
-  'pnpx',
-  'yarn',
-  'dlx',
-  'x',
-  'run',
-  'skills',
-  'add',
-  'install',
-  'i',
+  "bunx",
+  "bun",
+  "npx",
+  "npm",
+  "pnpm",
+  "pnpx",
+  "yarn",
+  "dlx",
+  "x",
+  "run",
+  "skills",
+  "add",
+  "install",
+  "i",
 ]);
 
 /** Why this name cannot be used, in a sentence, or nothing when it can. */
-export function skillNameProblem(name: string, taken: readonly string[] = []): string | undefined {
+export function skillNameProblem(
+  name: string,
+  taken: readonly string[] = []
+): string | undefined {
   const trimmed = name.trim();
-  if (!trimmed) return 'Give the skill a name.';
-  if (!SKILL_NAME_PATTERN.test(trimmed)) return 'Letters, digits, dots, dashes and underscores only.';
-  if (taken.includes(trimmed)) return `There is already a skill called “${trimmed}”.`;
+  if (!trimmed) {
+    return "Give the skill a name.";
+  }
+  if (!SKILL_NAME_PATTERN.test(trimmed)) {
+    return "Letters, digits, dots, dashes and underscores only.";
+  }
+  if (taken.includes(trimmed)) {
+    return `There is already a skill called “${trimmed}”.`;
+  }
   return undefined;
 }
 
@@ -192,12 +219,16 @@ export function skillNameProblem(name: string, taken: readonly string[] = []): s
  */
 export function normalizeSkillSource(input: string): string {
   const trimmed = input.trim();
-  if (SKILL_SCHEME.test(trimmed)) return trimmed;
+  if (SKILL_SCHEME.test(trimmed)) {
+    return trimmed;
+  }
   const slug = trimmed
     .split(/\s+/)
-    .filter((word) => word !== '' && !word.startsWith('-'))
+    .filter((word) => word !== "" && !word.startsWith("-"))
     .find((word) => !WRAPPERS.has(word.toLowerCase()));
-  if (!slug) return '';
+  if (!slug) {
+    return "";
+  }
   return SKILL_SCHEME.test(slug) ? slug : `skills:${slug}`;
 }
 
@@ -208,31 +239,42 @@ export function normalizeSkillSource(input: string): string {
  */
 export function suggestSkillName(source: string): string {
   const scheme = /^(skills|github|npm):/.exec(source)?.[1];
-  const body = source.slice(scheme ? scheme.length + 1 : 0).split('#')[0];
-  const at = body.lastIndexOf('@');
+  const body = source.slice(scheme ? scheme.length + 1 : 0).split("#")[0];
+  const at = body.lastIndexOf("@");
   // `@` names the skill in a `skills:` slug, and a ref or a version elsewhere.
-  const filter = at > 0 && (scheme === undefined || scheme === 'skills') ? body.slice(at + 1) : '';
-  const segments = (at > 0 ? body.slice(0, at) : body).split(/[/?]/).filter(Boolean);
+  const filter =
+    at > 0 && (scheme === undefined || scheme === "skills")
+      ? body.slice(at + 1)
+      : "";
+  const segments = (at > 0 ? body.slice(0, at) : body)
+    .split(/[/?]/)
+    .filter(Boolean);
   // A plain URL points at the skill's own file; the directory holds its name.
-  if (segments.at(-1)?.toLowerCase() === 'skill.md') segments.pop();
-  return (filter || segments.at(-1) || '')
-    .replace(/[^A-Za-z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  if (segments.at(-1)?.toLowerCase() === "skill.md") {
+    segments.pop();
+  }
+  return (filter || segments.at(-1) || "")
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 /** The same source, narrowed to one skill of a repo that holds several. */
 export function pickSkill(source: string, choice: string): string {
-  const hash = source.indexOf('#');
+  const hash = source.indexOf("#");
   const body = hash === -1 ? source : source.slice(0, hash);
-  const at = body.lastIndexOf('@');
-  return `${at > 0 ? body.slice(0, at) : body}@${choice}${hash === -1 ? '' : source.slice(hash)}`;
+  const at = body.lastIndexOf("@");
+  return `${at > 0 ? body.slice(0, at) : body}@${choice}${hash === -1 ? "" : source.slice(hash)}`;
 }
 
 /** A resolved skill's size, in the units a download is talked about in. */
 export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
   const kb = bytes / 1024;
-  if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} kB`;
+  if (kb < 1024) {
+    return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} kB`;
+  }
   const mb = kb / 1024;
   return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
 }
@@ -242,10 +284,14 @@ export function formatBytes(bytes: number): string {
  * the marketplace is really linked there. Any one will do — the clone is the
  * same on all of them.
  */
-export const catalogHost = (machines: readonly Machine[], name: string): Machine | undefined =>
+export const catalogHost = (
+  machines: readonly Machine[],
+  name: string
+): Machine | undefined =>
   machines.find(
     (machine) =>
-      machine.status === 'online' && machine.fleet?.marketplaces?.[name]?.state === 'applied'
+      machine.status === "online" &&
+      machine.fleet?.marketplaces?.[name]?.state === "applied"
   );
 
 /**
@@ -255,14 +301,25 @@ export const catalogHost = (machines: readonly Machine[], name: string): Machine
  */
 async function said(response: Response): Promise<string> {
   const body = (await response.text()).trim();
-  if (!body) return `the hub answered ${response.status}`;
+  if (!body) {
+    return `the hub answered ${response.status}`;
+  }
   try {
     const parsed: unknown = JSON.parse(body);
-    if (typeof parsed === 'string') return parsed;
-    if (parsed && typeof parsed === 'object') {
-      const { message, error } = parsed as { message?: unknown; error?: unknown };
-      if (typeof message === 'string') return message;
-      if (typeof error === 'string') return error;
+    if (typeof parsed === "string") {
+      return parsed;
+    }
+    if (parsed && typeof parsed === "object") {
+      const { message, error } = parsed as {
+        message?: unknown;
+        error?: unknown;
+      };
+      if (typeof message === "string") {
+        return message;
+      }
+      if (typeof error === "string") {
+        return error;
+      }
     }
   } catch {
     // A plain-text refusal, which is Elysia's own default.
@@ -270,16 +327,26 @@ async function said(response: Response): Promise<string> {
   return body;
 }
 
-async function send<T>(url: string, init: RequestInit, attempt: string): Promise<T> {
+async function send<T>(
+  url: string,
+  init: RequestInit,
+  attempt: string
+): Promise<T> {
   const response = await fetch(url, init);
-  if (!response.ok) throw new Error(`Could not ${attempt} — ${await said(response)}.`);
+  if (!response.ok) {
+    throw new Error(`Could not ${attempt} — ${await said(response)}.`);
+  }
   return (await response.json()) as T;
 }
 
 const put = <T>(url: string, body: unknown, attempt: string): Promise<T> =>
   send<T>(
     url,
-    { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
     attempt
   );
 
@@ -288,14 +355,23 @@ const put = <T>(url: string, body: unknown, attempt: string): Promise<T> =>
  * document is keyed by `models/claude-opus-5.md`, and a slash in a route
  * parameter is a route somewhere else.
  */
-async function erase(url: string, attempt: string, body?: unknown): Promise<void> {
+async function erase(
+  url: string,
+  attempt: string,
+  body?: unknown
+): Promise<void> {
   const response = await fetch(url, {
-    method: 'DELETE',
+    method: "DELETE",
     ...(body === undefined
       ? {}
-      : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+      : {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
   });
-  if (!response.ok) throw new Error(`Could not ${attempt} — ${await said(response)}.`);
+  if (!response.ok) {
+    throw new Error(`Could not ${attempt} — ${await said(response)}.`);
+  }
 }
 
 export const saveMcpServer = (
@@ -303,18 +379,35 @@ export const saveMcpServer = (
   config: FleetMcpConfig,
   enabled?: boolean
 ): Promise<FleetMcpServer> =>
-  put(`/api/fleet/mcp/${encodeURIComponent(name)}`, { config, enabled }, `save ${name}`);
+  put(
+    `/api/fleet/mcp/${encodeURIComponent(name)}`,
+    { config, enabled },
+    `save ${name}`
+  );
 
 export const removeMcpServer = (name: string): Promise<void> =>
   erase(`/api/fleet/mcp/${encodeURIComponent(name)}`, `remove ${name}`);
 
-export const saveMarketplace = (name: string, source: string): Promise<FleetMarketplace> =>
-  put(`/api/fleet/marketplaces/${encodeURIComponent(name)}`, { source }, `link ${name}`);
+export const saveMarketplace = (
+  name: string,
+  source: string
+): Promise<FleetMarketplace> =>
+  put(
+    `/api/fleet/marketplaces/${encodeURIComponent(name)}`,
+    { source },
+    `link ${name}`
+  );
 
 export const removeMarketplace = (name: string): Promise<void> =>
-  erase(`/api/fleet/marketplaces/${encodeURIComponent(name)}`, `unlink ${name}`);
+  erase(
+    `/api/fleet/marketplaces/${encodeURIComponent(name)}`,
+    `unlink ${name}`
+  );
 
-export const savePlugin = (id: string, patch: { enabled?: boolean }): Promise<FleetPlugin> =>
+export const savePlugin = (
+  id: string,
+  patch: { enabled?: boolean }
+): Promise<FleetPlugin> =>
   put(`/api/fleet/plugins/${encodeURIComponent(id)}`, patch, `save ${id}`);
 
 export const removePlugin = (id: string): Promise<void> =>
@@ -327,7 +420,11 @@ export const removePlugin = (id: string): Promise<void> =>
  * without a reload.
  */
 export const refreshPlugin = (id: string): Promise<FleetPlugin> =>
-  send(`/api/fleet/plugins/${encodeURIComponent(id)}/refresh`, { method: 'POST' }, `refresh ${id}`);
+  send(
+    `/api/fleet/plugins/${encodeURIComponent(id)}/refresh`,
+    { method: "POST" },
+    `refresh ${id}`
+  );
 
 /**
  * Stores a skill and resolves it on the hub, once, for every machine. A source
@@ -345,15 +442,18 @@ export const saveSkill = (
  * `cwd` would see. Asked on demand and never stored: it is the machine's own
  * word at the moment of asking.
  */
-export const inspectMachine = (machineId: string, cwd?: string): Promise<ConfigInspection> =>
+export const inspectMachine = (
+  machineId: string,
+  cwd?: string
+): Promise<ConfigInspection> =>
   send(
     `/api/agents/${encodeURIComponent(machineId)}/inspect`,
     {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cwd ? { cwd } : {}),
     },
-    'read what this machine has'
+    "read what this machine has"
   );
 
 /**
@@ -373,7 +473,11 @@ export const adoptSkill = (
 
 /** Resolves the same source again — for a skill whose repo has moved on. */
 export const refreshSkill = (name: string): Promise<FleetSkillMeta> =>
-  send(`/api/fleet/skills/${encodeURIComponent(name)}/refresh`, { method: 'POST' }, `refresh ${name}`);
+  send(
+    `/api/fleet/skills/${encodeURIComponent(name)}/refresh`,
+    { method: "POST" },
+    `refresh ${name}`
+  );
 
 export const removeSkill = (name: string): Promise<void> =>
   erase(`/api/fleet/skills/${encodeURIComponent(name)}`, `remove ${name}`);
@@ -384,7 +488,11 @@ export const removeSkill = (name: string): Promise<void> =>
  * broken one and stores what it was given either way.
  */
 export const saveAgent = (name: string, content: string): Promise<FleetAgent> =>
-  put(`/api/fleet/agents/${encodeURIComponent(name)}`, { content }, `save ${name}`);
+  put(
+    `/api/fleet/agents/${encodeURIComponent(name)}`,
+    { content },
+    `save ${name}`
+  );
 
 /**
  * Forgets it here. The file stays on the machines — the `fs` verb has no
@@ -396,19 +504,24 @@ export const removeAgent = (name: string): Promise<void> =>
 
 /** Writes the subagents again, at every machine that is online. */
 export const pushAgents = (): Promise<{ unpushable: Record<string, string> }> =>
-  send('/api/fleet/agents/push', { method: 'POST' }, 'push the subagents to the machines');
+  send(
+    "/api/fleet/agents/push",
+    { method: "POST" },
+    "push the subagents to the machines"
+  );
 
 /** One subagent found on a machine, whoever wrote it. */
 export interface DiscoveredAgent {
+  content: string;
+  description?: string;
   /** The front matter's `name` — the identity, whatever the file is called. */
   name: string;
   path: string;
-  content: string;
-  description?: string;
 }
 
 /** A `.md` under the agents directory, as a listing gives it. */
-const markdown = (entry: FsEntry): boolean => entry.kind === 'file' && entry.name.endsWith('.md');
+const markdown = (entry: FsEntry): boolean =>
+  entry.kind === "file" && entry.name.endsWith(".md");
 
 /**
  * The subagent files a machine really has under `~/.claude/agents`. Claude Code
@@ -419,23 +532,37 @@ const markdown = (entry: FsEntry): boolean => entry.kind === 'file' && entry.nam
  * A machine whose home cannot be worked out, or which has no such directory,
  * answers with nothing at all — absence over placeholder.
  */
-export async function discoverAgents(machineId: string): Promise<DiscoveredAgent[]> {
+export async function discoverAgents(
+  machineId: string
+): Promise<DiscoveredAgent[]> {
   const home = await homeOf(machineId);
-  if (!home) return [];
+  if (!home) {
+    return [];
+  }
 
   const root = `${home}/.claude/agents`;
   let entries: FsEntry[];
   try {
-    entries = await machineFs<FsEntry[]>(machineId, 'list', root);
+    entries = await machineFs<FsEntry[]>(machineId, "list", root);
   } catch {
     return [];
   }
 
-  const paths = entries.filter(markdown).map((entry) => `${root}/${entry.name}`);
-  for (const dir of entries.filter((entry) => entry.kind === 'dir')) {
+  const paths = entries
+    .filter(markdown)
+    .map((entry) => `${root}/${entry.name}`);
+  for (const dir of entries.filter((entry) => entry.kind === "dir")) {
     try {
-      const nested = await machineFs<FsEntry[]>(machineId, 'list', `${root}/${dir.name}`);
-      paths.push(...nested.filter(markdown).map((entry) => `${root}/${dir.name}/${entry.name}`));
+      const nested = await machineFs<FsEntry[]>(
+        machineId,
+        "list",
+        `${root}/${dir.name}`
+      );
+      paths.push(
+        ...nested
+          .filter(markdown)
+          .map((entry) => `${root}/${dir.name}/${entry.name}`)
+      );
     } catch {
       // One unreadable subdirectory is not a reason to lose the rest of them.
     }
@@ -444,11 +571,13 @@ export async function discoverAgents(machineId: string): Promise<DiscoveredAgent
   const read = await Promise.all(
     paths.map(async (path) => {
       try {
-        const content = await machineFs<string>(machineId, 'read', path);
+        const content = await machineFs<string>(machineId, "read", path);
         const front = parseAgentFrontMatter(content);
         // A markdown file with no `name` is not a subagent — it is a note
         // somebody left in the directory, and Claude Code ignores it too.
-        if (!front.name) return null;
+        if (!front.name) {
+          return null;
+        }
         return {
           name: front.name,
           path,
@@ -465,14 +594,14 @@ export async function discoverAgents(machineId: string): Promise<DiscoveredAgent
 
 /** One superseded version of the memory, as the history list reads it. */
 export interface FleetMemoryVersion {
-  id: number;
-  hash: string;
-  /** `fleet`, or `machine:<machineId>` for a copy an overwrite took off one. */
-  source: string;
-  /** Which document of the set it was a version of; absent is the main file. */
-  path?: string;
   bytes: number;
   createdAt: string;
+  hash: string;
+  id: number;
+  /** Which document of the set it was a version of; absent is the main file. */
+  path?: string;
+  /** `fleet`, or `machine:<machineId>` for a copy an overwrite took off one. */
+  source: string;
 }
 
 /** What a save came to: the row the hub stored, or the one it has instead. */
@@ -485,14 +614,21 @@ export type MemorySave =
  * `expectedHash` is what the writer had in front of them — a save against a row
  * somebody else moved comes back with what is really there, unwritten.
  */
-export async function saveMemory(content: string, expectedHash?: string): Promise<MemorySave> {
-  const response = await fetch('/api/fleet/memory', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+export async function saveMemory(
+  content: string,
+  expectedHash?: string
+): Promise<MemorySave> {
+  const response = await fetch("/api/fleet/memory", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content, expectedHash }),
   });
-  if (response.status === 409) return { ok: false, latest: (await response.json()) as FleetMemoryRow };
-  if (!response.ok) throw new Error(`Could not save the memory — ${await said(response)}.`);
+  if (response.status === 409) {
+    return { ok: false, latest: (await response.json()) as FleetMemoryRow };
+  }
+  if (!response.ok) {
+    throw new Error(`Could not save the memory — ${await said(response)}.`);
+  }
   return { ok: true, memory: (await response.json()) as FleetMemoryRow };
 }
 
@@ -502,14 +638,18 @@ export async function saveMemory(content: string, expectedHash?: string): Promis
  * not a failure. `send` would choke parsing that empty answer as JSON, and the
  * memory tab would report the fetch's own exception as what the machine said.
  */
-export async function peekMemory(machineId: string): Promise<MachineMemorySet | null> {
-  const response = await fetch('/api/fleet/memory/peek', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+export async function peekMemory(
+  machineId: string
+): Promise<MachineMemorySet | null> {
+  const response = await fetch("/api/fleet/memory/peek", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ machineId }),
   });
   if (!response.ok) {
-    throw new Error(`Could not read this machine's memory — ${await said(response)}.`);
+    throw new Error(
+      `Could not read this machine's memory — ${await said(response)}.`
+    );
   }
   const body = await response.text();
   return body ? (JSON.parse(body) as MachineMemorySet) : null;
@@ -522,31 +662,32 @@ export async function peekMemory(machineId: string): Promise<MachineMemorySet | 
 export const memoryHistory = (path?: string): Promise<FleetMemoryVersion[]> =>
   send(
     path === undefined
-      ? '/api/fleet/memory/history'
+      ? "/api/fleet/memory/history"
       : `/api/fleet/memory/history?path=${encodeURIComponent(path)}`,
     {},
-    'read the memory history'
+    "read the memory history"
   );
 
 export const memoryVersion = (
   id: number
 ): Promise<FleetMemoryVersion & { content: string }> =>
-  send(`/api/fleet/memory/history/${id}`, {}, 'read that version');
+  send(`/api/fleet/memory/history/${id}`, {}, "read that version");
 
 /** Undo: the version becomes the fleet's, and what it replaced joins the history. */
 export const restoreMemory = (id: number): Promise<FleetMemoryRow> =>
   send(
-    '/api/fleet/memory/restore',
+    "/api/fleet/memory/restore",
     {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     },
-    'restore that version'
+    "restore that version"
   );
 
 /** Drops it, and with it the copy on every machine that still has whiffle's. */
-export const removeMemory = (): Promise<void> => erase('/api/fleet/memory', 'remove the memory');
+export const removeMemory = (): Promise<void> =>
+  erase("/api/fleet/memory", "remove the memory");
 
 /**
  * Stores one linked document; every machine gets it under `~/.claude/memories/`.
@@ -556,22 +697,27 @@ export async function saveMemoryDoc(
   path: string,
   content: string,
   expectedHash?: string
-): Promise<{ ok: true; doc: FleetMemoryDocRow } | { ok: false; latest: FleetMemoryDocRow }> {
-  const response = await fetch('/api/fleet/memory/docs', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+): Promise<
+  | { ok: true; doc: FleetMemoryDocRow }
+  | { ok: false; latest: FleetMemoryDocRow }
+> {
+  const response = await fetch("/api/fleet/memory/docs", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path, content, expectedHash }),
   });
   if (response.status === 409) {
     return { ok: false, latest: (await response.json()) as FleetMemoryDocRow };
   }
-  if (!response.ok) throw new Error(`Could not save ${path} — ${await said(response)}.`);
+  if (!response.ok) {
+    throw new Error(`Could not save ${path} — ${await said(response)}.`);
+  }
   return { ok: true, doc: (await response.json()) as FleetMemoryDocRow };
 }
 
 /** Drops one document, and with it the copy on every machine that has whiffle's. */
 export const removeMemoryDoc = (path: string): Promise<void> =>
-  erase('/api/fleet/memory/docs', `remove ${path}`, { path });
+  erase("/api/fleet/memory/docs", `remove ${path}`, { path });
 
 /**
  * Takes one machine's whole memory as the fleet's — the main file and every
@@ -580,22 +726,25 @@ export const removeMemoryDoc = (path: string): Promise<void> =>
  */
 export const adoptMemory = (machineId: string): Promise<FleetMemoryRow> =>
   send(
-    '/api/fleet/memory/adopt',
+    "/api/fleet/memory/adopt",
     {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ machineId }),
     },
     "adopt this machine's memory"
   );
 
 /** The same for one document of the set, for the drifted row being settled. */
-export const adoptMemoryDoc = (machineId: string, path: string): Promise<FleetMemoryDocRow> =>
+export const adoptMemoryDoc = (
+  machineId: string,
+  path: string
+): Promise<FleetMemoryDocRow> =>
   send(
-    '/api/fleet/memory/adopt',
+    "/api/fleet/memory/adopt",
     {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ machineId, path }),
     },
     `adopt this machine's ${path}`
@@ -606,15 +755,18 @@ export const adoptMemoryDoc = (machineId: string, path: string): Promise<FleetMe
  * A `path` forces the one document, so settling a drifted `models/…` does not
  * also overwrite a main file nobody looked at.
  */
-export const pushMemory = (machineId: string, path?: string): Promise<unknown> =>
+export const pushMemory = (
+  machineId: string,
+  path?: string
+): Promise<unknown> =>
   send(
-    '/api/fleet/memory/push',
+    "/api/fleet/memory/push",
     {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ machineId, path }),
     },
-    'overwrite this machine'
+    "overwrite this machine"
   );
 
 /**
@@ -624,13 +776,13 @@ export const pushMemory = (machineId: string, path?: string): Promise<unknown> =
  */
 export const syncFleet = (machineId?: string): Promise<unknown> =>
   send(
-    '/api/fleet/sync',
+    "/api/fleet/sync",
     {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(machineId ? { machineId } : {}),
     },
-    'sync the fleet'
+    "sync the fleet"
   );
 
 /**
@@ -642,4 +794,9 @@ export const marketplaceCatalog = (
   machineId: string,
   name: string
 ): Promise<MarketplacePluginInfo[]> =>
-  machineControl<MarketplacePluginInfo[]>(machineId, MARKETPLACE_CATALOG, [name], CONTROL_TIMEOUT_MS);
+  machineControl<MarketplacePluginInfo[]>(
+    machineId,
+    MARKETPLACE_CATALOG,
+    [name],
+    CONTROL_TIMEOUT_MS
+  );

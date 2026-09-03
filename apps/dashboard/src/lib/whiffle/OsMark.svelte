@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { IconServerDuo } from "$lib/icons";
   /**
    * The mark of the operating system itself, rather than the shape of a box —
    * a laptop glyph on a Mac and a monitor glyph on a Linux tower said which
@@ -9,26 +10,25 @@
    * on the same optical weight and fills with `currentColor`, so it takes the
    * ink of whatever row it lands in.
    */
-  import { cn } from '$lib/utils';
-  import { IconServerDuo } from '$lib/icons';
+  import { cn } from "$lib/utils";
 
   interface Props {
+    class?: string;
     /** The daemon's `platform-arch` fingerprint, as `machineOs` reads it. */
     os: string;
-    class?: string;
   }
 
   let { os, class: className }: Props = $props();
 
-  const platform = $derived(os.trim().toLowerCase().split('-')[0]);
+  const platform = $derived(os.trim().toLowerCase().split("-")[0]);
   const shape = $derived(
-    platform === 'darwin'
-      ? 'apple'
-      : platform === 'linux'
-        ? 'tux'
-        : platform === 'win32' || platform === 'windows'
-          ? 'windows'
-          : 'unknown'
+    platform === "darwin"
+      ? "apple"
+      : platform === "linux"
+        ? "tux"
+        : platform === "win32" || platform === "windows"
+          ? "windows"
+          : "unknown"
   );
 </script>
 
@@ -36,10 +36,10 @@
   <IconServerDuo class={cn('size-4 shrink-0', className)} />
 {:else}
   <svg
-    viewBox="0 0 16 16"
-    fill="currentColor"
     aria-hidden="true"
     class={cn('size-4 shrink-0', className)}
+    fill="currentColor"
+    viewBox="0 0 16 16"
   >
     {#if shape === 'apple'}
       <path
@@ -63,7 +63,9 @@
            1.1 0 0 0 1.8 0 .9 1.1 0 0 0-1.8 0ZM8 5.6 6.6 7h2.8Z"
       />
     {:else}
-      <path d="M7.6 2.5 15 1.4v6.1H7.6ZM6.9 2.6v4.9H1V3.4ZM6.9 8.5v4.9L1 12.6V8.5ZM7.6 8.5H15v6.1L7.6 13.5Z" />
+      <path
+        d="M7.6 2.5 15 1.4v6.1H7.6ZM6.9 2.6v4.9H1V3.4ZM6.9 8.5v4.9L1 12.6V8.5ZM7.6 8.5H15v6.1L7.6 13.5Z"
+      />
     {/if}
   </svg>
 {/if}

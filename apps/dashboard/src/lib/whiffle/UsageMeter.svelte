@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { ClaudeLimits, LimitWindow } from "@whiffle/core";
   /**
    * How full the machine's Claude limits are, on the dock next to ContextMeter.
    * The two answer the same "am I about to hit a wall?" question for the same
@@ -10,14 +11,13 @@
    * fetched on open, once, because it is a heavy REST aggregate rather than a
    * pushed number.
    */
-  import { onMount } from 'svelte';
-  import type { ClaudeLimits, LimitWindow } from '@whiffle/core';
-  import * as Popover from '$lib/components/ui/popover';
-  import { Badge } from '$lib/components/ui/badge';
-  import IconClock from '~icons/solar/clock-circle-linear';
-  import IconHourglass from '~icons/solar/hourglass-line-duotone';
-  import IconDollar from '~icons/solar/dollar-linear';
-  import { whiffle } from './client.svelte';
+  import { onMount } from "svelte";
+  import { Badge } from "$lib/components/ui/badge";
+  import * as Popover from "$lib/components/ui/popover";
+  import IconClock from "~icons/solar/clock-circle-linear";
+  import IconDollar from "~icons/solar/dollar-linear";
+  import IconHourglass from "~icons/solar/hourglass-line-duotone";
+  import { whiffle } from "./client.svelte";
 
   interface Props {
     /**
@@ -37,26 +37,28 @@
 
   /** The three bands, identical thresholds to ContextMeter so the two read as one system. */
   const FILL: Record<string, string> = {
-    calm: 'bg-muted-foreground/60',
-    warn: 'bg-warning',
-    critical: 'bg-destructive',
+    calm: "bg-muted-foreground/60",
+    warn: "bg-warning",
+    critical: "bg-destructive",
   };
   const TEXT: Record<string, string> = {
-    calm: 'text-muted-foreground',
-    warn: 'text-warning',
-    critical: 'text-destructive',
+    calm: "text-muted-foreground",
+    warn: "text-warning",
+    critical: "text-destructive",
   };
-  const band = (pct: number): 'calm' | 'warn' | 'critical' =>
-    pct >= 90 ? 'critical' : pct >= 70 ? 'warn' : 'calm';
+  const band = (pct: number): "calm" | "warn" | "critical" =>
+    pct >= 90 ? "critical" : pct >= 70 ? "warn" : "calm";
 
   const windows = $derived(limits?.windows ?? []);
   /** The 5-hour hairline: the session window. */
-  const sessionWindow = $derived(windows.find((w) => w.group === 'session') ?? null);
+  const sessionWindow = $derived(
+    windows.find((w) => w.group === "session") ?? null
+  );
   /** The weekly hairline: the active weekly window, else the fullest one. */
   const weeklyWindow = $derived(
-    windows.find((w) => w.group === 'weekly' && w.isActive) ??
+    windows.find((w) => w.group === "weekly" && w.isActive) ??
       windows
-        .filter((w) => w.group === 'weekly')
+        .filter((w) => w.group === "weekly")
         .reduce<LimitWindow | null>(
           (best, w) => (best === null || w.percent > best.percent ? w : best),
           null
@@ -67,10 +69,16 @@
   const weekPct = $derived(weeklyWindow?.percent ?? null);
 
   const label = $derived.by(() => {
-    if (fivePct !== null && weekPct !== null) return `${Math.round(fivePct)}% · ${Math.round(weekPct)}%`;
-    if (fivePct !== null) return `${Math.round(fivePct)}%`;
-    if (weekPct !== null) return `${Math.round(weekPct)}%`;
-    return '—';
+    if (fivePct !== null && weekPct !== null) {
+      return `${Math.round(fivePct)}% · ${Math.round(weekPct)}%`;
+    }
+    if (fivePct !== null) {
+      return `${Math.round(fivePct)}%`;
+    }
+    if (weekPct !== null) {
+      return `${Math.round(weekPct)}%`;
+    }
+    return "—";
   });
 
   /**
@@ -80,20 +88,30 @@
    * when it is not. The full set is one tap away, where it has room to be read.
    */
   const binding = $derived.by(() => {
-    const scored = windows.filter((w) => typeof w.percent === 'number');
-    if (scored.length === 0) return null;
+    const scored = windows.filter((w) => typeof w.percent === "number");
+    if (scored.length === 0) {
+      return null;
+    }
     return scored.reduce((worst, w) => (w.percent > worst.percent ? w : worst));
   });
   const bindingPct = $derived(binding?.percent ?? null);
 
   /** Why there is nothing to meter — a normal state, never a fake 0%. */
   const emptyReason = $derived.by(() => {
-    if (limits === null) return 'No limit reading yet.';
-    if (limits.error === 'not signed in') return 'No limit reading — this machine is not signed in to Claude.';
-    if (limits.error === 'token expired') return 'The Claude login on this machine has expired.';
+    if (limits === null) {
+      return "No limit reading yet.";
+    }
+    if (limits.error === "not signed in") {
+      return "No limit reading — this machine is not signed in to Claude.";
+    }
+    if (limits.error === "token expired") {
+      return "The Claude login on this machine has expired.";
+    }
     if (limits.error) {
       // A stale reading still has its windows; show them and flag the age.
-      if (limits.stale && windows.length > 0) return null;
+      if (limits.stale && windows.length > 0) {
+        return null;
+      }
       return limits.error;
     }
     return null;
@@ -115,28 +133,42 @@
   });
 
   function resetsIn(resetsAt: string | null, at: number): string {
-    if (!resetsAt) return '';
+    if (!resetsAt) {
+      return "";
+    }
     const diff = new Date(resetsAt).getTime() - at;
-    if (diff <= 0) return 'resetting now';
+    if (diff <= 0) {
+      return "resetting now";
+    }
     const totalMin = Math.floor(diff / 60_000);
     const h = Math.floor(totalMin / 60);
     const m = totalMin % 60;
-    if (h > 0) return `resets in ${h}h ${m}m`;
-    if (m > 0) return `resets in ${m}m`;
-    return 'resets in <1m';
+    if (h > 0) {
+      return `resets in ${h}h ${m}m`;
+    }
+    if (m > 0) {
+      return `resets in ${m}m`;
+    }
+    return "resets in <1m";
   }
 
   function windowLabel(w: LimitWindow): string {
-    if (w.group === 'session') return '5-hour';
-    if (w.group === 'weekly') return w.scopeLabel ? `Weekly · ${w.scopeLabel}` : 'Weekly';
+    if (w.group === "session") {
+      return "5-hour";
+    }
+    if (w.group === "weekly") {
+      return w.scopeLabel ? `Weekly · ${w.scopeLabel}` : "Weekly";
+    }
     return w.kind;
   }
 
   const planLabel = (tier: string | null): string | null => {
-    if (!tier) return null;
+    if (!tier) {
+      return null;
+    }
     return tier
-      .replace(/^default_claude_/, '')
-      .replace(/_/g, ' ')
+      .replace(/^default_claude_/, "")
+      .replace(/_/g, " ")
       .replace(/\b\w/g, (c) => c.toUpperCase());
   };
 
@@ -151,11 +183,15 @@
     const since = day.getTime();
     const query = machineId
       ? `harness=opencode&machineId=${encodeURIComponent(machineId)}`
-      : 'harness=opencode';
+      : "harness=opencode";
     try {
       const [totalRes, todayRes] = await Promise.all([
-        fetch(`/api/usage/summary?${query}`).then((r) => (r.ok ? r.json() : null)),
-        fetch(`/api/usage/summary?${query}&since=${since}`).then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/usage/summary?${query}`).then((r) =>
+          r.ok ? r.json() : null
+        ),
+        fetch(`/api/usage/summary?${query}&since=${since}`).then((r) =>
+          r.ok ? r.json() : null
+        ),
       ]);
       spend = {
         total: totalRes?.totals?.costUsd ?? 0,
@@ -173,6 +209,9 @@
   }}
 >
   <Popover.Trigger
+    aria-label={hasReading && binding
+      ? `Claude limits. ${windowLabel(binding)} window ${Math.round(binding.percent)} percent used, the fullest of ${windows.length}. Show them all.${staleNote ? ` ${staleNote}.` : ''}`
+      : `Claude usage limits. ${emptyReason}`}
     class="flex h-7 shrink-0 items-center gap-1.5 rounded-[var(--radius-control)] px-1.5
            text-micro tabular-nums
            hover:bg-muted
@@ -184,38 +223,46 @@
     title={hasReading && binding
       ? `${windowLabel(binding)} limit — ${Math.round(binding.percent)}% used, ${resetsIn(binding.resetsAt, now)}${staleNote ? ` · ${staleNote}` : ''}`
       : 'Claude usage limits'}
-    aria-label={hasReading && binding
-      ? `Claude limits. ${windowLabel(binding)} window ${Math.round(binding.percent)} percent used, the fullest of ${windows.length}. Show them all.${staleNote ? ` ${staleNote}.` : ''}`
-      : `Claude usage limits. ${emptyReason}`}
   >
     {#if hasReading && binding}
       <!-- An hourglass, because this meter is about a window that refills —
            and because a bare bar beside the context meter's bare bar would be
            two identical readings of two different things. -->
-      <IconHourglass class="size-3.5 shrink-0" aria-hidden="true" />
+      <IconHourglass aria-hidden="true" class="size-3.5 shrink-0" />
       <span
-        role="progressbar"
-        aria-valuenow={Math.round(binding.percent)}
-        aria-valuemin={0}
+        aria-label="{windowLabel(binding)} limit"
         aria-valuemax={100}
-        aria-label="{windowLabel(binding)} limit">{Math.round(binding.percent)}%</span
+        aria-valuemin={0}
+        aria-valuenow={Math.round(binding.percent)}
+        role="progressbar"
+        >{Math.round(binding.percent)}%</span
       >
     {:else}
       <span class="text-muted-foreground">—</span>
     {/if}
   </Popover.Trigger>
 
-  <Popover.Content class="w-80 rounded-[var(--radius-panel)] p-0 shadow-lg" align="end" side="top">
+  <Popover.Content
+    align="end"
+    class="w-80 rounded-[var(--radius-panel)] p-0 shadow-lg"
+    side="top"
+  >
     <div class="flex items-center gap-2 border-b border-border px-3 py-2.5">
       <IconClock class="size-4 text-muted-foreground" />
       <span class="text-sm font-medium">Usage limits</span>
       {#if hasReading && limits && planLabel(limits.planTier)}
-        <Badge variant="outline" class="ml-auto font-mono text-micro">{planLabel(limits.planTier)}</Badge>
+        <Badge class="ml-auto font-mono text-micro" variant="outline"
+          >{planLabel(limits.planTier)}</Badge
+        >
       {/if}
     </div>
 
     {#if staleNote}
-      <p class="border-b border-border px-3 py-1.5 text-[11px] text-muted-foreground">{staleNote}</p>
+      <p
+        class="border-b border-border px-3 py-1.5 text-[11px] text-muted-foreground"
+      >
+        {staleNote}
+      </p>
     {/if}
 
     {#if emptyReason}
@@ -225,21 +272,25 @@
         {#each windows as window (window.kind)}
           <li class="flex flex-col gap-1 py-1.5">
             <div class="flex items-center gap-1.5">
-              <span class="min-w-0 truncate text-micro font-medium">{windowLabel(window)}</span>
+              <span class="min-w-0 truncate text-micro font-medium"
+                >{windowLabel(window)}</span
+              >
               {#if window.isActive}
-                <span class="rounded-full bg-primary/10 px-1.5 text-[10px] font-medium text-primary">
+                <span
+                  class="rounded-full bg-primary/10 px-1.5 text-[10px] font-medium text-primary"
+                >
                   active
                 </span>
               {/if}
             </div>
             <div class="flex items-center gap-2">
               <span
+                aria-label="{windowLabel(window)} limit"
+                aria-valuemax={100}
+                aria-valuemin={0}
+                aria-valuenow={window.percent}
                 class="relative h-1 flex-1 overflow-hidden rounded-full bg-muted"
                 role="progressbar"
-                aria-valuenow={window.percent}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label="{windowLabel(window)} limit"
               >
                 <span
                   class="absolute inset-y-0 left-0 rounded-full {FILL[band(window.percent)]}
@@ -247,7 +298,9 @@
                   style="width: {window.percent}%"
                 ></span>
               </span>
-              <span class="shrink-0 text-micro tabular-nums {TEXT[band(window.percent)]}">
+              <span
+                class="shrink-0 text-micro tabular-nums {TEXT[band(window.percent)]}"
+              >
                 {Math.round(window.percent)}%
               </span>
             </div>
@@ -267,7 +320,8 @@
         <span class="text-micro font-medium">opencode</span>
         <span class="ml-auto text-micro tabular-nums text-muted-foreground">
           {#if spend}
-            {usd(spend.today)} today · {usd(spend.total)} total
+            {usd(spend.today)}
+            today · {usd(spend.total)} total
           {:else}
             —
           {/if}
@@ -276,10 +330,10 @@
     </div>
 
     <a
-      href="/usage"
       class="flex items-center justify-between border-t border-border px-3 py-2
              text-micro font-medium text-primary
              transition-colors duration-150 ease-out hover:bg-muted"
+      href="/usage"
     >
       Open full usage
       <span aria-hidden="true">→</span>

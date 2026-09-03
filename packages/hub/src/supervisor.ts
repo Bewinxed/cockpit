@@ -1,12 +1,12 @@
 import type {
   Envelope,
-  NeutralMessage,
   NeutralAssistantMessage,
+  NeutralMessage,
   Rule,
   RuleFacts,
   SendPayload,
   SupervisorEvent,
-} from '@whiffle/core';
+} from "@whiffle/core";
 import {
   RULE_FIRE_CEILING,
   RULE_SCAN_LIMIT,
@@ -14,9 +14,9 @@ import {
   ruleInScope,
   ruleMatches,
   WHIFFLE_ENV,
-} from '@whiffle/core';
-import type { DbShape } from './db';
-import { verdictFor , verdictStream, type RuleVerdict } from './llm';
+} from "@whiffle/core";
+import type { DbShape } from "./db";
+import { type RuleVerdict, verdictFor, verdictStream } from "./llm";
 
 // ── constants (all sourced from PLAN.md C3) ────────────────────────────
 
@@ -51,40 +51,40 @@ export interface SupervisorSender {
  * this signal's close; nothing here is persisted.
  */
 export interface SupervisorStatusSignal {
-  phase: 'evaluating';
-  source: 'rule' | 'autopilot';
-  ruleId: string | null;
   at: number;
+  phase: "evaluating";
+  ruleId: string | null;
+  source: "rule" | "autopilot";
 }
 
 export interface SupervisorEngineDeps {
-  db: DbShape;
   agent: (machineId: string) => SupervisorSender | undefined;
-  telegram?: { onSupervisor(instanceId: string, text: string): void };
+  db: DbShape;
   publish: (instanceId: string, event: SupervisorEvent) => void;
   /** Optional transient broadcast: the dashboard's "thinking" indicator. */
   status?: (instanceId: string, status: SupervisorStatusSignal) => void;
+  telegram?: { onSupervisor(instanceId: string, text: string): void };
 }
 
 // ── per-instance state ─────────────────────────────────────────────────
 
 interface InstanceState {
-  /** Text the session spoke this turn (subagent frames excluded). */
-  turn: string[];
-  /** Files touched this turn, deduped. */
-  files: Set<string>;
   /** Bash commands this turn. */
   commands: string[];
-  /** Whether the last turn was initiated by our own reply. */
-  initiatedTurn: boolean;
   /** How many consecutive supervisor-initiated turns. */
   consecutive: number;
-  /** Muted until a non-supervisor-initiated turn resets. */
-  muted: boolean;
+  /** Files touched this turn, deduped. */
+  files: Set<string>;
   /** Whether an evaluation is currently in flight. */
   inFlight: boolean;
+  /** Whether the last turn was initiated by our own reply. */
+  initiatedTurn: boolean;
+  /** Muted until a non-supervisor-initiated turn resets. */
+  muted: boolean;
   /** Timestamp of the result frame that triggered the current/last evaluation. */
   resultTimestamp: number;
+  /** Text the session spoke this turn (subagent frames excluded). */
+  turn: string[];
 }
 
 const freshState = (): InstanceState => ({
@@ -117,7 +117,9 @@ class Semaphore {
       this.#active++;
       return true;
     }
-    if (this.#queue.length >= this.#queueCap) return false;
+    if (this.#queue.length >= this.#queueCap) {
+      return false;
+    }
     return new Promise<boolean>((resolve) => {
       this.#queue.push(() => {
         this.#active++;
@@ -141,9 +143,11 @@ class Semaphore {
 /** The text blocks of an assistant message, joined — tool calls are not speech. */
 const spoken = (message: NeutralAssistantMessage): string =>
   message.message.content
-    .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+    .filter(
+      (block): block is { type: "text"; text: string } => block.type === "text"
+    )
     .map((block) => block.text)
-    .join('');
+    .join("");
 
 /**
  * The fixed adversarial harness preamble (PLAN.md C2 "Prompt assembly").
@@ -188,9 +192,15 @@ export class SupervisorEngine {
   readonly #agent: (machineId: string) => SupervisorSender | undefined;
   readonly #telegram?: { onSupervisor(instanceId: string, text: string): void };
   readonly #publish: (instanceId: string, event: SupervisorEvent) => void;
-  readonly #status?: (instanceId: string, status: SupervisorStatusSignal) => void;
+  readonly #status?: (
+    instanceId: string,
+    status: SupervisorStatusSignal
+  ) => void;
   readonly #state = new Map<string, InstanceState>();
-  readonly #semaphore = new Semaphore(SUPERVISOR_MAX_CONCURRENT, SEMAPHORE_QUEUE_CAP);
+  readonly #semaphore = new Semaphore(
+    SUPERVISOR_MAX_CONCURRENT,
+    SEMAPHORE_QUEUE_CAP
+  );
 
   constructor({ db, agent, telegram, publish, status }: SupervisorEngineDeps) {
     this.#db = db;
@@ -213,7 +223,9 @@ export class SupervisorEngine {
    */
   noteHumanSend(instanceId: string): void {
     const state = this.#state.get(instanceId);
-    if (!state) return;
+    if (!state) {
+      return;
+    }
     state.consecutive = 0;
     state.initiatedTurn = false;
     state.muted = false;
@@ -227,24 +239,30 @@ export class SupervisorEngine {
     try {
       this.#observe(instanceId, message);
     } catch (error) {
-      console.error(`[supervisor] ${instanceId}: ${error instanceof Error ? error.message : error}`);
+      console.error(
+        `[supervisor] ${instanceId}: ${error instanceof Error ? error.message : error}`
+      );
     }
   }
 
   #observe(instanceId: string, message: NeutralMessage): void {
-    if (message.type === 'assistant') {
+    if (message.type === "assistant") {
       // Subagent frames excluded — same discipline as RuleEngine (rules.ts:152).
-      if (message.parent_tool_use_id) return;
+      if (message.parent_tool_use_id) {
+        return;
+      }
       const state = this.#ensureState(instanceId);
       const text = spoken(message);
-      if (text) state.turn.push(text);
+      if (text) {
+        state.turn.push(text);
+      }
       this.#extractFiles(state, message);
       return;
     }
 
-    if (message.type === 'result') {
+    if (message.type === "result") {
       const state = this.#ensureState(instanceId);
-      if (message.subtype === 'aborted') {
+      if (message.subtype === "aborted") {
         // Aborted: flush buffers, no evaluation.
         state.turn = [];
         state.files.clear();
@@ -252,7 +270,7 @@ export class SupervisorEngine {
         return;
       }
       // Schedule evaluation — fire-and-forget, off the frame path.
-      const turnText = state.turn.join('\n\n');
+      const turnText = state.turn.join("\n\n");
       const files = [...state.files].slice(0, FILES_CAP);
       const commands = [...state.commands];
       const now = Date.now();
@@ -273,21 +291,26 @@ export class SupervisorEngine {
         // relay points) takes the mute off.
         state.consecutive = 0;
       }
-      void this.#evaluate(instanceId, turnText, files, commands, now).catch(() => {});
-      return;
+      void this.#evaluate(instanceId, turnText, files, commands, now).catch(
+        () => {}
+      );
     }
   }
 
   /** Walk assistant frames for tool_use blocks to extract file paths and commands. */
   #extractFiles(state: InstanceState, message: NeutralAssistantMessage): void {
     for (const block of message.message.content) {
-      if (block.type !== 'tool_use') continue;
-      const input = block.input as Record<string, unknown>;
-      for (const key of ['file_path', 'path', 'notebook_path'] as const) {
-        const val = input[key];
-        if (typeof val === 'string' && val) state.files.add(val);
+      if (block.type !== "tool_use") {
+        continue;
       }
-      if (typeof input.command === 'string' && input.command) {
+      const input = block.input as Record<string, unknown>;
+      for (const key of ["file_path", "path", "notebook_path"] as const) {
+        const val = input[key];
+        if (typeof val === "string" && val) {
+          state.files.add(val);
+        }
+      }
+      if (typeof input.command === "string" && input.command) {
         state.commands.push(input.command);
       }
     }
@@ -295,7 +318,9 @@ export class SupervisorEngine {
 
   #ensureState(instanceId: string): InstanceState {
     const found = this.#state.get(instanceId);
-    if (found) return found;
+    if (found) {
+      return found;
+    }
     const made = freshState();
     this.#state.set(instanceId, made);
     return made;
@@ -308,16 +333,16 @@ export class SupervisorEngine {
     turnText: string,
     files: string[],
     commands: string[],
-    resultTimestamp: number,
+    resultTimestamp: number
   ): Promise<void> {
     const state = this.#ensureState(instanceId);
 
     // Loop guard 1: one in flight per instance.
     if (state.inFlight) {
       const event = this.#record(instanceId, {
-        source: 'autopilot',
-        verdict: 'skipped',
-        note: 'in-flight',
+        source: "autopilot",
+        verdict: "skipped",
+        note: "in-flight",
       });
       this.#publish(instanceId, event);
       return;
@@ -327,9 +352,9 @@ export class SupervisorEngine {
     // (noteHumanSend) — no turn, however initiated, clears it on its own.
     if (state.muted) {
       const event = this.#record(instanceId, {
-        source: 'autopilot',
-        verdict: 'skipped',
-        note: 'muted (consecutive cap reached)',
+        source: "autopilot",
+        verdict: "skipped",
+        note: "muted (consecutive cap reached)",
       });
       this.#publish(instanceId, event);
       return;
@@ -337,11 +362,15 @@ export class SupervisorEngine {
 
     // Resolve config at evaluation time — DB wins, env fallback.
     const config = this.#resolveConfig();
-    if (!config) return; // Not configured — engine inert.
+    if (!config) {
+      return; // Not configured — engine inert.
+    }
 
     // Look up the instance row for facts and autopilot.
     const row = this.#db.listInstances().find((r) => r.id === instanceId);
-    if (!row) return;
+    if (!row) {
+      return;
+    }
 
     const facts: RuleFacts = {
       machineId: row.machineId,
@@ -352,16 +381,19 @@ export class SupervisorEngine {
 
     // Selection: autopilot enabled > first in-scope llm rule (createdAt asc).
     const selection = this.#compose(instanceId, row, facts, turnText);
-    if (!selection) return;
+    if (!selection) {
+      return;
+    }
     // Attribution shorthand: a single composed rule keeps its identity on the
     // event row; a composed set is attributed in the note, not a column.
-    const soleRuleId = selection.rules.length === 1 ? selection.rules[0].id : undefined;
+    const soleRuleId =
+      selection.rules.length === 1 ? selection.rules[0].id : undefined;
 
     state.inFlight = true;
     // The visible half of the evaluation: the dashboard shows the supervisor
     // deliberating from this signal until the terminal event lands.
     this.#status?.(instanceId, {
-      phase: 'evaluating',
+      phase: "evaluating",
       source: selection.source,
       ruleId: soleRuleId ?? null,
       at: Date.now(),
@@ -374,22 +406,37 @@ export class SupervisorEngine {
       const event = this.#record(instanceId, {
         source: selection.source,
         ruleId: soleRuleId,
-        verdict: 'skipped',
-        note: 'semaphore queue full',
+        verdict: "skipped",
+        note: "semaphore queue full",
       });
       this.#publish(instanceId, event);
       return;
     }
 
     try {
-      const user = this.#assembleUserBlock(instanceId, row, facts, turnText, files, commands, state);
+      const user = this.#assembleUserBlock(
+        instanceId,
+        row,
+        facts,
+        turnText,
+        files,
+        commands,
+        state
+      );
 
       // Rules without autopilot stream: one verdict object PER RULE, each
       // acted on the moment its element completes — no waiting for the tail
       // (operator order 2026-09-02). Autopilot instead absorbs the rules as
       // context and answers with one composed verdict below.
       if (!selection.autopilot) {
-        await this.#evaluateRuleStream(instanceId, state, selection.rules, user, config, resultTimestamp);
+        await this.#evaluateRuleStream(
+          instanceId,
+          state,
+          selection.rules,
+          user,
+          config,
+          resultTimestamp
+        );
         return;
       }
 
@@ -411,19 +458,19 @@ export class SupervisorEngine {
         const event = this.#record(instanceId, {
           source: selection.source,
           ruleId: soleRuleId,
-          verdict: 'skipped',
-          note: 'stale (newer result arrived)',
+          verdict: "skipped",
+          note: "stale (newer result arrived)",
         });
         this.#publish(instanceId, event);
         return;
       }
 
-      if ('error' in result) {
+      if ("error" in result) {
         state.inFlight = false;
         const event = this.#record(instanceId, {
           source: selection.source,
           ruleId: soleRuleId,
-          verdict: 'error',
+          verdict: "error",
           note: result.error,
           model: config.model,
         });
@@ -436,24 +483,27 @@ export class SupervisorEngine {
       // Coerce ask_operator from a rule to escalate (PLAN.md C2).
       let effectiveVerdict = verdict.verdict;
       let coercionNote: string | undefined;
-      if (verdict.verdict === 'ask_operator' && selection.source === 'rule') {
-        effectiveVerdict = 'escalate';
-        coercionNote = 'ask_operator coerced to escalate (from rule)';
+      if (verdict.verdict === "ask_operator" && selection.source === "rule") {
+        effectiveVerdict = "escalate";
+        coercionNote = "ask_operator coerced to escalate (from rule)";
       }
 
       // Loop guard 3: consecutive cap — force escalate + mute.
-      if (effectiveVerdict === 'reply' && state.consecutive >= SUPERVISOR_CONSECUTIVE_MAX) {
-        effectiveVerdict = 'escalate';
+      if (
+        effectiveVerdict === "reply" &&
+        state.consecutive >= SUPERVISOR_CONSECUTIVE_MAX
+      ) {
+        effectiveVerdict = "escalate";
         coercionNote = `autopilot hit its consecutive-reply limit (${SUPERVISOR_CONSECUTIVE_MAX})`;
         state.muted = true;
       }
 
-      if (effectiveVerdict === 'silent') {
+      if (effectiveVerdict === "silent") {
         state.inFlight = false;
         const event = this.#record(instanceId, {
           source: selection.source,
           ruleId: soleRuleId,
-          verdict: 'silent',
+          verdict: "silent",
           note: verdict.note || null,
           model: result.model,
           latencyMs: result.latencyMs,
@@ -462,17 +512,19 @@ export class SupervisorEngine {
         return;
       }
 
-      if (effectiveVerdict === 'reply') {
+      if (effectiveVerdict === "reply") {
         // Re-check instance + agent reachability before delivery.
-        const freshRow = this.#db.listInstances().find((r) => r.id === instanceId);
+        const freshRow = this.#db
+          .listInstances()
+          .find((r) => r.id === instanceId);
         const sender = freshRow ? this.#agent(freshRow.machineId) : undefined;
-        if (!sender || !freshRow) {
+        if (!(sender && freshRow)) {
           state.inFlight = false;
           const event = this.#record(instanceId, {
             source: selection.source,
             ruleId: soleRuleId,
-            verdict: 'skipped',
-            note: 'unreachable',
+            verdict: "skipped",
+            note: "unreachable",
             model: result.model,
             latencyMs: result.latencyMs,
           });
@@ -484,16 +536,16 @@ export class SupervisorEngine {
         const originName = selection.originName;
 
         sender.send({
-          verb: 'send',
+          verb: "send",
           machineId: freshRow.machineId,
           instanceId,
           payload: {
             instanceId,
             message: {
-              type: 'user',
-              message: { role: 'user', content: verdict.message },
+              type: "user",
+              message: { role: "user", content: verdict.message },
               parent_tool_use_id: null,
-              origin: { kind: 'system', name: originName },
+              origin: { kind: "system", name: originName },
               shouldQuery: true,
             },
             urgent: false,
@@ -517,7 +569,7 @@ export class SupervisorEngine {
         const event = this.#record(instanceId, {
           source: selection.source,
           ruleId: soleRuleId,
-          verdict: 'reply',
+          verdict: "reply",
           message: verdict.message,
           note: coercionNote || verdict.note || null,
           model: result.model,
@@ -528,7 +580,10 @@ export class SupervisorEngine {
       }
 
       // escalate / ask_operator
-      const eventVerdict = effectiveVerdict === 'ask_operator' ? 'ask' as const : 'escalate' as const;
+      const eventVerdict =
+        effectiveVerdict === "ask_operator"
+          ? ("ask" as const)
+          : ("escalate" as const);
       state.inFlight = false;
 
       // Rule bookkeeping — same sharing as the reply path.
@@ -552,12 +607,13 @@ export class SupervisorEngine {
 
       // Telegram notification for escalate/ask.
       this.#telegram?.onSupervisor(instanceId, verdict.message);
-
     } finally {
       this.#semaphore.release();
       // Safety: ensure inFlight is cleared even on unexpected errors.
       const s = this.#state.get(instanceId);
-      if (s) s.inFlight = false;
+      if (s) {
+        s.inFlight = false;
+      }
     }
   }
 
@@ -576,17 +632,19 @@ export class SupervisorEngine {
     rules: Array<{ id: string; name: string; prompt: string }>,
     user: string,
     config: { baseUrl: string; apiKey?: string; model: string },
-    resultTimestamp: number,
+    resultTimestamp: number
   ): Promise<void> {
     const streamStart = Date.now();
-    const sections = rules.map((r) => `— Rule: ${r.name} —\n${r.prompt}`).join('\n\n');
+    const sections = rules
+      .map((r) => `— Rule: ${r.name} —\n${r.prompt}`)
+      .join("\n\n");
     const system =
       `${HARNESS_PREAMBLE}\n\n` +
       `This evaluation covers ${rules.length} standing rule(s). Emit EXACTLY one verdict ` +
-      `object per rule, in the order listed, shaped ` +
+      "object per rule, in the order listed, shaped " +
       `{"rule": "<rule name>", "verdict": "silent"|"reply"|"escalate", "message": "...", "note": "..."}. ` +
       `Judge each rule independently; a rule with nothing to warrant gets "silent". ` +
-      `The single-object contract above does not apply here.\n\n` +
+      "The single-object contract above does not apply here.\n\n" +
       `Operator instructions:\n${sections}`;
 
     // Matched by name first, order as fallback — a model that mangles a name
@@ -596,17 +654,26 @@ export class SupervisorEngine {
 
     const act = (verdict: RuleVerdict): void => {
       const byName = unclaimed.findIndex((r) => r.name === verdict.rule);
-      const rule = byName >= 0 ? unclaimed.splice(byName, 1)[0] : unclaimed.shift();
-      if (!rule) return; // more elements than rules — surplus is noise, drop it
+      const rule =
+        byName >= 0 ? unclaimed.splice(byName, 1)[0] : unclaimed.shift();
+      if (!rule) {
+        return; // more elements than rules — surplus is noise, drop it
+      }
       const latencyMs = Date.now() - streamStart;
 
       // Staleness: a newer turn ended while this stream was running. Already-
       // delivered elements stand; the rest are recorded, not acted on.
-      if (!stale && state.resultTimestamp > resultTimestamp) stale = true;
+      if (!stale && state.resultTimestamp > resultTimestamp) {
+        stale = true;
+      }
       if (stale) {
         const event = this.#record(instanceId, {
-          source: 'rule', ruleId: rule.id, verdict: 'skipped',
-          note: 'stale (newer result arrived)', model: config.model, latencyMs,
+          source: "rule",
+          ruleId: rule.id,
+          verdict: "skipped",
+          note: "stale (newer result arrived)",
+          model: config.model,
+          latencyMs,
         });
         this.#publish(instanceId, event);
         return;
@@ -615,42 +682,55 @@ export class SupervisorEngine {
       let effective = verdict.verdict;
       let note: string | null = verdict.note || null;
 
-      if (effective === 'reply' && state.muted) {
+      if (effective === "reply" && state.muted) {
         const event = this.#record(instanceId, {
-          source: 'rule', ruleId: rule.id, verdict: 'skipped',
-          note: 'muted (consecutive cap reached)', model: config.model, latencyMs,
+          source: "rule",
+          ruleId: rule.id,
+          verdict: "skipped",
+          note: "muted (consecutive cap reached)",
+          model: config.model,
+          latencyMs,
         });
         this.#publish(instanceId, event);
         return;
       }
-      if (effective === 'reply' && state.consecutive >= SUPERVISOR_CONSECUTIVE_MAX) {
-        effective = 'escalate';
+      if (
+        effective === "reply" &&
+        state.consecutive >= SUPERVISOR_CONSECUTIVE_MAX
+      ) {
+        effective = "escalate";
         note = `autopilot hit its consecutive-reply limit (${SUPERVISOR_CONSECUTIVE_MAX})`;
         state.muted = true;
       }
 
-      if (effective === 'reply') {
-        const freshRow = this.#db.listInstances().find((r) => r.id === instanceId);
+      if (effective === "reply") {
+        const freshRow = this.#db
+          .listInstances()
+          .find((r) => r.id === instanceId);
         const sender = freshRow ? this.#agent(freshRow.machineId) : undefined;
-        if (!sender || !freshRow) {
+        if (!(sender && freshRow)) {
           const event = this.#record(instanceId, {
-            source: 'rule', ruleId: rule.id, verdict: 'skipped',
-            note: 'unreachable', model: config.model, latencyMs,
+            source: "rule",
+            ruleId: rule.id,
+            verdict: "skipped",
+            note: "unreachable",
+            model: config.model,
+            latencyMs,
           });
           this.#publish(instanceId, event);
           return;
         }
         sender.send({
-          verb: 'send',
+          verb: "send",
           machineId: freshRow.machineId,
           instanceId,
           payload: {
             instanceId,
             message: {
-              type: 'user',
-              message: { role: 'user', content: verdict.message },
+              type: "user",
+              message: { role: "user", content: verdict.message },
               parent_tool_use_id: null,
-              origin: { kind: 'system', name: `supervisor:${rule.name}` },
+              origin: { kind: "system", name: `supervisor:${rule.name}` },
               shouldQuery: true,
             },
             urgent: false,
@@ -659,19 +739,21 @@ export class SupervisorEngine {
         state.initiatedTurn = true;
       }
 
-      if (effective !== 'silent') {
+      if (effective !== "silent") {
         const standing = this.#db.ruleStateFor(rule.id, instanceId);
         if (!standing || standing.fireCount < RULE_FIRE_CEILING) {
           this.#db.noteRuleFire(rule.id, instanceId, false);
         }
       }
-      if (effective === 'escalate') this.#telegram?.onSupervisor(instanceId, verdict.message);
+      if (effective === "escalate") {
+        this.#telegram?.onSupervisor(instanceId, verdict.message);
+      }
 
       const event = this.#record(instanceId, {
-        source: 'rule',
+        source: "rule",
         ruleId: rule.id,
-        verdict: effective === 'escalate' ? 'escalate' : effective,
-        message: effective === 'silent' ? null : verdict.message,
+        verdict: effective === "escalate" ? "escalate" : effective,
+        message: effective === "silent" ? null : verdict.message,
         note,
         model: config.model,
         latencyMs,
@@ -692,14 +774,17 @@ export class SupervisorEngine {
       onVerdict: act,
     });
 
-    if ('error' in outcome) {
+    if ("error" in outcome) {
       // Whatever streamed before the failure already acted; the rules the
       // stream never reached are recorded as this one error.
       const event = this.#record(instanceId, {
-        source: 'rule',
+        source: "rule",
         ruleId: unclaimed.length === 1 ? unclaimed[0].id : undefined,
-        verdict: 'error',
-        note: outcome.count > 0 ? `${outcome.error} (after ${outcome.count} verdicts)` : outcome.error,
+        verdict: "error",
+        note:
+          outcome.count > 0
+            ? `${outcome.error} (after ${outcome.count} verdicts)`
+            : outcome.error,
         model: config.model,
       });
       this.#publish(instanceId, event);
@@ -716,11 +801,17 @@ export class SupervisorEngine {
    */
   #compose(
     instanceId: string,
-    row: { autopilot?: { enabled: boolean; prompt: string; updatedAt: number } | null },
+    row: {
+      autopilot?: {
+        enabled: boolean;
+        prompt: string;
+        updatedAt: number;
+      } | null;
+    },
     facts: RuleFacts,
-    turnText: string,
+    turnText: string
   ): {
-    source: 'autopilot' | 'rule';
+    source: "autopilot" | "rule";
     /** The standing autopilot prompt, when the session has one armed. */
     autopilot: string | null;
     /** The full operator-instructions block, sections labeled by origin. */
@@ -730,46 +821,69 @@ export class SupervisorEngine {
     /** The transcript label this evaluation speaks under. */
     originName: string;
   } | null {
-    const autopilot = row.autopilot?.enabled && row.autopilot.prompt ? row.autopilot.prompt : null;
+    const autopilot =
+      row.autopilot?.enabled && row.autopilot.prompt
+        ? row.autopilot.prompt
+        : null;
 
     // Every enabled in-scope llm rule whose trigger matches — ALL of them.
-    const matched = this.#db.listRules()
-      .filter((r): r is Rule => r.enabled && r.action === 'llm' && r.timing === 'turn')
+    const matched = this.#db
+      .listRules()
+      .filter(
+        (r): r is Rule => r.enabled && r.action === "llm" && r.timing === "turn"
+      )
       .sort((a, b) => a.createdAt - b.createdAt)
       .filter((rule) => {
-        if (!rule.prompt) return false;
-        if (!ruleInScope(rule.scope, facts)) return false;
-        if (rule.trigger === 'pattern') {
-          const text = turnText.length > RULE_SCAN_LIMIT
-            ? turnText.slice(-RULE_SCAN_LIMIT)
-            : turnText;
-          if (!ruleMatches(rule, text)) return false;
+        if (!rule.prompt) {
+          return false;
+        }
+        if (!ruleInScope(rule.scope, facts)) {
+          return false;
+        }
+        if (rule.trigger === "pattern") {
+          const text =
+            turnText.length > RULE_SCAN_LIMIT
+              ? turnText.slice(-RULE_SCAN_LIMIT)
+              : turnText;
+          if (!ruleMatches(rule, text)) {
+            return false;
+          }
         }
         return true;
       });
 
-    if (!autopilot && matched.length === 0) return null;
+    if (!autopilot && matched.length === 0) {
+      return null;
+    }
 
     const sections: string[] = [];
-    if (autopilot) sections.push(`— Your standing mandate (autopilot) —\n${autopilot}`);
-    for (const rule of matched) sections.push(`— Rule: ${rule.name} —\n${rule.prompt}`);
+    if (autopilot) {
+      sections.push(`— Your standing mandate (autopilot) —\n${autopilot}`);
+    }
+    for (const rule of matched) {
+      sections.push(`— Rule: ${rule.name} —\n${rule.prompt}`);
+    }
     if (sections.length > 1) {
       sections.push(
-        'All instructions above apply together. One short reply may address ' +
-        'several at once; in your note, name which instruction(s) drove the verdict.'
+        "All instructions above apply together. One short reply may address " +
+          "several at once; in your note, name which instruction(s) drove the verdict."
       );
     }
 
     return {
-      source: autopilot ? 'autopilot' : 'rule',
+      source: autopilot ? "autopilot" : "rule",
       autopilot,
-      instructions: sections.join('\n\n'),
-      rules: matched.map((r) => ({ id: r.id, name: r.name, prompt: r.prompt ?? '' })),
+      instructions: sections.join("\n\n"),
+      rules: matched.map((r) => ({
+        id: r.id,
+        name: r.name,
+        prompt: r.prompt ?? "",
+      })),
       originName: autopilot
-        ? 'supervisor:autopilot'
+        ? "supervisor:autopilot"
         : matched.length === 1
           ? `supervisor:${matched[0].name}`
-          : 'supervisor:rules',
+          : "supervisor:rules",
     };
   }
 
@@ -782,55 +896,71 @@ export class SupervisorEngine {
     turnText: string,
     files: string[],
     commands: string[],
-    state: InstanceState,
+    state: InstanceState
   ): string {
     const parts: string[] = [];
 
     // Session metadata.
-    const cwd = typeof row.cwd === 'string' ? row.cwd.split('/').pop() || row.cwd : '(unknown)';
+    const cwd =
+      typeof row.cwd === "string"
+        ? row.cwd.split("/").pop() || row.cwd
+        : "(unknown)";
     const machine = facts.machineId;
-    const harness = facts.harness || '(unknown)';
-    const model = facts.model || '(unknown)';
-    const title = (typeof row.title === 'string' ? row.title : null)
-      || (typeof row.derivedTitle === 'string' ? row.derivedTitle : null)
-      || '(untitled)';
-    parts.push(`Session: ${title}\nDirectory: ${cwd} | Machine: ${machine} | Harness: ${harness} | Model: ${model}`);
+    const harness = facts.harness || "(unknown)";
+    const model = facts.model || "(unknown)";
+    const title =
+      (typeof row.title === "string" ? row.title : null) ||
+      (typeof row.derivedTitle === "string" ? row.derivedTitle : null) ||
+      "(untitled)";
+    parts.push(
+      `Session: ${title}\nDirectory: ${cwd} | Machine: ${machine} | Harness: ${harness} | Model: ${model}`
+    );
 
     // Turn attribution.
     const selfInitiated = state.consecutive > 0;
-    parts.push(`This turn was started by your own previous message: ${selfInitiated ? 'yes' : 'no'} (consecutive: ${state.consecutive})`);
+    parts.push(
+      `This turn was started by your own previous message: ${selfInitiated ? "yes" : "no"} (consecutive: ${state.consecutive})`
+    );
 
     // Files touched.
     if (files.length > 0) {
-      parts.push(`Files touched this turn:\n${files.map((f) => `  ${f}`).join('\n')}`);
+      parts.push(
+        `Files touched this turn:\n${files.map((f) => `  ${f}`).join("\n")}`
+      );
     }
     if (commands.length > 0) {
       const shown = commands.slice(0, FILES_CAP);
-      parts.push(`Commands run this turn:\n${shown.map((c) => `  ${c}`).join('\n')}`);
+      parts.push(
+        `Commands run this turn:\n${shown.map((c) => `  ${c}`).join("\n")}`
+      );
     }
 
     // Agent's final text, tail-clamped (RULE_SCAN_LIMIT precedent, core/rules.ts:153).
     if (turnText) {
-      const clamped = turnText.length > RULE_SCAN_LIMIT
-        ? turnText.slice(-RULE_SCAN_LIMIT)
-        : turnText;
+      const clamped =
+        turnText.length > RULE_SCAN_LIMIT
+          ? turnText.slice(-RULE_SCAN_LIMIT)
+          : turnText;
       parts.push(`Agent's turn output:\n${clamped}`);
     }
 
     // Last 3 supervisor log rows for this instance.
-    const recentEvents = this.#db.listSupervisorEvents({ instanceId, limit: 3 });
+    const recentEvents = this.#db.listSupervisorEvents({
+      instanceId,
+      limit: 3,
+    });
     if (recentEvents.length > 0) {
       const lines = recentEvents.map((e) => {
         const ts = new Date(e.createdAt).toISOString();
-        const msg = e.message ? ` — ${e.message.slice(0, 200)}` : '';
-        const note = e.note ? ` [${e.note.slice(0, 100)}]` : '';
+        const msg = e.message ? ` — ${e.message.slice(0, 200)}` : "";
+        const note = e.note ? ` [${e.note.slice(0, 100)}]` : "";
         return `  ${ts} ${e.verdict}${msg}${note}`;
       });
-      parts.push(`Recent supervisor log:\n${lines.join('\n')}`);
+      parts.push(`Recent supervisor log:\n${lines.join("\n")}`);
     }
 
     // Total user block clamped to 24,000 chars (PLAN.md C2: our choice).
-    let block = parts.join('\n\n');
+    let block = parts.join("\n\n");
     if (block.length > USER_BLOCK_LIMIT) {
       block = block.slice(-USER_BLOCK_LIMIT);
     }
@@ -844,7 +974,9 @@ export class SupervisorEngine {
     // enabled:false — is authoritative; env only fills in while no row exists.
     const dbConfig = this.#db.getSupervisorConfig();
     if (dbConfig) {
-      if (!dbConfig.enabled || !dbConfig.baseUrl || !dbConfig.model) return null;
+      if (!(dbConfig.enabled && dbConfig.baseUrl && dbConfig.model)) {
+        return null;
+      }
       return {
         baseUrl: dbConfig.baseUrl,
         model: dbConfig.model,
@@ -868,15 +1000,18 @@ export class SupervisorEngine {
 
   // ── recording ──────────────────────────────────────────────────────────
 
-  #record(instanceId: string, data: {
-    source: 'rule' | 'autopilot';
-    ruleId?: string;
-    verdict: SupervisorEvent['verdict'];
-    message?: string | null;
-    note?: string | null;
-    model?: string | null;
-    latencyMs?: number | null;
-  }): SupervisorEvent {
+  #record(
+    instanceId: string,
+    data: {
+      source: "rule" | "autopilot";
+      ruleId?: string;
+      verdict: SupervisorEvent["verdict"];
+      message?: string | null;
+      note?: string | null;
+      model?: string | null;
+      latencyMs?: number | null;
+    }
+  ): SupervisorEvent {
     return this.#db.recordSupervisorEvent({
       instanceId,
       source: data.source,

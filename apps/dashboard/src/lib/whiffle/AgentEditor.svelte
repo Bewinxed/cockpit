@@ -1,4 +1,9 @@
 <script lang="ts">
+  import {
+    agentProblem,
+    type FleetAgent,
+    parseAgentFrontMatter,
+  } from "@whiffle/core";
   /**
    * One subagent, edited as what it is: a markdown file. There is no form —
    * Claude Code reads sixteen optional front-matter fields and adds more with
@@ -6,15 +11,18 @@
    * strip above the text says what the file currently claims to be, which is
    * the only reading whiffle does of it.
    */
-  import { toast } from 'svelte-sonner';
-  import { agentProblem, parseAgentFrontMatter, type FleetAgent } from '@whiffle/core';
-  import { Badge } from '$lib/components/ui/badge';
-  import { Button } from '$lib/components/ui/button';
-  import * as Dialog from '$lib/components/ui/dialog';
-  import { Textarea } from '$lib/components/ui/textarea';
-  import { saveAgent } from './fleet';
+  import { toast } from "svelte-sonner";
+  import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
+  import * as Dialog from "$lib/components/ui/dialog";
+  import { Textarea } from "$lib/components/ui/textarea";
+  import { saveAgent } from "./fleet";
 
-  let { open = $bindable(false), agent = null, onsaved }: {
+  let {
+    open = $bindable(false),
+    agent = null,
+    onsaved,
+  }: {
     open?: boolean;
     /** Null writes a new one; the template is what it starts from. */
     agent?: FleetAgent | null;
@@ -30,9 +38,9 @@ description: Use this agent proactively when <the situation it is for>.
 You are a <role>, working in one repository at a time.
 
 <What you do, what you never do, and what you hand back.>
-`;
+  `;
 
-  let draft = $state('');
+  let draft = $state("");
   let saving = $state(false);
   let refused = $state<string | undefined>(undefined);
   let seeded = $state(false);
@@ -56,7 +64,9 @@ You are a <role>, working in one repository at a time.
   });
 
   async function commit() {
-    if (!target) return;
+    if (!target) {
+      return;
+    }
     saving = true;
     refused = undefined;
     try {
@@ -72,19 +82,25 @@ You are a <role>, working in one repository at a time.
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="material-panel rounded-[var(--radius-shell)] shadow-xl sm:max-w-2xl">
+  <Dialog.Content
+    class="material-panel rounded-[var(--radius-shell)] shadow-xl sm:max-w-2xl"
+  >
     <Dialog.Header>
       <Dialog.Title>{agent ? agent.name : 'New subagent'}</Dialog.Title>
       <Dialog.Description>
         The file is the definition. It lands at
-        <span class="font-mono">~/.claude/agents/{target ?? 'name'}.md</span> on every machine, and
-        Claude Code picks it up within seconds.
+        <span class="font-mono">~/.claude/agents/{target ?? 'name'}.md</span>
+        on every machine, and Claude Code picks it up within seconds.
       </Dialog.Description>
     </Dialog.Header>
 
-    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[var(--radius-well)] bg-muted px-3 py-2">
+    <div
+      class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[var(--radius-well)] bg-muted px-3 py-2"
+    >
       {#if front.name}
-        <span class="shrink-0 font-mono text-micro text-foreground">{front.name}</span>
+        <span class="shrink-0 font-mono text-micro text-foreground"
+          >{front.name}</span
+        >
       {/if}
       {#if front.model && front.model !== 'inherit'}
         <Badge variant="outline">{front.model}</Badge>
@@ -96,9 +112,14 @@ You are a <role>, working in one repository at a time.
         <Badge variant="outline">{front.effort} effort</Badge>
       {/if}
       {#if problem}
-        <span class="min-w-0 flex-1 text-micro text-muted-foreground">Not storable yet — {problem}.</span>
+        <span class="min-w-0 flex-1 text-micro text-muted-foreground"
+          >Not storable yet — {problem}.</span
+        >
       {:else if front.description}
-        <span class="min-w-0 flex-1 truncate text-micro text-muted-foreground" title={front.description}>
+        <span
+          class="min-w-0 flex-1 truncate text-micro text-muted-foreground"
+          title={front.description}
+        >
           {front.description}
         </span>
       {/if}
@@ -107,16 +128,20 @@ You are a <role>, working in one repository at a time.
     <!-- The kit's textarea is `field-sizing-content`, so a long prompt body would
          grow the dialog straight off the screen, buttons and all. -->
     <Textarea
-      bind:value={draft}
-      spellcheck="false"
       aria-label="{target ?? 'New'} definition"
       class="max-h-[55vh] min-h-80 overflow-y-auto font-mono text-sm md:text-sm"
+      spellcheck="false"
+      bind:value={draft}
     />
 
-    {#if refused}<p class="text-caption text-destructive" role="alert">{refused}</p>{/if}
+    {#if refused}
+      <p class="text-caption text-destructive" role="alert">{refused}</p>
+    {/if}
 
     <div class="flex justify-end gap-2">
-      <Button variant="outline" onclick={() => (open = false)} disabled={saving}>Cancel</Button>
+      <Button disabled={saving} onclick={() => (open = false)} variant="outline"
+        >Cancel</Button
+      >
       <Button disabled={saving || !target || !dirty} onclick={commit}>
         {saving ? 'Saving…' : 'Save'}
       </Button>

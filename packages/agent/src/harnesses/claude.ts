@@ -9,21 +9,22 @@
  * the neutral types mirror the SDK's field names, so a message crosses the wire
  * with its `raw` self attached and nothing lost.
  */
+
+import { access, readdir, readFile, realpath } from "node:fs/promises";
+import { join } from "node:path";
 import {
   deleteSession,
   getSessionInfo,
   getSessionMessages,
   listSessions,
-  query,
-  renameSession,
-  tagSession,
   type PermissionResult,
   type Query,
+  query,
+  renameSession,
   type SDKMessage,
   type SDKUserMessage,
-} from '@anthropic-ai/claude-agent-sdk';
-import { access, readFile, readdir, realpath } from 'node:fs/promises';
-import { join } from 'node:path';
+  tagSession,
+} from "@anthropic-ai/claude-agent-sdk";
 import type {
   AuthState,
   EffortLevel,
@@ -40,7 +41,7 @@ import type {
   UserQuestion,
   UserQuestionAnswered,
   UserQuestionResult,
-} from '@whiffle/core';
+} from "@whiffle/core";
 import {
   ASK_USER_QUESTION,
   CONTROL_CONTEXT_USAGE,
@@ -49,14 +50,20 @@ import {
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
   INSPECT_CONFIG,
+  isInjected,
   MARKETPLACE_CATALOG,
   MESSAGE_DEQUEUED,
   MESSAGE_QUEUED,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
-  isInjected,
   settledQuestionResult,
-} from '@whiffle/core';
+} from "@whiffle/core";
+import { sessiondEndpoint } from "@whiffle/core/sessiond";
+import { probeAuth, unlockKeychain } from "../auth";
+import {
+  DENIED_NATIVE_SUBAGENT_TOOLS,
+  DENIED_WEB_TOOLS,
+} from "../denied-tools";
 import {
   fleetStatus,
   inspectConfig,
@@ -64,64 +71,77 @@ import {
   readMemoryFile,
   readSkillFiles,
   syncFleetConfig,
-} from '../fleet';
-import { DENIED_NATIVE_SUBAGENT_TOOLS, DENIED_WEB_TOOLS } from '../denied-tools';
-import { MCP_SERVER_NAME, handoffServer } from '../handoff';
-import { fetchDelegateTypes } from './handoff-shared';
-import { probeAuth, unlockKeychain } from '../auth';
-import { beginLogin, clearCredentials, completeLogin, exportCredentials, importCredentials } from '../login';
-import { resolveBin } from '../tools';
-import { claudeConfigDirs } from '../usage/scan-claude';
-import type { Harness, HarnessContext, HarnessSession } from '../harness';
+} from "../fleet";
+import { handoffServer, MCP_SERVER_NAME } from "../handoff";
+import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import {
-  ensureSessiond,
-  sessiondBridge,
-  SessiondClient,
-  type SessiondWelcomeInfo,
-} from '../sessiond-client';
-import { sessiondEndpoint } from '@whiffle/core/sessiond';
+  beginLogin,
+  clearCredentials,
+  completeLogin,
+  exportCredentials,
+  importCredentials,
+} from "../login";
 // Type-only, and deliberately so: `session.ts` imports the harness registry
 // this file is part of, so a value import here would close a module cycle.
-import type { SessiondAwareContext } from '../session';
+import type { SessiondAwareContext } from "../session";
+import {
+  ensureSessiond,
+  SessiondClient,
+  type SessiondWelcomeInfo,
+  sessiondBridge,
+} from "../sessiond-client";
+import { resolveBin } from "../tools";
+import { claudeConfigDirs } from "../usage/scan-claude";
+import { fetchDelegateTypes } from "./handoff-shared";
 
 /** The neutral frame is the SDK frame re-tagged: same fields, plus the original. */
 export const toNeutral = (sdk: SDKMessage): NeutralMessage => {
-  if (sdk.type === 'result') {
+  if (sdk.type === "result") {
     // The SDK's own usage carries cache_creation/cache_read counts; re-tag them
     // under the harness-neutral `cache` shape the opencode adapter's result
     // frame also populates.
     const usage = (
-      sdk as { usage?: { cache_creation_input_tokens?: number; cache_read_input_tokens?: number } }
+      sdk as {
+        usage?: {
+          cache_creation_input_tokens?: number;
+          cache_read_input_tokens?: number;
+        };
+      }
     ).usage;
     return {
       ...sdk,
       raw: sdk,
       ...(usage
-        ? { cache: { read: usage.cache_read_input_tokens ?? 0, write: usage.cache_creation_input_tokens ?? 0 } }
+        ? {
+            cache: {
+              read: usage.cache_read_input_tokens ?? 0,
+              write: usage.cache_creation_input_tokens ?? 0,
+            },
+          }
         : {}),
     } as unknown as NeutralMessage;
   }
   if (
-    sdk.type === 'assistant' ||
-    sdk.type === 'user' ||
-    sdk.type === 'stream_event' ||
-    sdk.type === 'system'
+    sdk.type === "assistant" ||
+    sdk.type === "user" ||
+    sdk.type === "stream_event" ||
+    sdk.type === "system"
   ) {
     return { ...sdk, raw: sdk } as unknown as NeutralMessage;
   }
   // `auth_status` is MCP server auth plumbing — surface it as a quiet system
   // message so the QUIET set silences it instead of the dashboard showing a
   // bare "⚙ raw" banner. The MCP status panel already shows auth failures.
-  if (sdk.type === 'auth_status') {
+  if (sdk.type === "auth_status") {
     return {
-      type: 'system',
-      subtype: 'auth_status',
+      type: "system",
+      subtype: "auth_status",
       uuid: sdk.uuid,
       session_id: sdk.session_id,
       raw: sdk,
     } as unknown as NeutralMessage;
   }
-  return { type: 'raw', harness: 'claude', uuid: sdk.uuid, message: sdk };
+  return { type: "raw", harness: "claude", uuid: sdk.uuid, message: sdk };
 };
 
 /**
@@ -135,23 +155,35 @@ export const toNeutral = (sdk: SDKMessage): NeutralMessage => {
  * an empty answer.
  */
 function normalizeQuestionResult(raw: unknown): UserQuestionResult | null {
-  if (typeof raw !== 'object' || raw === null) return null;
+  if (typeof raw !== "object" || raw === null) {
+    return null;
+  }
   const { questions, answers, response, annotations } = raw as {
     questions?: unknown;
     answers?: unknown;
     response?: unknown;
     annotations?: unknown;
   };
-  if (typeof answers !== 'object' || answers === null || Array.isArray(answers)) return null;
+  if (
+    typeof answers !== "object" ||
+    answers === null ||
+    Array.isArray(answers)
+  ) {
+    return null;
+  }
   const normalized = normalizeQuestions(questions);
-  if (!normalized) return null;
+  if (!normalized) {
+    return null;
+  }
   return {
-    outcome: 'answered',
+    outcome: "answered",
     questions: normalized,
     answers: answers as UserAnswers,
-    ...(typeof response === 'string' ? { response } : {}),
-    ...(annotations && typeof annotations === 'object' && !Array.isArray(annotations)
-      ? { annotations: annotations as UserQuestionAnswered['annotations'] }
+    ...(typeof response === "string" ? { response } : {}),
+    ...(annotations &&
+    typeof annotations === "object" &&
+    !Array.isArray(annotations)
+      ? { annotations: annotations as UserQuestionAnswered["annotations"] }
       : {}),
   };
 }
@@ -162,22 +194,40 @@ function normalizeQuestionResult(raw: unknown): UserQuestionResult | null {
  * left to say what was asked. `null` when the array is not questions at all.
  */
 function normalizeQuestions(raw: unknown): UserQuestion[] | null {
-  if (!Array.isArray(raw)) return null;
+  if (!Array.isArray(raw)) {
+    return null;
+  }
   const normalized: UserQuestion[] = [];
   for (const question of raw) {
-    if (typeof question !== 'object' || question === null) return null;
-    const q = question as { question?: unknown; header?: unknown; options?: unknown; multiSelect?: unknown };
-    if (typeof q.question !== 'string' || !Array.isArray(q.options)) return null;
-    const options: UserQuestion['options'] = [];
+    if (typeof question !== "object" || question === null) {
+      return null;
+    }
+    const q = question as {
+      question?: unknown;
+      header?: unknown;
+      options?: unknown;
+      multiSelect?: unknown;
+    };
+    if (typeof q.question !== "string" || !Array.isArray(q.options)) {
+      return null;
+    }
+    const options: UserQuestion["options"] = [];
     for (const option of q.options) {
-      if (typeof option !== 'object' || option === null) continue;
+      if (typeof option !== "object" || option === null) {
+        continue;
+      }
       const o = option as { label?: unknown; description?: unknown };
-      if (typeof o.label !== 'string') continue;
-      options.push({ label: o.label, description: typeof o.description === 'string' ? o.description : '' });
+      if (typeof o.label !== "string") {
+        continue;
+      }
+      options.push({
+        label: o.label,
+        description: typeof o.description === "string" ? o.description : "",
+      });
     }
     normalized.push({
       question: q.question,
-      header: typeof q.header === 'string' ? q.header : 'Question',
+      header: typeof q.header === "string" ? q.header : "Question",
       options,
       multiSelect: q.multiSelect === true,
     });
@@ -191,14 +241,23 @@ function normalizeQuestions(raw: unknown): UserQuestion[] | null {
  * so this is where the dashboard's folding layer finds `questionResult` — the
  * same place the live path writes it.
  */
-function attachQuestionResult(message: unknown, result: UserQuestionResult): unknown {
-  if (typeof message !== 'object' || message === null) return message;
+function attachQuestionResult(
+  message: unknown,
+  result: UserQuestionResult
+): unknown {
+  if (typeof message !== "object" || message === null) {
+    return message;
+  }
   const content = (message as { content?: unknown }).content;
-  if (!Array.isArray(content)) return message;
+  if (!Array.isArray(content)) {
+    return message;
+  }
   return {
     ...(message as object),
     content: content.map((block) =>
-      block && typeof block === 'object' && (block as { type?: string }).type === 'tool_result'
+      block &&
+      typeof block === "object" &&
+      (block as { type?: string }).type === "tool_result"
         ? { ...(block as object), questionResult: result }
         : block
     ),
@@ -214,36 +273,55 @@ function attachQuestionResult(message: unknown, result: UserQuestionResult): unk
  * session file the SDK would have read and lifts the sidecars back, keyed by
  * uuid, so the answer survives a reload the way it survives the live stream.
  */
-async function readQuestionSidecars(sessionId: string, dir?: string): Promise<Map<string, UserQuestionResult>> {
+async function readQuestionSidecars(
+  sessionId: string,
+  dir?: string
+): Promise<Map<string, UserQuestionResult>> {
   const file = await claudeSessionFile(sessionId, dir);
-  if (!file) return new Map();
+  if (!file) {
+    return new Map();
+  }
   let text: string;
   try {
-    text = await readFile(file, 'utf8');
+    text = await readFile(file, "utf8");
   } catch {
     return new Map();
   }
   const sidecars = new Map<string, UserQuestionResult>();
-  for (const line of text.split('\n')) {
-    if (!line.includes('"toolUseResult"')) continue;
+  for (const line of text.split("\n")) {
+    if (!line.includes('"toolUseResult"')) {
+      continue;
+    }
     let entry: unknown;
     try {
       entry = JSON.parse(line);
     } catch {
       continue;
     }
-    if (typeof entry !== 'object' || entry === null) continue;
-    const { uuid, toolUseResult } = entry as { uuid?: unknown; toolUseResult?: unknown };
-    if (typeof uuid !== 'string') continue;
+    if (typeof entry !== "object" || entry === null) {
+      continue;
+    }
+    const { uuid, toolUseResult } = entry as {
+      uuid?: unknown;
+      toolUseResult?: unknown;
+    };
+    if (typeof uuid !== "string") {
+      continue;
+    }
     const result = normalizeQuestionResult(toolUseResult);
-    if (result) sidecars.set(uuid, result);
+    if (result) {
+      sidecars.set(uuid, result);
+    }
   }
   return sidecars;
 }
 
 /** The session file the CLI stores a session under, or null when it is not found. */
-async function claudeSessionFile(sessionId: string, dir?: string): Promise<string | null> {
-  const projects = claudeConfigDirs().map((config) => join(config, 'projects'));
+async function claudeSessionFile(
+  sessionId: string,
+  dir?: string
+): Promise<string | null> {
+  const projects = claudeConfigDirs().map((config) => join(config, "projects"));
   const fileName = `${sessionId}.jsonl`;
   // The CLI names the project dir from the session's cwd: realpath, then every
   // non-alphanumeric byte becomes '-'. Try that first — it is the exact file
@@ -252,7 +330,7 @@ async function claudeSessionFile(sessionId: string, dir?: string): Promise<strin
   let slug: string | null = null;
   if (dir) {
     try {
-      slug = (await realpath(dir)).replace(/[^a-zA-Z0-9]/g, '-');
+      slug = (await realpath(dir)).replace(/[^a-zA-Z0-9]/g, "-");
     } catch {
       slug = null;
     }
@@ -276,7 +354,9 @@ async function claudeSessionFile(sessionId: string, dir?: string): Promise<strin
       continue;
     }
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
+      if (!entry.isDirectory()) {
+        continue;
+      }
       const candidate = join(projectsDir, entry.name, fileName);
       try {
         await access(candidate);
@@ -291,7 +371,7 @@ async function claudeSessionFile(sessionId: string, dir?: string): Promise<strin
 
 export const CLAUDE_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,
-  permissionModes: ['default', 'acceptEdits', 'plan', 'bypassPermissions'],
+  permissionModes: ["default", "acceptEdits", "plan", "bypassPermissions"],
   setModel: true,
   effort: true,
   contextUsage: true,
@@ -320,8 +400,14 @@ export const CLAUDE_CAPABILITIES: HarnessCapabilities = {
 };
 
 /** The blocks a user turn is made of, taken from the SDK rather than re-modelled. */
-type ContentBlock = Extract<SDKUserMessage['message']['content'], unknown[]>[number];
-type Base64Source = Extract<Extract<ContentBlock, { type: 'image' }>['source'], { type: 'base64' }>;
+type ContentBlock = Extract<
+  SDKUserMessage["message"]["content"],
+  unknown[]
+>[number];
+type Base64Source = Extract<
+  Extract<ContentBlock, { type: "image" }>["source"],
+  { type: "base64" }
+>;
 
 /**
  * A turn's images and pasted text folded into the message the SDK iterates.
@@ -330,22 +416,32 @@ type Base64Source = Extract<Extract<ContentBlock, { type: 'image' }>['source'], 
  */
 function withExtras(
   message: SDKUserMessage,
-  attachments: SendPayload['attachments'],
-  images: SendPayload['images']
+  attachments: SendPayload["attachments"],
+  images: SendPayload["images"]
 ): SDKUserMessage {
-  if (!attachments?.length && !images?.length) return message;
+  if (!(attachments?.length || images?.length)) {
+    return message;
+  }
 
-  const typed = typeof message.message.content === 'string' ? message.message.content : '';
+  const typed =
+    typeof message.message.content === "string" ? message.message.content : "";
   const pasted = (attachments ?? [])
-    .map(({ name, content }) => `\n\n<pasted-text name="${name}">\n${content}\n</pasted-text>`)
-    .join('');
+    .map(
+      ({ name, content }) =>
+        `\n\n<pasted-text name="${name}">\n${content}\n</pasted-text>`
+    )
+    .join("");
 
   const content: ContentBlock[] = [
     ...(images ?? []).map(({ mediaType, data }) => ({
-      type: 'image' as const,
-      source: { type: 'base64' as const, media_type: mediaType as Base64Source['media_type'], data },
+      type: "image" as const,
+      source: {
+        type: "base64" as const,
+        media_type: mediaType as Base64Source["media_type"],
+        data,
+      },
     })),
-    { type: 'text' as const, text: typed + pasted },
+    { type: "text" as const, text: typed + pasted },
   ];
 
   return { ...message, message: { ...message.message, content } };
@@ -367,7 +463,9 @@ export class InputStream implements AsyncIterable<SDKUserMessage> {
   #ended = false;
 
   /** Called with the id of a tagged message at the moment the model pulls it. */
-  constructor(private readonly onConsume: (queueId: string) => void = () => {}) {}
+  constructor(
+    private readonly onConsume: (queueId: string) => void = () => {}
+  ) {}
 
   /**
    * Hands one turn to the model, or holds it until the running one is done.
@@ -395,10 +493,14 @@ export class InputStream implements AsyncIterable<SDKUserMessage> {
       next: () => {
         const queued = this.#queue.shift();
         if (queued) {
-          if (queued.queueId) this.onConsume(queued.queueId);
+          if (queued.queueId) {
+            this.onConsume(queued.queueId);
+          }
           return Promise.resolve({ done: false, value: queued.message });
         }
-        if (this.#ended) return Promise.resolve({ done: true, value: undefined });
+        if (this.#ended) {
+          return Promise.resolve({ done: true, value: undefined });
+        }
         return new Promise((resolve) => {
           this.#waiting = resolve;
         });
@@ -415,11 +517,15 @@ export class InputStream implements AsyncIterable<SDKUserMessage> {
  */
 export const queuedText = (message: NeutralUserMessage): string => {
   const content = message.message.content;
-  if (typeof content === 'string') return content;
+  if (typeof content === "string") {
+    return content;
+  }
   return content
-    .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+    .filter(
+      (block): block is { type: "text"; text: string } => block.type === "text"
+    )
     .map((block) => block.text)
-    .join('\n');
+    .join("\n");
 };
 
 /** The `message_queued` announcement for one held turn. */
@@ -427,7 +533,7 @@ export const queuedFrame = (
   queued: QueuedMessage,
   sessionId: string | null
 ): NeutralMessage => ({
-  type: 'system',
+  type: "system",
   subtype: MESSAGE_QUEUED,
   ...(sessionId ? { session_id: sessionId } : {}),
   queueId: queued.queueId,
@@ -437,8 +543,11 @@ export const queuedFrame = (
 });
 
 /** And the one that retires it, at the moment the model pulled it. */
-export const dequeuedFrame = (queueId: string, sessionId: string | null): NeutralMessage => ({
-  type: 'system',
+export const dequeuedFrame = (
+  queueId: string,
+  sessionId: string | null
+): NeutralMessage => ({
+  type: "system",
   subtype: MESSAGE_DEQUEUED,
   ...(sessionId ? { session_id: sessionId } : {}),
   queueId,
@@ -460,12 +569,14 @@ class Turn {
   }
 
   async settle(ms: number): Promise<void> {
-    if (!this.busy) return;
+    if (!this.busy) {
+      return;
+    }
     await Promise.race([this.#ended.promise, Bun.sleep(ms)]);
   }
 }
 
-const SETTLE_TIMEOUT_MS = 5_000;
+const SETTLE_TIMEOUT_MS = 5000;
 
 /**
  * How long a custody `stop` waits for the child to die after its stdin is
@@ -473,10 +584,13 @@ const SETTLE_TIMEOUT_MS = 5_000;
  * stdin EOF within tens of milliseconds; a couple of seconds separates slow
  * from stuck, and stuck gets SIGKILL.
  */
-const CUSTODY_EXIT_MS = 2_000;
+const CUSTODY_EXIT_MS = 2000;
 
 /** Whether `promise` settled within `ms`. The timer is cleared either way. */
-const within = async (promise: Promise<unknown>, ms: number): Promise<boolean> => {
+const within = async (
+  promise: Promise<unknown>,
+  ms: number
+): Promise<boolean> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const expiry = new Promise<false>((resolve) => {
     timer = setTimeout(() => resolve(false), ms);
@@ -495,7 +609,7 @@ const AWAITING_ECHO_LIMIT = 32;
 type PermissionResolver = (result: PermissionResult) => void;
 
 class ClaudeSession implements HarnessSession {
-  readonly harness = 'claude' as const;
+  readonly harness = "claude" as const;
   sessionId: string | null = null;
   readonly #handle: Query;
   readonly #input: InputStream;
@@ -526,7 +640,11 @@ class ClaudeSession implements HarnessSession {
    */
   readonly #openQuestions = new Map<
     string,
-    { toolUseID: string; questions: UserQuestion[]; input: Record<string, unknown> }
+    {
+      toolUseID: string;
+      questions: UserQuestion[];
+      input: Record<string, unknown>;
+    }
   >();
   /** Denied questions, keyed by tool call, until their `tool_result` goes past. */
   readonly #dismissedQuestions = new Map<string, UserQuestionResult>();
@@ -554,12 +672,12 @@ class ClaudeSession implements HarnessSession {
     permissionMode: string | undefined,
     model: string | undefined,
     effort: EffortLevel | undefined,
-    resume: SpawnPayload['resume'],
+    resume: SpawnPayload["resume"],
     persistSession: boolean | undefined,
     skills?: string[],
     denyTools?: string[],
     /** Fetched once by `spawn()` before this session existed; frozen from here on. */
-    delegateTypes?: import('@whiffle/core').DelegateType[],
+    delegateTypes?: import("@whiffle/core").DelegateType[],
     /** `false` on a leaf delegate: no spawning tools at all. Absent = allowed. */
     canDelegate?: boolean,
     /**
@@ -589,9 +707,10 @@ class ClaudeSession implements HarnessSession {
     //
     // A spec that names `chrome` or `no-chrome` itself still wins.
     const callerArgs =
-      (options as { extraArgs?: Record<string, string | null> } | undefined)?.extraArgs ?? {};
+      (options as { extraArgs?: Record<string, string | null> } | undefined)
+        ?.extraArgs ?? {};
     const extraArgs: Record<string, string | null> = {
-      ...('no-chrome' in callerArgs ? {} : { chrome: null }),
+      ...("no-chrome" in callerArgs ? {} : { chrome: null }),
       ...callerArgs,
     };
 
@@ -603,9 +722,16 @@ class ClaudeSession implements HarnessSession {
         ...(options as Record<string, unknown> | undefined),
         extraArgs,
         mcpServers: {
-          ...((options as { mcpServers?: Record<string, unknown> } | undefined)?.mcpServers ?? {}),
+          ...((options as { mcpServers?: Record<string, unknown> } | undefined)
+            ?.mcpServers ?? {}),
           [MCP_SERVER_NAME]: handoffServer(
-            { instanceId, cwd: workdir, emit: (envelope) => ctx.emit(envelope), delegateTypes, canDelegate },
+            {
+              instanceId,
+              cwd: workdir,
+              emit: (envelope) => ctx.emit(envelope),
+              delegateTypes,
+              canDelegate,
+            },
             // Keyed under BOTH the handler's text and the serialized payload:
             // CLIs before ~2.1.x forward the handler's text block, current ones
             // (verified on 2.1.233) replace it with JSON.stringify(structuredContent).
@@ -622,7 +748,8 @@ class ClaudeSession implements HarnessSession {
         // ask, threaded through from the spawn.
         disallowedTools: [
           ...new Set([
-            ...((options as { disallowedTools?: string[] } | undefined)?.disallowedTools ?? []),
+            ...((options as { disallowedTools?: string[] } | undefined)
+              ?.disallowedTools ?? []),
             ...DENIED_WEB_TOOLS,
             ...DENIED_NATIVE_SUBAGENT_TOOLS,
             ...(denyTools ?? []),
@@ -632,23 +759,31 @@ class ClaudeSession implements HarnessSession {
           ? {
               resume: resume.sessionKey,
               ...(resume.fork ? { forkSession: true } : {}),
-              ...(resume.atMessage ? { resumeSessionAt: resume.atMessage } : {}),
+              ...(resume.atMessage
+                ? { resumeSessionAt: resume.atMessage }
+                : {}),
             }
           : {}),
         ...(persistSession === false ? { persistSession: false } : {}),
-        ...(permissionMode ? { permissionMode: permissionMode as import('@anthropic-ai/claude-agent-sdk').PermissionMode } : {}),
+        ...(permissionMode
+          ? {
+              permissionMode:
+                permissionMode as import("@anthropic-ai/claude-agent-sdk").PermissionMode,
+            }
+          : {}),
         ...(model && { model }),
         // Left out entirely when nobody chose: the SDK's own default is the
         // model's, and writing a level here would put whiffle's guess in its
         // place on every model whose scale we cannot see.
         ...(effort && { effort }),
-        ...(permissionMode === 'bypassPermissions' && {
+        ...(permissionMode === "bypassPermissions" && {
           allowDangerouslySkipPermissions: true,
           // Bypass mode must also let the model run commands outside the sandbox
           // via `dangerouslyDisableSandbox` — otherwise the SDK auto-denies such
           // Bash calls (`sandboxOverride`) without ever reaching `canUseTool`.
           sandbox: {
-            ...((options as { sandbox?: Record<string, unknown> } | undefined)?.sandbox ?? {}),
+            ...((options as { sandbox?: Record<string, unknown> } | undefined)
+              ?.sandbox ?? {}),
             allowUnsandboxedCommands: true,
           },
         }),
@@ -667,23 +802,37 @@ class ClaudeSession implements HarnessSession {
         // fallback (PLAN.md C7).
         ...(sessiond
           ? {
-              spawnClaudeCodeProcess: (spawnOptions: import('@anthropic-ai/claude-agent-sdk').SpawnOptions) =>
+              spawnClaudeCodeProcess: (
+                spawnOptions: import("@anthropic-ai/claude-agent-sdk").SpawnOptions
+              ) =>
                 sessiondBridge(sessiond.client, sessiond.procId, spawnOptions),
             }
           : {}),
-        canUseTool: (toolName, toolInput, { requestId, suggestions, toolUseID }) =>
+        canUseTool: (
+          toolName,
+          toolInput,
+          { requestId, suggestions, toolUseID }
+        ) =>
           new Promise<PermissionResult>((resolve) => {
             this.#permissions.set(requestId, resolve);
             if (toolName === ASK_USER_QUESTION) {
-              const questions = normalizeQuestions((toolInput as { questions?: unknown }).questions);
-              if (questions)
+              const questions = normalizeQuestions(
+                (toolInput as { questions?: unknown }).questions
+              );
+              if (questions) {
                 this.#openQuestions.set(requestId, {
                   toolUseID,
                   questions,
                   input: toolInput as Record<string, unknown>,
                 });
+              }
             }
-            ctx.permission({ requestId, toolName, input: toolInput, suggestions });
+            ctx.permission({
+              requestId,
+              toolName,
+              input: toolInput,
+              suggestions,
+            });
           }),
       },
     });
@@ -696,8 +845,8 @@ class ClaudeSession implements HarnessSession {
     if (skills?.length) {
       for (const skill of skills) {
         input.push({
-          type: 'user',
-          message: { role: 'user', content: `/${skill}` },
+          type: "user",
+          message: { role: "user", content: `/${skill}` },
           parent_tool_use_id: null,
         } as SDKUserMessage);
       }
@@ -713,14 +862,19 @@ class ClaudeSession implements HarnessSession {
    */
   #dequeue(queueId: string): void {
     const at = this.#queued.findIndex((entry) => entry.queueId === queueId);
-    if (at === -1) return;
+    if (at === -1) {
+      return;
+    }
     const [entry] = this.#queued.splice(at, 1);
     this.#awaitingEcho.push({ queueId, text: entry.text });
     // A turn nothing ever echoed would otherwise sit here for the session's
     // life. The tag is a nicety — `message_dequeued` already retired the row —
     // so the oldest unmatched entries are simply dropped.
     if (this.#awaitingEcho.length > AWAITING_ECHO_LIMIT) {
-      this.#awaitingEcho.splice(0, this.#awaitingEcho.length - AWAITING_ECHO_LIMIT);
+      this.#awaitingEcho.splice(
+        0,
+        this.#awaitingEcho.length - AWAITING_ECHO_LIMIT
+      );
     }
     this.#ctx.frame(dequeuedFrame(queueId, this.sessionId));
   }
@@ -733,23 +887,35 @@ class ClaudeSession implements HarnessSession {
    * tool_result traffic are nobody's send.
    */
   #tagEcho(neutral: NeutralMessage): void {
-    if (neutral.type !== 'user' || this.#awaitingEcho.length === 0) return;
-    if (neutral.parent_tool_use_id) return;
+    if (neutral.type !== "user" || this.#awaitingEcho.length === 0) {
+      return;
+    }
+    if (neutral.parent_tool_use_id) {
+      return;
+    }
     const text = queuedText(neutral);
-    if (!text) return;
+    if (!text) {
+      return;
+    }
     // `startsWith`, not equality: a turn that carried pasted text has it folded
     // in after the sentence (`withExtras`). An entry with no text of its own —
     // an images-only send — is never matched by prefix, which every string
     // would satisfy; its `message_dequeued` is what retires it.
     const at = this.#awaitingEcho.findIndex(
-      (entry) => entry.text !== '' && text.startsWith(entry.text)
+      (entry) => entry.text !== "" && text.startsWith(entry.text)
     );
-    if (at === -1) return;
+    if (at === -1) {
+      return;
+    }
     const [entry] = this.#awaitingEcho.splice(at, 1);
     neutral.queueId = entry.queueId;
   }
 
-  async #pumpMessages(ctx: HarnessContext, handle: Query, turn: Turn): Promise<void> {
+  async #pumpMessages(
+    ctx: HarnessContext,
+    handle: Query,
+    turn: Turn
+  ): Promise<void> {
     try {
       for await (const message of handle) {
         const neutral = toNeutral(message);
@@ -760,23 +926,31 @@ class ClaudeSession implements HarnessSession {
         // what lands in the `tool_result` block's `content`). Normalise it onto
         // the block so the dashboard reads one neutral shape and never parses
         // prose.
-        if (neutral.type === 'user') {
-          const result = normalizeQuestionResult((message as SDKUserMessage).tool_use_result);
+        if (neutral.type === "user") {
+          const result = normalizeQuestionResult(
+            (message as SDKUserMessage).tool_use_result
+          );
           if (result && Array.isArray(neutral.message.content)) {
             for (const block of neutral.message.content) {
-              if (block.type === 'tool_result') block.questionResult = result;
+              if (block.type === "tool_result") {
+                block.questionResult = result;
+              }
             }
           }
         }
         // A dismissed question has no sidecar to normalise — the denial was
         // recorded when it was made, and this is the block it belongs to.
-        if (neutral.type === 'user' && this.#dismissedQuestions.size > 0) {
+        if (neutral.type === "user" && this.#dismissedQuestions.size > 0) {
           const content = neutral.message.content;
           if (Array.isArray(content)) {
             for (const block of content) {
-              if (block.type !== 'tool_result') continue;
+              if (block.type !== "tool_result") {
+                continue;
+              }
               const dismissed = this.#dismissedQuestions.get(block.tool_use_id);
-              if (!dismissed) continue;
+              if (!dismissed) {
+                continue;
+              }
               this.#dismissedQuestions.delete(block.tool_use_id);
               block.questionResult = dismissed;
             }
@@ -786,33 +960,37 @@ class ClaudeSession implements HarnessSession {
         // before forwarding tool_result blocks. The tool handlers stored their
         // structured data in #pendingStructured keyed by result text; inject it
         // back onto the matching block so downstream consumers see it.
-        if (neutral.type === 'user' && this.#pendingStructured.size > 0) {
+        if (neutral.type === "user" && this.#pendingStructured.size > 0) {
           const content = neutral.message.content;
           if (Array.isArray(content)) {
             for (const block of content) {
-              if (block.type !== 'tool_result') continue;
+              if (block.type !== "tool_result") {
+                continue;
+              }
               const text =
-                typeof block.content === 'string'
+                typeof block.content === "string"
                   ? block.content
                   : Array.isArray(block.content)
                     ? (block.content as { text?: string }[])
-                        .map((b) => b.text ?? '')
+                        .map((b) => b.text ?? "")
                         .filter(Boolean)
-                        .join('\n')
-                    : '';
+                        .join("\n")
+                    : "";
               const sc = this.#pendingStructured.get(text);
               if (sc) {
                 (block as Record<string, unknown>).structuredContent = sc;
                 // Both keys (handler text + serialized payload) point at this
                 // value; sweep them so neither lingers.
                 for (const [key, value] of this.#pendingStructured) {
-                  if (value === sc) this.#pendingStructured.delete(key);
+                  if (value === sc) {
+                    this.#pendingStructured.delete(key);
+                  }
                 }
               }
             }
           }
         }
-        if (message.type === 'system' && message.subtype === 'init') {
+        if (message.type === "system" && message.subtype === "init") {
           this.sessionId = message.session_id;
           ctx.session(message.session_id);
         }
@@ -824,7 +1002,7 @@ class ClaudeSession implements HarnessSession {
         // an `instances.served_model` column. Left undone: `db/schema.ts`,
         // `db/index.ts` and `server.ts` are mid-edit in another session's
         // working tree and a migration on top of that is unsafe right now.
-        if (message.type === 'result') {
+        if (message.type === "result") {
           turn.end();
           ctx.busy(false);
         }
@@ -838,7 +1016,10 @@ class ClaudeSession implements HarnessSession {
     }
   }
 
-  send(message: NeutralUserMessage, extras: Pick<SendPayload, 'attachments' | 'images' | 'urgent'>): void {
+  send(
+    message: NeutralUserMessage,
+    extras: Pick<SendPayload, "attachments" | "images" | "urgent">
+  ): void {
     const sdk = message as unknown as SDKUserMessage;
     const queued = (message as { shouldQuery?: boolean }).shouldQuery === false;
 
@@ -861,8 +1042,12 @@ class ClaudeSession implements HarnessSession {
     // A queued hand-off picked up while the session is idle is the turn that
     // wakes it; otherwise it stays out of the way of the turn in flight.
     const wake = queued && !this.#turn.busy;
-    if (!queued || wake) this.#ctx.busy(true);
-    const outgoing = wake ? ({ ...sdk, shouldQuery: undefined } as typeof sdk) : sdk;
+    if (!queued || wake) {
+      this.#ctx.busy(true);
+    }
+    const outgoing = wake
+      ? ({ ...sdk, shouldQuery: undefined } as typeof sdk)
+      : sdk;
 
     // Announced only if it actually waits, and only for what the reader typed.
     //
@@ -910,27 +1095,38 @@ class ClaudeSession implements HarnessSession {
     // to any of them, which is exactly a session-scoped switch. `max` is only
     // reachable this way — the persisted setting excludes it.
     if (method === CONTROL_SET_EFFORT) {
-      return await this.#handle.applyFlagSettings({ effortLevel: args[0] as EffortLevel });
+      return await this.#handle.applyFlagSettings({
+        effortLevel: args[0] as EffortLevel,
+      });
     }
-    const handle = this.#handle as unknown as Record<string, (...a: unknown[]) => unknown>;
-    if (typeof handle[method] !== 'function') throw new Error(`unknown control method: ${method}`);
+    const handle = this.#handle as unknown as Record<
+      string,
+      (...a: unknown[]) => unknown
+    >;
+    if (typeof handle[method] !== "function") {
+      throw new Error(`unknown control method: ${method}`);
+    }
     return await handle[method](...args);
   }
 
   resolvePermission(requestId: string, result: PermissionResult): void {
     const resolve = this.#permissions.get(requestId);
-    if (!resolve) throw new Error(`no permission request ${requestId}`);
+    if (!resolve) {
+      throw new Error(`no permission request ${requestId}`);
+    }
     this.#permissions.delete(requestId);
     const question = this.#openQuestions.get(requestId);
-    if (!question) return resolve(result);
+    if (!question) {
+      return resolve(result);
+    }
 
     this.#openQuestions.delete(requestId);
     // Answering runs the tool, and the CLI writes the answers itself; walking
     // away leaves nothing behind, so the dismissal is recorded here for the
     // `tool_result` that is about to carry the CLI's denial prose.
-    if (result.behavior === 'deny') {
+    if (result.behavior === "deny") {
       this.#dismissedQuestions.set(question.toolUseID, {
-        outcome: 'dismissed',
+        outcome: "dismissed",
         questions: question.questions,
       });
     }
@@ -954,7 +1150,9 @@ class ClaudeSession implements HarnessSession {
     // session end, not a message being read.
     this.#queued.length = 0;
     this.#awaitingEcho.length = 0;
-    for (const resolve of this.#permissions.values()) resolve({ behavior: 'deny', message: 'session stopped' });
+    for (const resolve of this.#permissions.values()) {
+      resolve({ behavior: "deny", message: "session stopped" });
+    }
     this.#permissions.clear();
     // Not dismissals: the session is going away, and no `tool_result` will
     // arrive for these to be folded onto.
@@ -973,32 +1171,38 @@ class ClaudeSession implements HarnessSession {
 
 /** How long the `claude update` control gets. */
 const TAIL_LINES = 4;
-const tail = (output: string): string => output.trim().split('\n').slice(-TAIL_LINES).join('\n');
+const tail = (output: string): string =>
+  output.trim().split("\n").slice(-TAIL_LINES).join("\n");
 
 /** Updates the Claude Code the machine's sessions run on. */
 const updateClaudeCode = async (): Promise<string> => {
   const updated = await Bun.$`claude update`.quiet().nothrow();
-  const said = tail(updated.stdout.toString()) || tail(updated.stderr.toString());
-  if (updated.exitCode !== 0) throw new Error(said || `claude update exited ${updated.exitCode}`);
+  const said =
+    tail(updated.stdout.toString()) || tail(updated.stderr.toString());
+  if (updated.exitCode !== 0) {
+    throw new Error(said || `claude update exited ${updated.exitCode}`);
+  }
   return said;
 };
 
-const toInfo = (info: import('@anthropic-ai/claude-agent-sdk').SDKSessionInfo): NeutralSessionInfo => ({
+const toInfo = (
+  info: import("@anthropic-ai/claude-agent-sdk").SDKSessionInfo
+): NeutralSessionInfo => ({
   sessionId: info.sessionId,
-  harness: 'claude',
-  ...(info.summary !== undefined ? { summary: info.summary } : {}),
+  harness: "claude",
+  ...(info.summary === undefined ? {} : { summary: info.summary }),
   lastModified: info.lastModified,
-  ...(info.fileSize !== undefined ? { fileSize: info.fileSize } : {}),
-  ...(info.customTitle !== undefined ? { customTitle: info.customTitle } : {}),
-  ...(info.firstPrompt !== undefined ? { firstPrompt: info.firstPrompt } : {}),
-  ...(info.gitBranch !== undefined ? { gitBranch: info.gitBranch } : {}),
-  ...(info.cwd !== undefined ? { cwd: info.cwd } : {}),
-  ...(info.tag !== undefined ? { tag: info.tag } : {}),
-  ...(info.createdAt !== undefined ? { createdAt: info.createdAt } : {}),
+  ...(info.fileSize === undefined ? {} : { fileSize: info.fileSize }),
+  ...(info.customTitle === undefined ? {} : { customTitle: info.customTitle }),
+  ...(info.firstPrompt === undefined ? {} : { firstPrompt: info.firstPrompt }),
+  ...(info.gitBranch === undefined ? {} : { gitBranch: info.gitBranch }),
+  ...(info.cwd === undefined ? {} : { cwd: info.cwd }),
+  ...(info.tag === undefined ? {} : { tag: info.tag }),
+  ...(info.createdAt === undefined ? {} : { createdAt: info.createdAt }),
 });
 
 const toEntry = (
-  entry: import('@anthropic-ai/claude-agent-sdk').SessionMessage
+  entry: import("@anthropic-ai/claude-agent-sdk").SessionMessage
 ): SessionMessage => {
   // Every stored line carries the ISO time the turn was written, and the SDK
   // passes it through — but its `SessionMessage` type does not declare it, so
@@ -1015,10 +1219,9 @@ const toEntry = (
     message: entry.message,
     parent_tool_use_id: entry.parent_tool_use_id,
     parent_agent_id: entry.parent_agent_id,
-    ...(typeof written === 'string' ? { timestamp: written } : {}),
+    ...(typeof written === "string" ? { timestamp: written } : {}),
   };
 };
-
 
 /**
  * A line off a child's stdout, as the CLI writes it. Only two shapes matter
@@ -1028,29 +1231,39 @@ const toEntry = (
  */
 type CustodyLine =
   | (SDKMessage & { type: string })
-  | { type: 'control_request'; request_id: string; request: { subtype: string } & Record<string, unknown> }
+  | {
+      type: "control_request";
+      request_id: string;
+      request: { subtype: string } & Record<string, unknown>;
+    }
   | { type: string; [key: string]: unknown };
 
 /** The raw `control_response` the CLI reads off its stdin, both polarities. */
 export const controlSuccess = (requestId: string, response: unknown): string =>
   `${JSON.stringify({
-    type: 'control_response',
-    response: { subtype: 'success', request_id: requestId, response },
+    type: "control_response",
+    response: { subtype: "success", request_id: requestId, response },
   })}\n`;
 
 export const controlError = (requestId: string, error: string): string =>
   `${JSON.stringify({
-    type: 'control_response',
-    response: { subtype: 'error', request_id: requestId, error },
+    type: "control_response",
+    response: { subtype: "error", request_id: requestId, error },
   })}\n`;
 
 /** The in-band notice a custody refusal writes into the transcript. */
-export const CUSTODY_DEGRADED = 'custody_degraded';
+export const CUSTODY_DEGRADED = "custody_degraded";
 
 /** The three fields of a ring line that adoption reads; `undefined` when it is not JSON. */
-const parseLine = (data: string): { type?: unknown; subtype?: unknown; session_id?: unknown } | undefined => {
+const parseLine = (
+  data: string
+): { type?: unknown; subtype?: unknown; session_id?: unknown } | undefined => {
   try {
-    return JSON.parse(data) as { type?: unknown; subtype?: unknown; session_id?: unknown };
+    return JSON.parse(data) as {
+      type?: unknown;
+      subtype?: unknown;
+      session_id?: unknown;
+    };
   } catch {
     return undefined;
   }
@@ -1062,7 +1275,7 @@ const parseLine = (data: string): { type?: unknown; subtype?: unknown; session_i
  * that has been asked nothing yet writes its `init` and stops there.
  */
 const isWaiting = (line: { type?: unknown; subtype?: unknown }): boolean =>
-  line.type === 'result' || (line.type === 'system' && line.subtype === 'init');
+  line.type === "result" || (line.type === "system" && line.subtype === "init");
 
 /**
  * The running answer to "is this child waiting?", one ring line at a time. An
@@ -1078,9 +1291,15 @@ const idleVerdict = (
   line: { type?: unknown; subtype?: unknown } | undefined,
   previous: boolean | undefined
 ): boolean | undefined => {
-  if (line === undefined) return previous;
-  if (line.type === 'control_response' || line.type === 'rate_limit_event') return previous;
-  if (line.type === 'system' && line.subtype !== 'init') return previous;
+  if (line === undefined) {
+    return previous;
+  }
+  if (line.type === "control_response" || line.type === "rate_limit_event") {
+    return previous;
+  }
+  if (line.type === "system" && line.subtype !== "init") {
+    return previous;
+  }
   return isWaiting(line);
 };
 
@@ -1108,7 +1327,7 @@ const READ_ONLY_CONTROLS: ReadonlySet<string> = new Set([
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_MCP_STATUS,
   CONTROL_CONTEXT_USAGE,
-  'accountInfo',
+  "accountInfo",
 ]);
 
 /**
@@ -1141,12 +1360,15 @@ const READ_ONLY_CONTROLS: ReadonlySet<string> = new Set([
  * of the SDK. Everything it refuses, it refuses out loud.
  */
 export class ClaudeCustody implements HarnessSession {
-  readonly harness = 'claude' as const;
+  readonly harness = "claude" as const;
   sessionId: string | null = null;
   /** requestId → the parked ask, until an answer or the hand-off clears it. */
   readonly #parked = new Set<string>();
   /** Turns pushed during custody; delivered by the respawned session. */
-  readonly #held: { message: NeutralUserMessage; extras: Pick<SendPayload, 'attachments' | 'images' | 'urgent'> }[] = [];
+  readonly #held: {
+    message: NeutralUserMessage;
+    extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
+  }[] = [];
   #handedOff = false;
   /** Settled by {@link exited} when sessiond reports the child gone. */
   readonly #exit = Promise.withResolvers<void>();
@@ -1161,7 +1383,10 @@ export class ClaudeCustody implements HarnessSession {
     private readonly onHandoff: (handoff: {
       instanceId: string;
       sessionId: string | null;
-      held: { message: NeutralUserMessage; extras: Pick<SendPayload, 'attachments' | 'images' | 'urgent'> }[];
+      held: {
+        message: NeutralUserMessage;
+        extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
+      }[];
     }) => void,
     sessionId: string | null = null,
     /** Signals the child; what a `stop` falls back to when EOF alone does not end it. */
@@ -1200,21 +1425,31 @@ export class ClaudeCustody implements HarnessSession {
       return;
     }
 
-    if (parsed.type === 'control_request') {
-      this.#onControlRequest(parsed as Extract<CustodyLine, { type: 'control_request' }>);
+    if (parsed.type === "control_request") {
+      this.#onControlRequest(
+        parsed as Extract<CustodyLine, { type: "control_request" }>
+      );
       return;
     }
     // A control_response is the CLI answering something the dead agent asked;
     // nobody is waiting for it any more.
-    if (parsed.type === 'control_response' || parsed.type === 'control_cancel_request') return;
+    if (
+      parsed.type === "control_response" ||
+      parsed.type === "control_cancel_request"
+    ) {
+      return;
+    }
 
     const sdk = parsed as SDKMessage;
-    if (sdk.type === 'system' && (sdk as { subtype?: string }).subtype === 'init') {
+    if (
+      sdk.type === "system" &&
+      (sdk as { subtype?: string }).subtype === "init"
+    ) {
       this.sessionId = sdk.session_id;
       this.ctx.session(sdk.session_id);
     }
     this.ctx.frame(toNeutral(sdk));
-    if (sdk.type === 'result') {
+    if (sdk.type === "result") {
       this.ctx.busy(false);
       // THE BOUNDARY. The turn that was in flight when the agent died has now
       // completed and been captured; this is the one moment at which handing
@@ -1223,32 +1458,43 @@ export class ClaudeCustody implements HarnessSession {
     }
   }
 
-  #onControlRequest(request: Extract<CustodyLine, { type: 'control_request' }>): void {
+  #onControlRequest(
+    request: Extract<CustodyLine, { type: "control_request" }>
+  ): void {
     const requestId = request.request_id;
-    if (request.request?.subtype === 'can_use_tool') {
+    if (request.request?.subtype === "can_use_tool") {
       // Re-parked under the SDK's own requestId — the same id the hub's parked
       // ask has carried end-to-end since this adapter first wrote it.
       this.#parked.add(requestId);
-      const inner = request.request as { tool_name?: string; input?: Record<string, unknown>; permission_suggestions?: unknown };
+      const inner = request.request as {
+        tool_name?: string;
+        input?: Record<string, unknown>;
+        permission_suggestions?: unknown;
+      };
       this.ctx.permission({
         requestId,
-        toolName: inner.tool_name ?? 'unknown',
+        toolName: inner.tool_name ?? "unknown",
         input: inner.input ?? {},
         ...(Array.isArray(inner.permission_suggestions)
-          ? { suggestions: inner.permission_suggestions as import('@whiffle/core').PermissionUpdate[] }
+          ? {
+              suggestions:
+                inner.permission_suggestions as import("@whiffle/core").PermissionUpdate[],
+            }
           : {}),
-        ...(inner.tool_name === ASK_USER_QUESTION ? { requestKind: 'question' as const } : {}),
+        ...(inner.tool_name === ASK_USER_QUESTION
+          ? { requestKind: "question" as const }
+          : {}),
       });
       return;
     }
     // Everything else: the handler it is addressed to died with the agent.
     // Refused in-band and said out loud, so the tool call fails where the
     // reader can see it rather than hanging on a promise nobody holds.
-    const subtype = request.request?.subtype ?? 'unknown';
+    const subtype = request.request?.subtype ?? "unknown";
     const reason = `whiffle: agent restarted; \`${subtype}\` cannot be served during custody`;
     this.write(controlError(requestId, reason));
     this.ctx.frame({
-      type: 'system',
+      type: "system",
       subtype: CUSTODY_DEGRADED,
       ...(this.sessionId ? { session_id: this.sessionId } : {}),
       control: subtype,
@@ -1264,7 +1510,9 @@ export class ClaudeCustody implements HarnessSession {
    * `handleControlRequest`).
    */
   resolvePermission(requestId: string, result: PermissionResult): void {
-    if (!this.#parked.delete(requestId)) throw new Error(`no permission request ${requestId}`);
+    if (!this.#parked.delete(requestId)) {
+      throw new Error(`no permission request ${requestId}`);
+    }
     this.write(controlSuccess(requestId, result));
   }
 
@@ -1275,7 +1523,10 @@ export class ClaudeCustody implements HarnessSession {
    * here whether the model is ready for it. The hand-off is seconds away and
    * delivers it through the real path.
    */
-  send(message: NeutralUserMessage, extras: Pick<SendPayload, 'attachments' | 'images' | 'urgent'>): void {
+  send(
+    message: NeutralUserMessage,
+    extras: Pick<SendPayload, "attachments" | "images" | "urgent">
+  ): void {
     this.#held.push({ message, extras });
   }
 
@@ -1288,7 +1539,7 @@ export class ClaudeCustody implements HarnessSession {
     const reason = `whiffle: agent restarted; control \`${method}\` is unavailable until this session hands back (custody)`;
     if (!READ_ONLY_CONTROLS.has(method)) {
       this.ctx.frame({
-        type: 'system',
+        type: "system",
         subtype: CUSTODY_DEGRADED,
         ...(this.sessionId ? { session_id: this.sessionId } : {}),
         control: method,
@@ -1305,22 +1556,32 @@ export class ClaudeCustody implements HarnessSession {
    */
   async interrupt(): Promise<void> {
     const requestId = crypto.randomUUID();
-    this.write(`${JSON.stringify({ type: 'control_request', request_id: requestId, request: { subtype: 'interrupt' } })}\n`);
+    this.write(
+      `${JSON.stringify({ type: "control_request", request_id: requestId, request: { subtype: "interrupt" } })}\n`
+    );
   }
 
   /** stdin EOF + the hand-off, once. */
   handOff(): void {
-    if (this.#handedOff) return;
+    if (this.#handedOff) {
+      return;
+    }
     this.#handedOff = true;
     this.stdinEnd();
-    this.onHandoff({ instanceId: this.instanceId, sessionId: this.sessionId, held: [...this.#held] });
+    this.onHandoff({
+      instanceId: this.instanceId,
+      sessionId: this.sessionId,
+      held: [...this.#held],
+    });
     this.#held.length = 0;
   }
 
   async stop(): Promise<void> {
     // A stop during custody is the operator ending the session, not a
     // hand-off: nothing is parked afterwards and nothing is respawned.
-    for (const requestId of this.#parked) this.write(controlError(requestId, 'whiffle: session stopped'));
+    for (const requestId of this.#parked) {
+      this.write(controlError(requestId, "whiffle: session stopped"));
+    }
     this.#parked.clear();
     this.#held.length = 0;
     this.#handedOff = true;
@@ -1329,8 +1590,10 @@ export class ClaudeCustody implements HarnessSession {
     // awaits this before spawning under the same procId, and sessiond's spawn
     // SIGKILLs a still-alive predecessor and broadcasts its exit to whoever is
     // subscribed under that id by then — which would be the new session.
-    if (await within(this.#exit.promise, CUSTODY_EXIT_MS)) return;
-    this.kill('SIGKILL');
+    if (await within(this.#exit.promise, CUSTODY_EXIT_MS)) {
+      return;
+    }
+    this.kill("SIGKILL");
     await within(this.#exit.promise, CUSTODY_EXIT_MS);
   }
 
@@ -1341,16 +1604,16 @@ export class ClaudeCustody implements HarnessSession {
 }
 
 export class ClaudeHarness implements Harness {
-  readonly kind = 'claude' as const;
+  readonly kind = "claude" as const;
   readonly capabilities = CLAUDE_CAPABILITIES;
-  auth: AuthState = 'authenticated';
+  auth: AuthState = "authenticated";
 
   async detect(): Promise<HarnessReport> {
     const auth = await probeAuth();
     this.auth = auth;
     return {
-      harness: 'claude',
-      installed: resolveBin('claude') !== undefined || auth === 'authenticated',
+      harness: "claude",
+      installed: resolveBin("claude") !== undefined || auth === "authenticated",
       version: undefined,
       auth,
       capabilities: CLAUDE_CAPABILITIES,
@@ -1369,10 +1632,13 @@ export class ClaudeHarness implements Harness {
     // `WHIFFLE_SESSIOND_ENDPOINT` is sessiond's own override
     // (`sessiond/src/main.ts`), honoured on this side too so a dev run — or a
     // test — can point both halves at a scratch socket instead of the real one.
-    endpoint: string = process.env.WHIFFLE_SESSIOND_ENDPOINT ?? sessiondEndpoint()
+    endpoint: string = process.env.WHIFFLE_SESSIOND_ENDPOINT ??
+      sessiondEndpoint()
   ): Promise<SessiondClient> {
     const existing = await this.#sessiond?.catch(() => undefined);
-    if (existing && !existing.closed) return existing;
+    if (existing && !existing.closed) {
+      return existing;
+    }
     // A dead connection is re-dialled; the CHILDREN are unaffected, which is
     // the whole property sessiond exists to provide.
     this.#sessiond = (async () => {
@@ -1382,12 +1648,16 @@ export class ClaudeHarness implements Harness {
     return this.#sessiond;
   }
 
-  async spawn(spec: SpawnPayload, ctx: HarnessContext): Promise<HarnessSession> {
+  async spawn(
+    spec: SpawnPayload,
+    ctx: HarnessContext
+  ): Promise<HarnessSession> {
     // Fetched once, before the session (and its `delegate` tool description)
     // exists — see `fetchDelegateTypes`'s own comment for why this is a plain
     // per-spawn HTTP read rather than a fleet-sync field.
     // A leaf never builds the tool that needs the list, so skip the HTTP read.
-    const delegateTypes = spec.canDelegate === false ? [] : await fetchDelegateTypes();
+    const delegateTypes =
+      spec.canDelegate === false ? [] : await fetchDelegateTypes();
     // The child is spawned under sessiond, unconditionally — no flag, no
     // in-process fallback (PLAN.md C7). `procId` is the instance id: stable
     // across agent restarts, which is what lets the returning agent match a
@@ -1447,7 +1717,10 @@ export class ClaudeHarness implements Harness {
       onHandoff: (handoff: {
         instanceId: string;
         sessionId: string | null;
-        held: { message: NeutralUserMessage; extras: Pick<SendPayload, 'attachments' | 'images' | 'urgent'> }[];
+        held: {
+          message: NeutralUserMessage;
+          extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
+        }[];
       }) => void;
     }
   ): Promise<ClaudeCustody> {
@@ -1468,7 +1741,9 @@ export class ClaudeHarness implements Harness {
     const head = options.head ?? 0;
     const boundary = options.afterSeq ?? head;
     let peekSeq =
-      head >= 1 && boundary <= head ? Math.max(0, Math.min(boundary, head - 1) - PEEK_LINES + 1) : undefined;
+      head >= 1 && boundary <= head
+        ? Math.max(0, Math.min(boundary, head - 1) - PEEK_LINES + 1)
+        : undefined;
     let verdict: boolean | undefined;
     let seen = false;
     let reopened = false;
@@ -1490,26 +1765,43 @@ export class ClaudeHarness implements Harness {
         (ctx as Partial<SessiondAwareContext>).line?.(srcEpoch, seq);
       }
     };
-    const listener: Parameters<SessiondClient['subscribe']>[1] = {
+    const listener: Parameters<SessiondClient["subscribe"]>[1] = {
       line: (event) => {
         seen = true;
         // Every line up to `head` feeds the verdict, peeked or really
         // replayed: a replayed `result` hands off inside `ingest` anyway, but
         // a replayed `init` would not, and a fresh child the hub saw nothing
         // of is exactly that case.
-        const parsed = peekSeq !== undefined && event.seq <= head ? parseLine(event.data) : undefined;
-        if (parsed !== undefined) verdict = idleVerdict(parsed, verdict);
+        const parsed =
+          peekSeq !== undefined && event.seq <= head
+            ? parseLine(event.data)
+            : undefined;
+        if (parsed !== undefined) {
+          verdict = idleVerdict(parsed, verdict);
+        }
         if (peekSeq !== undefined && event.seq <= boundary) {
           // Peek-only: looked at, never emitted. The session id is the one
           // thing taken from it — a survivor the hub never named arrives
           // without one, and the hand-off's `resume` cannot do without it.
-          if (custody.sessionId === null && typeof parsed?.session_id === 'string') custody.sessionId = parsed.session_id;
+          if (
+            custody.sessionId === null &&
+            typeof parsed?.session_id === "string"
+          ) {
+            custody.sessionId = parsed.session_id;
+          }
         } else {
           stamp(event.seq);
           custody.ingest(event.data);
         }
         // There is no backlog-complete event; the ring's last line is it.
-        if (peekSeq !== undefined && head >= 1 && event.seq === head && verdict === true) custody.handOff();
+        if (
+          peekSeq !== undefined &&
+          head >= 1 &&
+          event.seq === head &&
+          verdict === true
+        ) {
+          custody.handOff();
+        }
       },
       // A child that dies during custody is the session ending on its own,
       // and the supervisor's `closed` hook retires the row. After the
@@ -1518,7 +1810,9 @@ export class ClaudeHarness implements Harness {
       // hears of it.
       exit: () => {
         custody.exited();
-        if (!custody.handedOff) ctx.closed?.();
+        if (!custody.handedOff) {
+          ctx.closed?.();
+        }
       },
       // §6's honest refusal, surfaced rather than smoothed over — unless what
       // was refused is the peek window, which nobody asked to see: then the
@@ -1533,8 +1827,8 @@ export class ClaudeHarness implements Harness {
           return;
         }
         ctx.frame({
-          type: 'system',
-          subtype: 'sessiond_stream_gap',
+          type: "system",
+          subtype: "sessiond_stream_gap",
           text: `whiffle: sessiond's replay window overflowed; this transcript resumes at line ${nextSeq}`,
         } as unknown as NeutralMessage);
       },
@@ -1550,40 +1844,71 @@ export class ClaudeHarness implements Harness {
   }
 
   listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
-    return listSessions({ ...(dir ? { dir } : {}) }).then((rows) => rows.map(toInfo));
+    return listSessions({ ...(dir ? { dir } : {}) }).then((rows) =>
+      rows.map(toInfo)
+    );
   }
 
-  async getSessionInfo(sessionKey: string, dir?: string): Promise<NeutralSessionInfo | undefined> {
+  async getSessionInfo(
+    sessionKey: string,
+    dir?: string
+  ): Promise<NeutralSessionInfo | undefined> {
     const info = await getSessionInfo(sessionKey, { ...(dir ? { dir } : {}) });
     return info ? toInfo(info) : undefined;
   }
 
-  async getSessionMessages(sessionKey: string, dir?: string): Promise<SessionMessage[]> {
-    const rows = await getSessionMessages(sessionKey, { ...(dir ? { dir } : {}) });
+  async getSessionMessages(
+    sessionKey: string,
+    dir?: string
+  ): Promise<SessionMessage[]> {
+    const rows = await getSessionMessages(sessionKey, {
+      ...(dir ? { dir } : {}),
+    });
     // Only a transcript that asked the reader has a `toolUseResult` sidecar to
     // recover — skip the extra file read for everything else.
     const asksQuestion = rows.some((entry) => {
       const content = (entry.message as { content?: unknown } | null)?.content;
       return (
         Array.isArray(content) &&
-        content.some((block) => (block as { type?: string; name?: string }).type === 'tool_use' && (block as { name?: string }).name === 'AskUserQuestion')
+        content.some(
+          (block) =>
+            (block as { type?: string; name?: string }).type === "tool_use" &&
+            (block as { name?: string }).name === "AskUserQuestion"
+        )
       );
     });
-    if (!asksQuestion) return rows.map(toEntry);
+    if (!asksQuestion) {
+      return rows.map(toEntry);
+    }
     const sidecars = await readQuestionSidecars(sessionKey, dir);
-    if (sidecars.size === 0) return rows.map(toEntry);
+    if (sidecars.size === 0) {
+      return rows.map(toEntry);
+    }
     return rows.map((entry) => {
       const result = sidecars.get(entry.uuid);
-      if (!result) return toEntry(entry);
-      return { ...toEntry(entry), message: attachQuestionResult(entry.message, result) };
+      if (!result) {
+        return toEntry(entry);
+      }
+      return {
+        ...toEntry(entry),
+        message: attachQuestionResult(entry.message, result),
+      };
     });
   }
 
-  renameSession(sessionKey: string, title: string, dir?: string): Promise<void> {
+  renameSession(
+    sessionKey: string,
+    title: string,
+    dir?: string
+  ): Promise<void> {
     return renameSession(sessionKey, title, { ...(dir ? { dir } : {}) });
   }
 
-  tagSession(sessionKey: string, tag: string | null, dir?: string): Promise<void> {
+  tagSession(
+    sessionKey: string,
+    tag: string | null,
+    dir?: string
+  ): Promise<void> {
     return tagSession(sessionKey, tag, { ...(dir ? { dir } : {}) });
   }
 
@@ -1593,7 +1918,7 @@ export class ClaudeHarness implements Harness {
 
   async machine(method: string, args: unknown[]): Promise<unknown> {
     switch (method) {
-      case 'updateClaudeCode':
+      case "updateClaudeCode":
         return updateClaudeCode();
       case MARKETPLACE_CATALOG:
         return marketplaceCatalog(args[0] as string);
@@ -1603,26 +1928,26 @@ export class ClaudeHarness implements Harness {
         return readSkillFiles(args[0] as string, args[1] as string | undefined);
       case INSPECT_CONFIG:
         return inspectConfig(args[0] as string | undefined);
-      case 'beginLogin':
+      case "beginLogin":
         return beginLogin();
-      case 'completeLogin':
+      case "completeLogin":
         return completeLogin(args[0] as string);
-      case 'clearCredentials':
+      case "clearCredentials":
         return clearCredentials();
-      case 'exportCredentials':
+      case "exportCredentials":
         return exportCredentials();
-      case 'importCredentials':
+      case "importCredentials":
         return importCredentials(args[0] as Record<string, unknown>);
-      case 'unlockKeychain':
+      case "unlockKeychain":
         return unlockKeychain(args[0] as string);
-      case 'probeAuth':
+      case "probeAuth":
         return probeAuth();
       default:
         return undefined;
     }
   }
 
-  syncFleet(config: import('@whiffle/core').FleetConfig) {
+  syncFleet(config: import("@whiffle/core").FleetConfig) {
     return syncFleetConfig(config);
   }
 

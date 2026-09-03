@@ -1,10 +1,15 @@
-import { floorToHour, totalTokens } from '@whiffle/core';
-import type { UsageBucket } from '@whiffle/core';
-import { stat } from 'node:fs/promises';
-import { emptyIndex, loadIndex, saveIndex, type UsageIndex } from './index-store';
-import { listClaudeFiles, parseClaudeRecords } from './scan-claude';
-import { openDbPath, scanOpencode } from './scan-opencode';
-import type { ScannedRecord } from './types';
+import { stat } from "node:fs/promises";
+import type { UsageBucket } from "@whiffle/core";
+import { floorToHour, totalTokens } from "@whiffle/core";
+import {
+  emptyIndex,
+  loadIndex,
+  saveIndex,
+  type UsageIndex,
+} from "./index-store";
+import { listClaudeFiles, parseClaudeRecords } from "./scan-claude";
+import { openDbPath, scanOpencode } from "./scan-opencode";
+import type { ScannedRecord } from "./types";
 
 /**
  * The per-machine usage scanner (USAGE-SPEC.md §5). Owns the in-memory dedup
@@ -17,25 +22,27 @@ import type { ScannedRecord } from './types';
 const HOUR_MS = 60 * 60 * 1000;
 
 interface DedupEntry {
+  bucketKey: string;
   record: ScannedRecord;
   totalTokens: number;
-  bucketKey: string;
 }
 
 export interface ScanStats {
-  claudeFiles: number;
-  claudeSkipped: number;
-  claudeParsed: number;
-  claudeKept: number;
-  opencodeParsed: number;
-  opencodeKept: number;
   buckets: number;
+  claudeFiles: number;
+  claudeKept: number;
+  claudeParsed: number;
+  claudeSkipped: number;
   durationMs: number;
+  opencodeKept: number;
+  opencodeParsed: number;
 }
 
 /** `rec` beats `existing`: non-sidechain wins; then the larger total tokens. */
 const prefers = (rec: ScannedRecord, existing: DedupEntry): boolean => {
-  if (rec.isSidechain !== existing.record.isSidechain) return !rec.isSidechain;
+  if (rec.isSidechain !== existing.record.isSidechain) {
+    return !rec.isSidechain;
+  }
   return totalTokens(rec.tokens) > existing.totalTokens;
 };
 
@@ -46,21 +53,36 @@ const readTail = async (
 ): Promise<{ text: string; nextOffset: number }> => {
   const file = Bun.file(path);
   const size = file.size;
-  if (size <= offset) return { text: '', nextOffset: offset };
+  if (size <= offset) {
+    return { text: "", nextOffset: offset };
+  }
   const text = await file.slice(offset, size).text();
-  if (text.endsWith('\n')) return { text, nextOffset: size };
-  const lastNewline = text.lastIndexOf('\n');
-  if (lastNewline === -1) return { text: '', nextOffset: offset };
-  return { text: text.slice(0, lastNewline + 1), nextOffset: offset + lastNewline + 1 };
+  if (text.endsWith("\n")) {
+    return { text, nextOffset: size };
+  }
+  const lastNewline = text.lastIndexOf("\n");
+  if (lastNewline === -1) {
+    return { text: "", nextOffset: offset };
+  }
+  return {
+    text: text.slice(0, lastNewline + 1),
+    nextOffset: offset + lastNewline + 1,
+  };
 };
 
-const readWhole = async (path: string): Promise<{ text: string; nextOffset: number }> => {
+const readWhole = async (
+  path: string
+): Promise<{ text: string; nextOffset: number }> => {
   const file = Bun.file(path);
   const size = file.size;
   const text = await file.text();
-  if (text.endsWith('\n')) return { text, nextOffset: size };
-  const lastNewline = text.lastIndexOf('\n');
-  if (lastNewline === -1) return { text, nextOffset: 0 };
+  if (text.endsWith("\n")) {
+    return { text, nextOffset: size };
+  }
+  const lastNewline = text.lastIndexOf("\n");
+  if (lastNewline === -1) {
+    return { text, nextOffset: 0 };
+  }
   return { text: text.slice(0, lastNewline + 1), nextOffset: lastNewline + 1 };
 };
 
@@ -85,7 +107,21 @@ export class UsageScanner {
     const hourStart = floorToHour(rec.ts);
     const key = `${rec.harness}:${rec.sessionId}:${rec.model}:${hourStart}`;
     const b = this.buckets.get(key);
-    if (!b) {
+    if (b) {
+      b.tokens.input += rec.tokens.input;
+      b.tokens.output += rec.tokens.output;
+      b.tokens.cacheCreation += rec.tokens.cacheCreation;
+      b.tokens.cacheRead += rec.tokens.cacheRead;
+      b.tokens.reasoning += rec.tokens.reasoning;
+      b.costUsd += rec.costUsd;
+      b.messages += 1;
+      if (rec.ts < b.firstTs) {
+        b.firstTs = rec.ts;
+      }
+      if (rec.ts > b.lastTs) {
+        b.lastTs = rec.ts;
+      }
+    } else {
       this.buckets.set(key, {
         harness: rec.harness,
         hourStart,
@@ -106,16 +142,6 @@ export class UsageScanner {
         costUsd: rec.costUsd,
         messages: 1,
       });
-    } else {
-      b.tokens.input += rec.tokens.input;
-      b.tokens.output += rec.tokens.output;
-      b.tokens.cacheCreation += rec.tokens.cacheCreation;
-      b.tokens.cacheRead += rec.tokens.cacheRead;
-      b.tokens.reasoning += rec.tokens.reasoning;
-      b.costUsd += rec.costUsd;
-      b.messages += 1;
-      if (rec.ts < b.firstTs) b.firstTs = rec.ts;
-      if (rec.ts > b.lastTs) b.lastTs = rec.ts;
     }
     this.touchedKeys.add(key);
     return key;
@@ -123,7 +149,9 @@ export class UsageScanner {
 
   private reverse(entry: DedupEntry): void {
     const b = this.buckets.get(entry.bucketKey);
-    if (!b) return;
+    if (!b) {
+      return;
+    }
     b.tokens.input -= entry.record.tokens.input;
     b.tokens.output -= entry.record.tokens.output;
     b.tokens.cacheCreation -= entry.record.tokens.cacheCreation;
@@ -138,8 +166,10 @@ export class UsageScanner {
 
   /** Folds `rec` in if it survives dedup; returns true when it was kept. */
   private ingest(rec: ScannedRecord): boolean {
-    if (rec.harness === 'opencode') {
-      if (this.opencodeSeen.has(rec.messageId)) return false;
+    if (rec.harness === "opencode") {
+      if (this.opencodeSeen.has(rec.messageId)) {
+        return false;
+      }
       this.opencodeSeen.add(rec.messageId);
       this.fold(rec);
       return true;
@@ -147,21 +177,33 @@ export class UsageScanner {
 
     const mainKey = `${rec.messageId}\u0000${rec.requestId}`;
     const mainExisting = this.claudeMain.get(mainKey);
-    if (mainExisting && !prefers(rec, mainExisting)) return false;
+    if (mainExisting && !prefers(rec, mainExisting)) {
+      return false;
+    }
 
     if (rec.isSidechain) {
       const sideExisting = this.claudeSide.get(`${rec.messageId}\u0000`);
-      if (sideExisting && !prefers(rec, sideExisting)) return false;
+      if (sideExisting && !prefers(rec, sideExisting)) {
+        return false;
+      }
     }
 
-    if (mainExisting) this.reverse(mainExisting);
+    if (mainExisting) {
+      this.reverse(mainExisting);
+    }
     const bucketKey = this.fold(rec);
-    const entry: DedupEntry = { record: rec, totalTokens: totalTokens(rec.tokens), bucketKey };
+    const entry: DedupEntry = {
+      record: rec,
+      totalTokens: totalTokens(rec.tokens),
+      bucketKey,
+    };
     this.claudeMain.set(mainKey, entry);
     if (rec.isSidechain) {
       const sideKey = `${rec.messageId}\u0000`;
       const sideExisting = this.claudeSide.get(sideKey);
-      if (sideExisting && sideExisting !== mainExisting) this.reverse(sideExisting);
+      if (sideExisting && sideExisting !== mainExisting) {
+        this.reverse(sideExisting);
+      }
       this.claudeSide.set(sideKey, entry);
     }
     return true;
@@ -169,7 +211,11 @@ export class UsageScanner {
 
   private ingestAll(records: ScannedRecord[]): number {
     let kept = 0;
-    for (const rec of records) if (this.ingest(rec)) kept += 1;
+    for (const rec of records) {
+      if (this.ingest(rec)) {
+        kept += 1;
+      }
+    }
     return kept;
   }
 
@@ -197,7 +243,11 @@ export class UsageScanner {
       const records = parseClaudeRecords(text, file.project);
       claudeParsed += records.length;
       this.ingestAll(records);
-      this.index.claude[file.path] = { mtimeMs: info.mtimeMs, size: info.size, offset: nextOffset };
+      this.index.claude[file.path] = {
+        mtimeMs: info.mtimeMs,
+        size: info.size,
+        offset: nextOffset,
+      };
     }
 
     let opencodeParsed = 0;
@@ -217,7 +267,11 @@ export class UsageScanner {
     // winners. The fold path counts every fold (including ones later reversed
     // by a larger-token replay), so it is not the surviving count.
     let nonSideKept = 0;
-    for (const entry of this.claudeMain.values()) if (!entry.record.isSidechain) nonSideKept += 1;
+    for (const entry of this.claudeMain.values()) {
+      if (!entry.record.isSidechain) {
+        nonSideKept += 1;
+      }
+    }
     const claudeKept = nonSideKept + this.claudeSide.size;
 
     return {
@@ -257,13 +311,21 @@ export class UsageScanner {
         const records = parseClaudeRecords(text, file.project);
         claudeParsed += records.length;
         claudeKept += this.ingestAll(records);
-        this.index.claude[file.path] = { mtimeMs: info.mtimeMs, size: info.size, offset: nextOffset };
+        this.index.claude[file.path] = {
+          mtimeMs: info.mtimeMs,
+          size: info.size,
+          offset: nextOffset,
+        };
       } else {
         const { text, nextOffset } = await readWhole(file.path);
         const records = parseClaudeRecords(text, file.project);
         claudeParsed += records.length;
         claudeKept += this.ingestAll(records);
-        this.index.claude[file.path] = { mtimeMs: info.mtimeMs, size: info.size, offset: nextOffset };
+        this.index.claude[file.path] = {
+          mtimeMs: info.mtimeMs,
+          size: info.size,
+          offset: nextOffset,
+        };
       }
     }
 
@@ -306,7 +368,11 @@ export class UsageScanner {
     const prevHour = currentHour - HOUR_MS;
     const out: UsageBucket[] = [];
     for (const [key, b] of this.buckets) {
-      if (b.hourStart === currentHour || b.hourStart === prevHour || this.touchedKeys.has(key)) {
+      if (
+        b.hourStart === currentHour ||
+        b.hourStart === prevHour ||
+        this.touchedKeys.has(key)
+      ) {
         out.push(b);
       }
     }

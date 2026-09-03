@@ -12,9 +12,9 @@
    * "Running now". This is the same rail the phone opens as a sheet, so the
    * "New session" action lives here rather than in a bottom bar.
    */
-  import { page } from '$app/state';
-  import { Badge } from '$lib/components/ui/badge';
-  import { Button } from '$lib/components/ui/button';
+  import { page } from "$app/state";
+  import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
   import {
     IconBoxDuo,
     IconChevronRight,
@@ -26,31 +26,31 @@
     IconTools,
     IconUsage,
     IconWarningTriangle,
-  } from '$lib/icons';
+  } from "$lib/icons";
+  import ActivityDot from "./ActivityDot.svelte";
   import {
     ACTIVITY_LABEL,
+    type Activity,
     MACHINE_UNREACHABLE_HINT,
     SLEEPING_HINT,
     UNKNOWN_HINT,
-    type Activity,
-  } from './activity';
-  import ActivityDot from './ActivityDot.svelte';
+  } from "./activity";
   import {
-    whiffle,
+    type InstanceRow,
     isResumable,
     isStale,
-    type InstanceRow,
     type ProjectRow,
-  } from './client.svelte';
-  import { machineLabel } from './machine';
-  import { markHue, sessionSprite } from './mark';
-  import { rail } from './rail.svelte';
-  import FolderMenu from './FolderMenu.svelte';
-  import MachineMenu from './MachineMenu.svelte';
-  import NewProjectPopover from './NewProjectPopover.svelte';
-  import OsMark from './OsMark.svelte';
-  import SpawnPanel from './SpawnPanel.svelte';
-  import UsageMeter from './UsageMeter.svelte';
+    whiffle,
+  } from "./client.svelte";
+  import FolderMenu from "./FolderMenu.svelte";
+  import MachineMenu from "./MachineMenu.svelte";
+  import { machineLabel } from "./machine";
+  import { markHue, sessionSprite } from "./mark";
+  import NewProjectPopover from "./NewProjectPopover.svelte";
+  import OsMark from "./OsMark.svelte";
+  import { rail } from "./rail.svelte";
+  import SpawnPanel from "./SpawnPanel.svelte";
+  import UsageMeter from "./UsageMeter.svelte";
 
   const path = $derived(page.url.pathname);
 
@@ -58,11 +58,15 @@
 
   let spawnOpen = $state(false);
   let showAllNR = $state(false);
-  let spawnPrefill = $state<{ machineId?: string; cwd?: string; projectId?: string } | undefined>(
-    undefined
-  );
+  let spawnPrefill = $state<
+    { machineId?: string; cwd?: string; projectId?: string } | undefined
+  >(undefined);
 
-  function newSession(prefill?: { machineId?: string; cwd?: string; projectId?: string }) {
+  function newSession(prefill?: {
+    machineId?: string;
+    cwd?: string;
+    projectId?: string;
+  }) {
     spawnPrefill = prefill;
     spawnOpen = true;
   }
@@ -74,13 +78,18 @@
 
   function toggle(id: string) {
     const next = new Set(collapsed);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
     collapsed = next;
   }
 
   function collapseOthers(id: string) {
-    collapsed = new Set(orderedProjects.filter((p) => p.id !== id).map((p) => p.id));
+    collapsed = new Set(
+      orderedProjects.filter((p) => p.id !== id).map((p) => p.id)
+    );
   }
 
   /** A running session belongs to a project by explicit link, or by living
@@ -96,9 +105,11 @@
   /** Pinned projects first (giving the pin action a visible effect), then A–Z. */
   const orderedProjects = $derived.by(() =>
     [...whiffle.projects].sort((a, b) => {
-      const pa = rail.isPinned('project', a.id) ? 0 : 1;
-      const pb = rail.isPinned('project', b.id) ? 0 : 1;
-      if (pa !== pb) return pa - pb;
+      const pa = rail.isPinned("project", a.id) ? 0 : 1;
+      const pb = rail.isPinned("project", b.id) ? 0 : 1;
+      if (pa !== pb) {
+        return pa - pb;
+      }
       return a.name.localeCompare(b.name);
     })
   );
@@ -113,7 +124,9 @@
 
   /** Live sessions no listed project claims — the flat "Running now" tail. */
   const ungrouped = $derived(
-    running.filter((row) => !whiffle.projects.some((project) => inProject(row, project)))
+    running.filter(
+      (row) => !whiffle.projects.some((project) => inProject(row, project))
+    )
   );
 
   /** Listed rows with no live process — asleep or unreachable. `running` above
@@ -130,32 +143,41 @@
 
   /** The rail's own wording for a session that never carried a title. */
   const sessionName = (row: InstanceRow): string =>
-    row.title?.trim() || row.cwd.split('/').filter(Boolean).pop() || row.id.slice(0, 8);
+    row.title?.trim() ||
+    row.cwd.split("/").filter(Boolean).pop() ||
+    row.id.slice(0, 8);
 
   /** Blocked wins the Fleet pill: it is the only count anyone acts on. */
-  const fleetCount = $derived(whiffle.blockedCount || whiffle.runningInstances.length);
+  const fleetCount = $derived(
+    whiffle.blockedCount || whiffle.runningInstances.length
+  );
 
-  const online = $derived(new Set(whiffle.onlineMachines.map((machine) => machine.machineId)));
+  const online = $derived(
+    new Set(whiffle.onlineMachines.map((machine) => machine.machineId))
+  );
 
-  const PILL: Record<Activity, 'live' | 'attn' | 'idle'> = {
-    working: 'live',
-    blocked: 'attn',
-    idle: 'idle',
+  const PILL: Record<Activity, "live" | "attn" | "idle"> = {
+    working: "live",
+    blocked: "attn",
+    idle: "idle",
   };
 
   /** StatusPill ported to ui/badge, token-dressed to the Quiet Ledger pill
    *  recipe: a tint carries live/attn, idle carries NO fill (bare muted label). */
   const PILL_FILL: Record<string, string> = {
-    live: 'bg-[var(--status-live-bg)] text-[var(--status-live-ink)]',
-    attn: 'bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]',
-    done: 'bg-[var(--status-done-bg)] text-[var(--status-done-ink)]',
-    fail: 'bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]',
+    live: "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]",
+    attn: "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]",
+    done: "bg-[var(--status-done-bg)] text-[var(--status-done-ink)]",
+    fail: "bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]",
   };
-  function pillClass(status: 'live' | 'attn' | 'done' | 'fail' | 'idle'): string {
+  function pillClass(
+    status: "live" | "attn" | "done" | "fail" | "idle"
+  ): string {
     const base =
-      'h-[var(--c-pill-h)] rounded-[var(--radius-pill)] text-[length:var(--c-pill-fs)] leading-none whitespace-nowrap';
-    if (status === 'idle')
+      "h-[var(--c-pill-h)] rounded-[var(--radius-pill)] text-[length:var(--c-pill-fs)] leading-none whitespace-nowrap";
+    if (status === "idle") {
       return `${base} border-0 gap-0 bg-transparent p-0 font-[450] text-[var(--status-idle-ink)]`;
+    }
     return `${base} border-0 gap-[var(--c-pill-gap)] px-2.5 py-0 font-medium ${PILL_FILL[status]}`;
   }
 
@@ -163,16 +185,21 @@
    *  live tint, or the attention tint while a session is blocked. */
   function countClass(attn: boolean): string {
     const tint = attn
-      ? 'bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]'
-      : 'bg-[var(--status-live-bg)] text-[var(--status-live-ink)]';
+      ? "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]"
+      : "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]";
     return `ml-auto rounded-[var(--radius-pill)] border-0 px-[7px] py-[3px] text-[length:var(--text-sm)] font-medium leading-none ${tint}`;
   }
 </script>
 
 <div class="rail">
   <a class="brand" href="/session">
-    <span class="logo" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <span aria-hidden="true" class="logo">
+      <svg
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        viewBox="0 0 24 24"
+      >
         <path d="M4 4h16v16H4z" />
         <path d="M4 4h8v16H4z" fill="currentColor" />
       </svg>
@@ -194,7 +221,12 @@
     <div class="sec">Fleet</div>
     <nav aria-label="Fleet">
       {#snippet navItem(href: string, active: boolean, label: string, icon: import('svelte').Snippet, count?: number, attn = false)}
-        <a class="nav-i" class:on={active} {href} aria-current={active ? 'page' : undefined}>
+        <a
+          aria-current={active ? 'page' : undefined}
+          class="nav-i"
+          {href}
+          class:on={active}
+        >
           <span class="ic">{@render icon()}</span>
           <span class="lbl">{label}</span>
           {#if count !== undefined && count !== null}
@@ -202,12 +234,24 @@
           {/if}
         </a>
       {/snippet}
-      {#snippet boxIcon()}<IconBoxDuo />{/snippet}
-      {#snippet toolsIcon()}<IconTools />{/snippet}
-      {#snippet rulesIcon()}<IconRules />{/snippet}
-      {#snippet hooksIcon()}<IconHook />{/snippet}
-      {#snippet delegatesIcon()}<IconSubagent />{/snippet}
-      {#snippet usageIcon()}<IconUsage />{/snippet}
+      {#snippet boxIcon()}
+        <IconBoxDuo />
+      {/snippet}
+      {#snippet toolsIcon()}
+        <IconTools />
+      {/snippet}
+      {#snippet rulesIcon()}
+        <IconRules />
+      {/snippet}
+      {#snippet hooksIcon()}
+        <IconHook />
+      {/snippet}
+      {#snippet delegatesIcon()}
+        <IconSubagent />
+      {/snippet}
+      {#snippet usageIcon()}
+        <IconUsage />
+      {/snippet}
       {@render navItem(
         '/session',
         path.startsWith('/session'),
@@ -229,7 +273,7 @@
         {#each whiffle.machines as machine (machine.machineId)}
           <MachineMenu {machine}>
             <div class="row machine" role="listitem">
-              <OsMark os={machine.os} class="os" />
+              <OsMark class="os" os={machine.os} />
               <span class="nm">{machineLabel(machine.hostname)}</span>
               {#if online.has(machine.machineId)}
                 <span class="dot up" title="Online"></span>
@@ -239,7 +283,7 @@
                      a shape (triangle, not a dot) so it reads without colour
                      too. -->
                 <span class="unreachable" title={MACHINE_UNREACHABLE_HINT}>
-                  <IconWarningTriangle class="size-3" aria-hidden="true" />
+                  <IconWarningTriangle aria-hidden="true" class="size-3" />
                   <span class="sr-only">Unreachable</span>
                 </span>
               {/if}
@@ -269,25 +313,31 @@
           {@const sessions = sessionsOf(project)}
           {@const open = !collapsed.has(project.id)}
           <FolderMenu
-            name={project.name}
             cwd={project.cwd}
-            {project}
+            name={project.name}
+            oncollapseothers={() => collapseOthers(project.id)}
             onnew={() =>
               newSession({ projectId: project.id, machineId: project.machineId, cwd: project.cwd })}
-            oncollapseothers={() => collapseOthers(project.id)}
+            {project}
           >
             <div class="folder" role="listitem">
               <button
-                type="button"
-                class="folder-h"
-                class:on={path === `/project/${project.id}`}
                 aria-expanded={open}
+                class="folder-h"
                 onclick={() => toggle(project.id)}
+                type="button"
+                class:on={path === `/project/${project.id}`}
               >
-                <span class="tw" class:open aria-hidden="true"><IconChevronRight /></span>
-                <span class="mark m{markHue(project.cwd)}"><IconFolderDuo /></span>
+                <span aria-hidden="true" class="tw" class:open
+                  ><IconChevronRight /></span
+                >
+                <span class="mark m{markHue(project.cwd)}"
+                  ><IconFolderDuo /></span
+                >
                 <span class="nm">{project.name}</span>
-                {#if sessions.length > 0}<span class="cnt">{sessions.length}</span>{/if}
+                {#if sessions.length > 0}
+                  <span class="cnt">{sessions.length}</span>
+                {/if}
               </button>
             </div>
           </FolderMenu>
@@ -296,17 +346,22 @@
               {#each sessions as row (row.id)}
                 {@const Sprite = sessionSprite(row.id)}
                 {@const activity = whiffle.activityOf(row.id)}
-                <a class="row sub-i" class:on={path === `/session/${row.id}`} href="/session/{row.id}">
+                <a
+                  class="row sub-i"
+                  href="/session/{row.id}"
+                  class:on={path === `/session/${row.id}`}
+                >
                   <span class="mark m{markHue(row.cwd || row.machineId)}">
                     <Sprite aria-hidden="true" />
                   </span>
                   <span class="nm">{sessionName(row)}</span>
-                  <Badge class={pillClass(PILL[activity])}>{ACTIVITY_LABEL[activity]}</Badge>
+                  <Badge class={pillClass(PILL[activity])}
+                    >{ACTIVITY_LABEL[activity]}</Badge
+                  >
                 </a>
               {:else}
                 {@const recent = recentCountOf(project)}
                 <button
-                  type="button"
                   class="row sub-i empty"
                   onclick={() =>
                     newSession({
@@ -314,8 +369,11 @@
                       machineId: project.machineId,
                       cwd: project.cwd,
                     })}
+                  type="button"
                 >
-                  <span class="nm dim">{recent > 0 ? `${recent} recent — none running` : 'No sessions — start one'}</span>
+                  <span class="nm dim"
+                    >{recent > 0 ? `${recent} recent — none running` : 'No sessions — start one'}</span
+                  >
                 </button>
               {/each}
             </div>
@@ -330,12 +388,18 @@
         {#each ungrouped as row (row.id)}
           {@const activity = whiffle.activityOf(row.id)}
           {@const Sprite = sessionSprite(row.id)}
-          <a class="row" class:on={path === `/session/${row.id}`} href="/session/{row.id}">
+          <a
+            class="row"
+            href="/session/{row.id}"
+            class:on={path === `/session/${row.id}`}
+          >
             <span class="mark m{markHue(row.cwd || row.machineId)}">
               <Sprite aria-hidden="true" />
             </span>
             <span class="nm">{sessionName(row)}</span>
-            <Badge class={pillClass(PILL[activity])}>{ACTIVITY_LABEL[activity]}</Badge>
+            <Badge class={pillClass(PILL[activity])}
+              >{ACTIVITY_LABEL[activity]}</Badge
+            >
           </a>
         {/each}
       </div>
@@ -355,20 +419,32 @@
           {@const rowStale = isStale(row)}
           <a
             class="row"
-            class:on={path === `/session/${row.id}`}
             href="/session/{row.id}"
             title={notRunningHint(row)}
+            class:on={path === `/session/${row.id}`}
           >
-            <span class="mark m{markHue(row.cwd || row.machineId)}" style="opacity:0.6">
+            <span
+              class="mark m{markHue(row.cwd || row.machineId)}"
+              style="opacity:0.6"
+            >
               <Sprite aria-hidden="true" />
             </span>
             <span class="nm">{sessionName(row)}</span>
-            <ActivityDot activity="idle" sleeping={!rowStale} stale={rowStale} />
+            <ActivityDot
+              activity="idle"
+              sleeping={!rowStale}
+              stale={rowStale}
+            />
           </a>
         {/each}
         {#if !showAllNR && notRunning.length > SIDEBAR_CAP}
-          <button type="button" class="row dim" onclick={() => (showAllNR = true)}>
-            {notRunning.length - SIDEBAR_CAP} more…
+          <button
+            class="row dim"
+            onclick={() => (showAllNR = true)}
+            type="button"
+          >
+            {notRunning.length - SIDEBAR_CAP}
+            more…
           </button>
         {/if}
       </div>
@@ -378,7 +454,7 @@
   <div class="foot">
     <UsageMeter />
     <div class="me">
-      <span class="av" aria-hidden="true">bw</span>
+      <span aria-hidden="true" class="av">bw</span>
       <span class="who">
         <span class="nm">bewinxed</span>
         <span class="em">{whiffle.machines.length} machines</span>
@@ -387,7 +463,11 @@
   </div>
 </div>
 
-<SpawnPanel open={spawnOpen} prefill={spawnPrefill} onclose={() => (spawnOpen = false)} />
+<SpawnPanel
+  onclose={() => (spawnOpen = false)}
+  open={spawnOpen}
+  prefill={spawnPrefill}
+/>
 
 <style>
   .rail {
@@ -723,13 +803,27 @@
     display: block;
     color: var(--mark-glyph);
   }
-  .mark.m2 { background-color: var(--mark-2); }
-  .mark.m3 { background-color: var(--mark-3); }
-  .mark.m4 { background-color: var(--mark-4); }
-  .mark.m5 { background-color: var(--mark-5); }
-  .mark.m6 { background-color: var(--mark-6); }
-  .mark.m7 { background-color: var(--mark-7); }
-  .mark.m8 { background-color: var(--mark-8); }
+  .mark.m2 {
+    background-color: var(--mark-2);
+  }
+  .mark.m3 {
+    background-color: var(--mark-3);
+  }
+  .mark.m4 {
+    background-color: var(--mark-4);
+  }
+  .mark.m5 {
+    background-color: var(--mark-5);
+  }
+  .mark.m6 {
+    background-color: var(--mark-6);
+  }
+  .mark.m7 {
+    background-color: var(--mark-7);
+  }
+  .mark.m8 {
+    background-color: var(--mark-8);
+  }
   @media (hover: hover) and (pointer: fine) {
     .row:hover {
       background: var(--surface-hover);

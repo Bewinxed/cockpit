@@ -3,14 +3,14 @@
  * Compatible with Claude Code's credential format
  */
 
-import { homedir } from 'os';
-import { join } from 'path';
-import type { OAuthTokens, StoredCredentials } from './oauth';
-import { isTokenExpired, refreshAccessToken } from './oauth';
+import { homedir } from "os";
+import { join } from "path";
+import type { OAuthTokens, StoredCredentials } from "./oauth";
+import { isTokenExpired, refreshAccessToken } from "./oauth";
 
 // Path to credentials file (same as Claude Code)
-const CREDENTIALS_DIR = join(homedir(), '.claude');
-const CREDENTIALS_FILE = join(CREDENTIALS_DIR, '.credentials.json');
+const CREDENTIALS_DIR = join(homedir(), ".claude");
+const CREDENTIALS_FILE = join(CREDENTIALS_DIR, ".credentials.json");
 
 /**
  * Ensure the credentials directory exists
@@ -18,7 +18,7 @@ const CREDENTIALS_FILE = join(CREDENTIALS_DIR, '.credentials.json');
 async function ensureCredentialsDir(): Promise<void> {
   const dir = Bun.file(CREDENTIALS_DIR);
   if (!(await dir.exists())) {
-    await Bun.write(join(CREDENTIALS_DIR, '.keep'), '');
+    await Bun.write(join(CREDENTIALS_DIR, ".keep"), "");
   }
 }
 
@@ -34,7 +34,7 @@ export async function loadCredentials(): Promise<StoredCredentials | null> {
     const content = await file.text();
     return JSON.parse(content) as StoredCredentials;
   } catch (error) {
-    console.error('Failed to load credentials:', error);
+    console.error("Failed to load credentials:", error);
     return null;
   }
 }
@@ -60,7 +60,9 @@ export async function saveCredentials(tokens: OAuthTokens): Promise<void> {
       expiresAt: tokens.expiresAt, // Store as number (Unix timestamp in ms)
       // Include optional fields if present
       ...(tokens.scopes && { scopes: tokens.scopes }),
-      ...(tokens.subscriptionType && { subscriptionType: tokens.subscriptionType }),
+      ...(tokens.subscriptionType && {
+        subscriptionType: tokens.subscriptionType,
+      }),
       ...(tokens.rateLimitTier && { rateLimitTier: tokens.rateLimitTier }),
     },
   };
@@ -68,7 +70,7 @@ export async function saveCredentials(tokens: OAuthTokens): Promise<void> {
   await Bun.write(CREDENTIALS_FILE, JSON.stringify(credentials, null, 2));
 
   // Set restrictive permissions (owner read/write only)
-  const { chmod } = await import('fs/promises');
+  const { chmod } = await import("fs/promises");
   await chmod(CREDENTIALS_FILE, 0o600);
 }
 
@@ -76,7 +78,7 @@ export async function saveCredentials(tokens: OAuthTokens): Promise<void> {
  * Delete stored credentials
  */
 export async function deleteCredentials(): Promise<void> {
-  const { unlink } = await import('fs/promises');
+  const { unlink } = await import("fs/promises");
   try {
     await unlink(CREDENTIALS_FILE);
   } catch {
@@ -97,13 +99,13 @@ export async function getValidAccessToken(): Promise<string | null> {
 
   // Check if token is expired (expiresAt is already a number in ms)
   if (isTokenExpired(expiresAt)) {
-    console.log('Access token expired, refreshing...');
+    console.log("Access token expired, refreshing...");
     try {
       const newTokens = await refreshAccessToken(refreshToken);
       await saveCredentials(newTokens);
       return newTokens.accessToken;
     } catch (error) {
-      console.error('Failed to refresh token:', error);
+      console.error("Failed to refresh token:", error);
       return null;
     }
   }

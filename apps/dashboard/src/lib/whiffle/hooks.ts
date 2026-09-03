@@ -1,6 +1,6 @@
-import type { FleetHook, FleetItemState, HookDraft } from '@whiffle/core';
-import { HOOK_TEMPLATES } from '@whiffle/core';
-import type { Machine } from './client.svelte';
+import type { FleetHook, FleetItemState, HookDraft } from "@whiffle/core";
+import { HOOK_TEMPLATES } from "@whiffle/core";
+import type { Machine } from "./client.svelte";
 
 /**
  * The dashboard's side of hooks (packages/core's hooks.ts): plain REST against
@@ -14,8 +14,8 @@ import type { Machine } from './client.svelte';
  * `fetch` wrappers rather than the socket.
  */
 
-export { HOOK_TEMPLATES };
 export type { FleetHook, HookDraft };
+export { HOOK_TEMPLATES };
 
 /** What `GET /api/fleet/hooks` answers with. */
 export interface HooksPayload {
@@ -29,28 +29,31 @@ export interface HooksPayload {
  * this is a full edit history, not a sample of runs.
  */
 export interface HookVersion {
-  id: number;
-  hookId: string;
-  name: string;
+  createdAt: string;
   hash: string;
+  hookId: string;
+  id: number;
+  name: string;
   /** `fleet` for every version today — a hook has never been edited from a machine. */
   source: string;
-  createdAt: string;
 }
 
 /** A machine's per-hook convergence, by the same id the hub keeps hooks under.
  *  Absent from a daemon that predates the field — reads as "not reported". */
 export type HookFleetReport = Record<string, FleetItemState>;
 
-export const hooksOf = (machine: Machine): HookFleetReport | undefined => machine.fleet?.hooks;
+export const hooksOf = (machine: Machine): HookFleetReport | undefined =>
+  machine.fleet?.hooks;
 
 /** Elysia refuses with a bare string; JSON only when something else went wrong. */
 async function said(response: Response): Promise<string> {
   const body = await response.text();
   try {
     const parsed: unknown = JSON.parse(body);
-    if (typeof parsed === 'string') return parsed;
-    if (parsed && typeof parsed === 'object' && 'message' in parsed) {
+    if (typeof parsed === "string") {
+      return parsed;
+    }
+    if (parsed && typeof parsed === "object" && "message" in parsed) {
       return String((parsed as { message: unknown }).message);
     }
   } catch {
@@ -59,26 +62,32 @@ async function said(response: Response): Promise<string> {
   return body || `the hub answered ${response.status}`;
 }
 
-async function send<T>(url: string, init: RequestInit, attempt: string): Promise<T> {
+async function send<T>(
+  url: string,
+  init: RequestInit,
+  attempt: string
+): Promise<T> {
   const response = await fetch(url, init);
-  if (!response.ok) throw new Error(`Could not ${attempt} — ${await said(response)}.`);
+  if (!response.ok) {
+    throw new Error(`Could not ${attempt} — ${await said(response)}.`);
+  }
   return (await response.json()) as T;
 }
 
 const json = (body: unknown): RequestInit => ({
-  headers: { 'Content-Type': 'application/json' },
+  headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),
 });
 
 export const loadHooks = (): Promise<HooksPayload> =>
-  send<HooksPayload>('/api/fleet/hooks', {}, 'load the hooks');
+  send<HooksPayload>("/api/fleet/hooks", {}, "load the hooks");
 
 /** Only the fields the hub's schema accepts — `force`/`cwd` are the hub's own to set. */
 export const saveHook = (id: string, draft: HookDraft): Promise<FleetHook> =>
   send<FleetHook>(
     `/api/fleet/hooks/${encodeURIComponent(id)}`,
     {
-      method: 'PUT',
+      method: "PUT",
       ...json({
         name: draft.name,
         enabled: draft.enabled,
@@ -90,12 +99,16 @@ export const saveHook = (id: string, draft: HookDraft): Promise<FleetHook> =>
         projectId: draft.projectId,
       }),
     },
-    `save ${draft.name || 'the hook'}`
+    `save ${draft.name || "the hook"}`
   );
 
 export const removeHook = async (id: string, name: string): Promise<void> => {
-  const response = await fetch(`/api/fleet/hooks/${encodeURIComponent(id)}`, { method: 'DELETE' });
-  if (!response.ok) throw new Error(`Could not delete ${name} — ${await said(response)}.`);
+  const response = await fetch(`/api/fleet/hooks/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw new Error(`Could not delete ${name} — ${await said(response)}.`);
+  }
 };
 
 /** What this hook used to be, newest first — the hub keeps a version on every
@@ -104,26 +117,26 @@ export const loadHookVersions = (hookId: string): Promise<HookVersion[]> =>
   send<HookVersion[]>(
     `/api/fleet/hooks/history?hookId=${encodeURIComponent(hookId)}`,
     {},
-    'load this hook’s history'
+    "load this hook’s history"
   );
 
 /** Writes a past version back as the current one — through the same save door,
  *  so restoring keeps what it replaces, same as any other edit. */
 export const restoreHookVersion = (versionId: number): Promise<FleetHook> =>
   send<FleetHook>(
-    '/api/fleet/hooks/restore',
-    { method: 'POST', ...json({ id: versionId }) },
-    'restore that version'
+    "/api/fleet/hooks/restore",
+    { method: "POST", ...json({ id: versionId }) },
+    "restore that version"
   );
 
 /** A blank hook, on the defaults that make the common case one field of typing. */
 export const blankHook = (): HookDraft => ({
-  name: '',
+  name: "",
   enabled: true,
-  event: 'PostToolUse',
-  matcher: '',
-  handler: { type: 'command' },
-  script: '',
+  event: "PostToolUse",
+  matcher: "",
+  handler: { type: "command" },
+  script: "",
 });
 
 /** Strips a saved hook back to a draft, so the editor holds one shape either way. */
@@ -131,9 +144,9 @@ export const draftOf = (hook: FleetHook): HookDraft => ({
   name: hook.name,
   enabled: hook.enabled,
   event: hook.event,
-  matcher: hook.matcher ?? '',
+  matcher: hook.matcher ?? "",
   handler: { ...hook.handler },
-  script: hook.script ?? '',
+  script: hook.script ?? "",
   force: hook.force,
   scope: hook.scope,
   projectId: hook.projectId,

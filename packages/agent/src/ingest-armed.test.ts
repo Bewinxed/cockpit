@@ -30,62 +30,64 @@
  * writes a `result` line, which is the line that would arm the boundary
  * hand-off and ask the supervisor to spawn a real SDK session.
  */
-import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { afterAll, beforeAll, expect, test } from "bun:test";
+import { type ChildProcess, spawn } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   alreadyIngested,
-  readProvenance,
   type FramePayload,
   type FrameProvenance,
   type IngestMark,
-} from '@whiffle/core';
-import { SessiondClient, probeEndpoint } from './sessiond-client';
-import { SessionSupervisor } from './session';
+  readProvenance,
+} from "@whiffle/core";
+import { SessionSupervisor } from "./session";
+import { probeEndpoint, SessiondClient } from "./sessiond-client";
 
-const dir = mkdtempSync(join(tmpdir(), 'ingest-armed-'));
-const endpoint = join(dir, 'sessiond.sock');
+const dir = mkdtempSync(join(tmpdir(), "ingest-armed-"));
+const endpoint = join(dir, "sessiond.sock");
 let daemon: ChildProcess;
 let client: SessiondClient;
 let epoch: string;
 
 /** Emits on demand: a burst at startup, then as many lines as stdin asks for. */
-const emitterPath = join(dir, 'emitter.mjs');
+const emitterPath = join(dir, "emitter.mjs");
 writeFileSync(
   emitterPath,
   [
-    'let n = 0;',
+    "let n = 0;",
     "const emit = () => process.stdout.write(JSON.stringify({ type: 'system', subtype: 'note', n: ++n }) + '\\n');",
-    'for (let i = 0; i < Number(process.argv[2] ?? 1); i++) emit();',
+    "for (let i = 0; i < Number(process.argv[2] ?? 1); i++) emit();",
     "let buffer = '';",
     "process.stdin.on('data', (chunk) => {",
-    '  buffer += chunk;',
-    '  let nl = buffer.indexOf(String.fromCharCode(10));',
-    '  while (nl >= 0) {',
-    '    const asked = Number(buffer.slice(0, nl).trim() || 1);',
-    '    buffer = buffer.slice(nl + 1);',
-    '    for (let i = 0; i < asked; i++) emit();',
-    '    nl = buffer.indexOf(String.fromCharCode(10));',
-    '  }',
-    '});',
-    'process.stdin.resume();',
+    "  buffer += chunk;",
+    "  let nl = buffer.indexOf(String.fromCharCode(10));",
+    "  while (nl >= 0) {",
+    "    const asked = Number(buffer.slice(0, nl).trim() || 1);",
+    "    buffer = buffer.slice(nl + 1);",
+    "    for (let i = 0; i < asked; i++) emit();",
+    "    nl = buffer.indexOf(String.fromCharCode(10));",
+    "  }",
+    "});",
+    "process.stdin.resume();",
     "process.stdin.on('end', () => process.exit(0));",
-  ].join('\n')
+  ].join("\n")
 );
 
 const spawned: string[] = [];
 
 beforeAll(async () => {
   process.env.WHIFFLE_SESSIOND_ENDPOINT = endpoint;
-  const main = join(import.meta.dir, '..', '..', 'sessiond', 'src', 'main.ts');
+  const main = join(import.meta.dir, "..", "..", "sessiond", "src", "main.ts");
   daemon = spawn(process.execPath, [main], {
     env: { ...process.env, WHIFFLE_SESSIOND_ENDPOINT: endpoint },
-    stdio: 'ignore',
+    stdio: "ignore",
   });
   const deadline = Date.now() + 10_000;
-  while (Date.now() < deadline && !(await probeEndpoint(endpoint, 200))) await Bun.sleep(25);
+  while (Date.now() < deadline && !(await probeEndpoint(endpoint, 200))) {
+    await Bun.sleep(25);
+  }
   client = await SessiondClient.connect(endpoint);
   epoch = client.epoch!;
   expect(epoch).toBeTruthy();
@@ -93,20 +95,30 @@ beforeAll(async () => {
 
 afterAll(async () => {
   // Children first, so nothing is orphaned onto a machine full of real work.
-  for (const procId of spawned) await client.signal(procId, 'SIGKILL').catch(() => {});
+  for (const procId of spawned) {
+    await client.signal(procId, "SIGKILL").catch(() => {});
+  }
   await Bun.sleep(50);
   client.close();
-  daemon.kill('SIGKILL');
+  daemon.kill("SIGKILL");
 });
 
-type Sunk = Exclude<FramePayload, { kind: 'instances' }> & Partial<FrameProvenance>;
+type Sunk = Exclude<FramePayload, { kind: "instances" }> &
+  Partial<FrameProvenance>;
 
 const noteOf = (frame: Sunk): number | undefined =>
-  frame.kind === 'frame' ? (frame.message as unknown as { n?: number }).n : undefined;
+  frame.kind === "frame"
+    ? (frame.message as unknown as { n?: number }).n
+    : undefined;
 
-const waitFor = async (predicate: () => boolean, why: string): Promise<void> => {
+const waitFor = async (
+  predicate: () => boolean,
+  why: string
+): Promise<void> => {
   for (let waited = 0; waited < 400; waited++) {
-    if (predicate()) return;
+    if (predicate()) {
+      return;
+    }
     await Bun.sleep(10);
   }
   throw new Error(`timed out waiting for ${why}`);
@@ -121,7 +133,11 @@ const waitFor = async (predicate: () => boolean, why: string): Promise<void> => 
  */
 const hub = () => {
   const ledger = new Map<string, IngestMark>();
-  const admitted: { instanceId: string; provenance?: FrameProvenance; n?: number }[] = [];
+  const admitted: {
+    instanceId: string;
+    provenance?: FrameProvenance;
+    n?: number;
+  }[] = [];
   let refused = 0;
   return {
     admitted,
@@ -129,13 +145,17 @@ const hub = () => {
       return refused;
     },
     /** The register ack this hub would send for one instance, right now. */
-    ack: (instanceId: string): { ok: true; ingested: Record<string, IngestMark> } => {
+    ack: (
+      instanceId: string
+    ): { ok: true; ingested: Record<string, IngestMark> } => {
       const mark = ledger.get(instanceId);
       return { ok: true, ingested: mark ? { [instanceId]: { ...mark } } : {} };
     },
     /** What `server.ts` does with every relayed frame, in the order it does it. */
     relay: (frame: Sunk): void => {
-      if (frame.kind !== 'frame') return;
+      if (frame.kind !== "frame") {
+        return;
+      }
       const instanceId = frame.instanceId;
       const provenance = readProvenance(frame);
       if (!provenance) {
@@ -144,17 +164,27 @@ const hub = () => {
         refused += 1;
         return;
       } else {
-        ledger.set(instanceId, { epoch: provenance.srcEpoch, srcSeq: provenance.srcSeq });
+        ledger.set(instanceId, {
+          epoch: provenance.srcEpoch,
+          srcSeq: provenance.srcSeq,
+        });
       }
-      admitted.push({ instanceId, ...(provenance ? { provenance } : {}), n: noteOf(frame) });
+      admitted.push({
+        instanceId,
+        ...(provenance ? { provenance } : {}),
+        n: noteOf(frame),
+      });
     },
   };
 };
 
-test('a line replayed after an agent restart is admitted exactly once', async () => {
+test("a line replayed after an agent restart is admitted exactly once", async () => {
   const procId = `armed-${crypto.randomUUID()}`;
   spawned.push(procId);
-  await client.spawnProc(procId, { command: process.execPath, args: [emitterPath, '3'] });
+  await client.spawnProc(procId, {
+    command: process.execPath,
+    args: [emitterPath, "3"],
+  });
   await Bun.sleep(200);
 
   const board = hub();
@@ -175,14 +205,19 @@ test('a line replayed after an agent restart is admitted exactly once', async ()
 
   // Two lines forwarded and ingested. THIS is the ack the hub would hand back
   // if the agent re-registered now — and the one it dies holding.
-  await client.write(procId, '2\n');
-  await waitFor(() => board.admitted.length === 2, 'the two lines the ack will name');
+  await client.write(procId, "2\n");
+  await waitFor(
+    () => board.admitted.length === 2,
+    "the two lines the ack will name"
+  );
 
   // AT LEAST ONCE MEETS AT MOST ONCE (design §8), the shortest statement of the
   // whole guarantee: a socket that drops mid-forward makes the agent re-send
   // frames it already sent. Provenance is the only thing that tells the hub
   // they are the same lines — refused, never a second frame.
-  for (const frame of forwarded) board.relay(frame);
+  for (const frame of forwarded) {
+    board.relay(frame);
+  }
   expect(board.admitted.length).toBe(2);
   expect(board.refused).toBe(2);
 
@@ -191,8 +226,11 @@ test('a line replayed after an agent restart is admitted exactly once', async ()
 
   // Three more, forwarded and ingested AFTER that ack was minted. They are at
   // the hub; the ack does not know it.
-  await client.write(procId, '3\n');
-  await waitFor(() => board.admitted.length === 5, 'the frames the stale ack does not name');
+  await client.write(procId, "3\n");
+  await waitFor(
+    () => board.admitted.length === 5,
+    "the frames the stale ack does not name"
+  );
 
   // ---- THE RESTART. A new supervisor reattaches on the stale ack, so sessiond
   // replays from srcSeq 5: lines 6, 7 and 8 — every one of them already a hub
@@ -203,13 +241,19 @@ test('a line replayed after an agent restart is admitted exactly once', async ()
   second.sink = (frame) => board.relay(frame as Sunk);
   expect(await second.reattachFrom(staleAck, rows)).toEqual([procId]);
   // 2 from the re-send above, 3 from this replay.
-  await waitFor(() => board.refused === 5, 'the replayed lines to be refused, not ingested');
+  await waitFor(
+    () => board.refused === 5,
+    "the replayed lines to be refused, not ingested"
+  );
   await Bun.sleep(150);
   expect(board.admitted.length).toBe(5);
 
   // And it is following: the next line the child writes is admitted, once.
-  await client.write(procId, '1\n');
-  await waitFor(() => board.admitted.length === 6, 'the one genuinely new line');
+  await client.write(procId, "1\n");
+  await waitFor(
+    () => board.admitted.length === 6,
+    "the one genuinely new line"
+  );
   await Bun.sleep(100);
 
   // AT MOST ONCE, stated three ways.

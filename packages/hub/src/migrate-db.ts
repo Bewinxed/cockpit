@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, renameSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync, mkdirSync, renameSync } from "node:fs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * Where every hub before C9 wrote its sqlite file: straight into the checkout,
@@ -9,7 +9,9 @@ import { fileURLToPath } from 'node:url';
  * by hand, by `bun --watch`, or as a service — none of which are guaranteed to
  * be run from this directory.
  */
-export const LEGACY_DB_PATH = fileURLToPath(new URL('../whiffle.db', import.meta.url));
+export const LEGACY_DB_PATH = fileURLToPath(
+  new URL("../whiffle.db", import.meta.url)
+);
 
 /**
  * The one-time C9 cutover. Older units (and bare `bun run hub`) left the fleet's
@@ -28,11 +30,18 @@ export const LEGACY_DB_PATH = fileURLToPath(new URL('../whiffle.db', import.meta
  * the migration silently no-ops, and the hub comes up on an empty database
  * beside a full one. The deploy is the only place that knows both ends.
  */
-export const migrateLegacyDb = (target: string, legacy: string = LEGACY_DB_PATH): void => {
-  if (existsSync(target) || !existsSync(legacy)) return;
+export const migrateLegacyDb = (
+  target: string,
+  legacy: string = LEGACY_DB_PATH
+): void => {
+  if (existsSync(target) || !existsSync(legacy)) {
+    return;
+  }
   mkdirSync(dirname(target), { recursive: true });
-  for (const suffix of ['', '-wal', '-shm']) {
+  for (const suffix of ["", "-wal", "-shm"]) {
     const from = `${legacy}${suffix}`;
-    if (existsSync(from)) renameSync(from, `${target}${suffix}`);
+    if (existsSync(from)) {
+      renameSync(from, `${target}${suffix}`);
+    }
   }
 };

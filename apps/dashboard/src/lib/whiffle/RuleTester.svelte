@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { RuleDraft } from '@whiffle/core';
-  import { ruleHits } from '@whiffle/core';
-  import { Textarea } from '$lib/components/ui/textarea';
+  import type { RuleDraft } from "@whiffle/core";
+  import { ruleHits } from "@whiffle/core";
+  import { Textarea } from "$lib/components/ui/textarea";
 
   /**
    * The part of the editor that tells the truth. A pattern is a guess until it
@@ -13,7 +13,8 @@
    * box and the fleet ever disagree, one of them is wrong, and it would not be
    * this one.
    */
-  let { draft, sample = $bindable('') }: { draft: RuleDraft; sample?: string } = $props();
+  let { draft, sample = $bindable("") }: { draft: RuleDraft; sample?: string } =
+    $props();
 
   const hits = $derived(sample ? ruleHits(draft, sample) : []);
 
@@ -26,19 +27,31 @@
     const parts: { text: string; hit: boolean }[] = [];
     let at = 0;
     for (const hit of hits) {
-      if (hit.start > at) parts.push({ text: sample.slice(at, hit.start), hit: false });
+      if (hit.start > at) {
+        parts.push({ text: sample.slice(at, hit.start), hit: false });
+      }
       parts.push({ text: sample.slice(hit.start, hit.end), hit: true });
       at = hit.end;
     }
-    if (at < sample.length) parts.push({ text: sample.slice(at), hit: false });
+    if (at < sample.length) {
+      parts.push({ text: sample.slice(at), hit: false });
+    }
     return parts;
   });
 
   const verdict = $derived.by(() => {
-    if (!draft.pattern.trim()) return 'Write something to watch for and this will tell you if it fires.';
-    if (!sample.trim()) return 'Paste something a session might say, and see whether this rule catches it.';
-    if (hits.length === 0) return 'No match — this rule would stay quiet.';
-    return hits.length === 1 ? 'Matched once. This rule fires.' : `Matched ${hits.length} times. This rule fires.`;
+    if (!draft.pattern.trim()) {
+      return "Write something to watch for and this will tell you if it fires.";
+    }
+    if (!sample.trim()) {
+      return "Paste something a session might say, and see whether this rule catches it.";
+    }
+    if (hits.length === 0) {
+      return "No match — this rule would stay quiet.";
+    }
+    return hits.length === 1
+      ? "Matched once. This rule fires."
+      : `Matched ${hits.length} times. This rule fires.`;
   });
 
   const firing = $derived(hits.length > 0);
@@ -48,23 +61,23 @@
   <div class="flex flex-wrap items-baseline justify-between gap-2">
     <span class="text-caption font-medium text-foreground">Try it</span>
     <span
+      aria-live="polite"
       class="text-micro transition-colors duration-240 ease-[var(--e-in)] {firing
         ? 'text-success'
         : 'text-muted-foreground'}"
       role="status"
-      aria-live="polite"
     >
       {verdict}
     </span>
   </div>
 
   <Textarea
-    bind:value={sample}
+    aria-label="Sample text to test this rule against"
+    class="resize-y bg-background font-mono text-sm md:text-sm"
+    placeholder="I've fixed the parser. One honest caveat: the error path is still untested."
     rows={3}
     spellcheck="false"
-    placeholder="I've fixed the parser. One honest caveat: the error path is still untested."
-    class="resize-y bg-background font-mono text-sm md:text-sm"
-    aria-label="Sample text to test this rule against"
+    bind:value={sample}
   />
 
   {#if sample.trim() && draft.pattern.trim()}
@@ -73,8 +86,13 @@
     >
       {#each segments as segment, index (index)}
         {#if segment.hit}
-          <mark class="rounded-[var(--radius-mark)] bg-success/25 px-0.5 text-foreground">{segment.text}</mark>
-        {:else}{segment.text}{/if}
+          <mark
+            class="rounded-[var(--radius-mark)] bg-success/25 px-0.5 text-foreground"
+            >{segment.text}</mark
+          >
+        {:else}
+          {segment.text}
+        {/if}
       {/each}
     </p>
   {/if}

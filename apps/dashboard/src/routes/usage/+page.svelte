@@ -1,4 +1,14 @@
 <script lang="ts">
+  import type { LimitWindow } from "@whiffle/core";
+  import { Badge } from "$lib/components/ui/badge";
+  import * as Card from "$lib/components/ui/card";
+  import * as Table from "$lib/components/ui/table";
+  import { whiffle } from "$lib/whiffle/client.svelte";
+  import HarnessGlyph from "$lib/whiffle/HarnessGlyph.svelte";
+  import StatTile from "$lib/whiffle/StatTile.svelte";
+  import { compactNumber, type UsageSummaryRow, usd } from "$lib/whiffle/usage";
+  import BreakdownTable from "$lib/whiffle/usage/BreakdownTable.svelte";
+  import DailyChart from "$lib/whiffle/usage/DailyChart.svelte";
   /**
    * The usage surface: "am I about to blow the budget?" as a glance against a
    * threshold, not as a calculation.
@@ -16,17 +26,7 @@
    * opencode is real money. Making that the layout means the page cannot lie by
    * addition.
    */
-  import type { PageData } from './$types';
-  import type { LimitWindow } from '@whiffle/core';
-  import * as Card from '$lib/components/ui/card';
-  import * as Table from '$lib/components/ui/table';
-  import { Badge } from '$lib/components/ui/badge';
-  import { compactNumber, usd, type UsageSummaryRow } from '$lib/whiffle/usage';
-  import { whiffle } from '$lib/whiffle/client.svelte';
-  import StatTile from '$lib/whiffle/StatTile.svelte';
-  import HarnessGlyph from '$lib/whiffle/HarnessGlyph.svelte';
-  import DailyChart from '$lib/whiffle/usage/DailyChart.svelte';
-  import BreakdownTable from '$lib/whiffle/usage/BreakdownTable.svelte';
+  import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
 
@@ -39,7 +39,9 @@
     data.limits?.machines.find((m) => m.limits.error === null)?.limits ??
       // A stale reading beats an empty room: backoff keeps the last good
       // windows with the error attached, and old numbers outrank "HTTP 429".
-      data.limits?.machines.find((m) => m.limits.stale && m.limits.windows.length > 0)?.limits ??
+      data.limits?.machines.find(
+        (m) => m.limits.stale && m.limits.windows.length > 0
+      )?.limits ??
       null
   );
   const readingError = $derived(
@@ -49,17 +51,25 @@
   const windows = $derived(reading?.windows ?? []);
   /** Session first, then the weekly windows fullest-first: worst news nearest the top. */
   const orderedWindows = $derived([
-    ...windows.filter((w) => w.group === 'session'),
-    ...windows.filter((w) => w.group === 'weekly').sort((a, b) => b.percent - a.percent),
-    ...windows.filter((w) => w.group !== 'session' && w.group !== 'weekly'),
+    ...windows.filter((w) => w.group === "session"),
+    ...windows
+      .filter((w) => w.group === "weekly")
+      .sort((a, b) => b.percent - a.percent),
+    ...windows.filter((w) => w.group !== "session" && w.group !== "weekly"),
   ]);
-  const binding = $derived(orderedWindows.find((w) => w.isActive) ?? orderedWindows[0] ?? null);
+  const binding = $derived(
+    orderedWindows.find((w) => w.isActive) ?? orderedWindows[0] ?? null
+  );
 
-  const band = (pct: number): 'ok' | 'warn' | 'bad' =>
-    pct >= 90 ? 'bad' : pct >= 70 ? 'warn' : 'ok';
+  const band = (pct: number): "ok" | "warn" | "bad" =>
+    pct >= 90 ? "bad" : pct >= 70 ? "warn" : "ok";
 
   const windowLabel = (w: LimitWindow): string =>
-    w.group === 'session' ? '5-hour' : w.scopeLabel ? `Weekly · ${w.scopeLabel}` : 'Weekly';
+    w.group === "session"
+      ? "5-hour"
+      : w.scopeLabel
+        ? `Weekly · ${w.scopeLabel}`
+        : "Weekly";
 
   /** A live clock; the countdowns only ever show minutes. */
   let now = $state(Date.now());
@@ -69,9 +79,13 @@
   });
 
   function resetsIn(resetsAt: string | null, at: number): string {
-    if (!resetsAt) return '';
+    if (!resetsAt) {
+      return "";
+    }
     const diff = new Date(resetsAt).getTime() - at;
-    if (diff <= 0) return 'resetting';
+    if (diff <= 0) {
+      return "resetting";
+    }
     const mins = Math.floor(diff / 60_000);
     const h = Math.floor(mins / 60);
     return h > 0 ? `${h}h ${mins % 60}m` : `${mins}m`;
@@ -80,8 +94,8 @@
   const planLabel = $derived(
     reading?.planTier
       ? reading.planTier
-          .replace(/^default_claude_/, '')
-          .replace(/_/g, ' ')
+          .replace(/^default_claude_/, "")
+          .replace(/_/g, " ")
           .replace(/\b\w/g, (c) => c.toUpperCase())
       : null
   );
@@ -94,21 +108,30 @@
       ? Math.min((spendUsed / spendLimit) * 100, 100)
       : null
   );
-  const spendBand = $derived(spendPct !== null ? band(spendPct) : 'ok');
+  const spendBand = $derived(spendPct === null ? "ok" : band(spendPct));
 
   /** How long ago the reading was fetched. */
   const readingAge = $derived.by(() => {
-    if (!reading?.fetchedAt) return null;
+    if (!reading?.fetchedAt) {
+      return null;
+    }
     const diff = now - reading.fetchedAt;
-    if (diff < 60_000) return 'just now';
+    if (diff < 60_000) {
+      return "just now";
+    }
     const mins = Math.floor(diff / 60_000);
-    if (mins < 60) return `${mins}m ago`;
+    if (mins < 60) {
+      return `${mins}m ago`;
+    }
     const h = Math.floor(mins / 60);
     return `${h}h ${mins % 60}m ago`;
   });
 
   /** Top models by spend; the tail is noise on a glance surface. */
-  const topRows = (rows: UsageSummaryRow[] | undefined, n: number): UsageSummaryRow[] =>
+  const topRows = (
+    rows: UsageSummaryRow[] | undefined,
+    n: number
+  ): UsageSummaryRow[] =>
     [...(rows ?? [])].sort((a, b) => b.costUsd - a.costUsd).slice(0, n);
 
   const claudeRows = $derived(topRows(data.claude?.rows, 6));
@@ -117,7 +140,10 @@
   const openCodeTotals = $derived(data.opencode?.totals ?? null);
 
   const missing = $derived([
-    ...new Set([...(data.claude?.missingPricing ?? []), ...(data.opencode?.missingPricing ?? [])]),
+    ...new Set([
+      ...(data.claude?.missingPricing ?? []),
+      ...(data.opencode?.missingPricing ?? []),
+    ]),
   ]);
 
   /**
@@ -135,11 +161,19 @@
     }[] = [];
     for (const instance of whiffle.runningInstances) {
       const stats = whiffle.statsOf(instance.id);
-      if (stats.cost === null) continue;
-      const machine = whiffle.machines.find((m) => m.machineId === instance.machineId);
+      if (stats.cost === null) {
+        continue;
+      }
+      const machine = whiffle.machines.find(
+        (m) => m.machineId === instance.machineId
+      );
       rows.push({
         id: instance.id,
-        label: instance.title ?? instance.derivedTitle ?? instance.cwd.split('/').pop() ?? instance.id,
+        label:
+          instance.title ??
+          instance.derivedTitle ??
+          instance.cwd.split("/").pop() ??
+          instance.id,
         machine: machine?.hostname ?? instance.machineId,
         harness: instance.harness,
         cost: stats.cost,
@@ -152,28 +186,40 @@
 
   /** Blocks, newest first, grouped under the day they started. */
   const allBlocks = $derived(
-    [...data.blocksClaude.map((b) => ({ ...b, harness: 'Claude' })),
-     ...data.blocksOpenCode.map((b) => ({ ...b, harness: 'opencode' }))]
+    [
+      ...data.blocksClaude.map((b) => ({ ...b, harness: "Claude" })),
+      ...data.blocksOpenCode.map((b) => ({ ...b, harness: "opencode" })),
+    ]
       .filter((b) => !b.isGap)
       .sort((a, b) => b.startTime - a.startTime)
   );
 
   const dayKey = (ts: number): string =>
-    new Date(ts).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    new Date(ts).toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
 
   const dayGroups = $derived.by(() => {
     const groups: { day: string; blocks: typeof allBlocks }[] = [];
     for (const block of allBlocks) {
       const day = dayKey(block.startTime);
       const last = groups[groups.length - 1];
-      if (last && last.day === day) last.blocks.push(block);
-      else groups.push({ day, blocks: [block] });
+      if (last && last.day === day) {
+        last.blocks.push(block);
+      } else {
+        groups.push({ day, blocks: [block] });
+      }
     }
     return groups;
   });
 
   const clock = (ts: number): string =>
-    new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    new Date(ts).toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
 
   /**
    * A block only minutes old divides by a tiny elapsed span, so its projection
@@ -191,8 +237,8 @@
 <div class="page">
   <div class="col">
     <p class="sub">
-      Am I about to blow the budget? Claude is a subscription whose constraint is a
-      percentage; opencode is real money. The two are never added together.
+      Am I about to blow the budget? Claude is a subscription whose constraint
+      is a percentage; opencode is real money. The two are never added together.
     </p>
 
     {#if data.error}
@@ -215,11 +261,13 @@
     {:else if !reading && !data.limits}
       <Card.Root class="q-card">
         <Card.Content class="q-body">
-          <p class="note">No limit reading yet. Connect a machine to see spend here.</p>
+          <p class="note">
+            No limit reading yet. Connect a machine to see spend here.
+          </p>
         </Card.Content>
       </Card.Root>
     {:else}
-      <section class="hero" aria-label="Spend against threshold">
+      <section aria-label="Spend against threshold" class="hero">
         <div class="hero-main">
           {#if spendPct !== null && spendUsed !== null && spendLimit !== null}
             <div class="hero-spend">
@@ -227,29 +275,37 @@
               <span class="hero-limit">/ {usd(spendLimit)}</span>
             </div>
             <span
+              aria-label="Spend against threshold"
+              aria-valuemax={100}
+              aria-valuemin={0}
+              aria-valuenow={spendPct}
               class="hero-track"
               role="progressbar"
-              aria-valuenow={spendPct}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label="Spend against threshold"
             >
-              <span class="hero-fill {spendBand}" style="width: {Math.max(spendPct, 1)}%"></span>
+              <span
+                class="hero-fill {spendBand}"
+                style="width: {Math.max(spendPct, 1)}%"
+              ></span>
             </span>
           {:else if binding}
             <div class="hero-spend">
-              <span class="hero-amount {band(binding.percent)}">{Math.round(binding.percent)}%</span>
+              <span class="hero-amount {band(binding.percent)}"
+                >{Math.round(binding.percent)}%</span
+              >
               <span class="hero-limit">{windowLabel(binding)} used</span>
             </div>
             <span
+              aria-label="{windowLabel(binding)} limit"
+              aria-valuemax={100}
+              aria-valuemin={0}
+              aria-valuenow={binding.percent}
               class="hero-track"
               role="progressbar"
-              aria-valuenow={binding.percent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label="{windowLabel(binding)} limit"
             >
-              <span class="hero-fill {band(binding.percent)}" style="width: {Math.max(binding.percent, 1)}%"></span>
+              <span
+                class="hero-fill {band(binding.percent)}"
+                style="width: {Math.max(binding.percent, 1)}%"
+              ></span>
             </span>
           {/if}
           <div class="hero-meta">
@@ -257,7 +313,9 @@
               <Badge class="q-tag">{planLabel}</Badge>
             {/if}
             {#if binding}
-              <span class="hero-reset">Resets in {resetsIn(binding.resetsAt, now) || '—'}</span>
+              <span class="hero-reset"
+                >Resets in {resetsIn(binding.resetsAt, now) || '—'}</span
+              >
             {/if}
             {#if readingAge}
               <span class="hero-age">Checked {readingAge}</span>
@@ -266,12 +324,12 @@
         </div>
       </section>
 
-      <section class="stats" aria-label="Usage at a glance">
+      <section aria-label="Usage at a glance" class="stats">
         {#if binding}
           <StatTile
             label="{windowLabel(binding)} used"
-            value="{Math.round(binding.percent)}%"
             tone={binding.percent >= 90 ? 'warn' : 'default'}
+            value="{Math.round(binding.percent)}%"
           />
           <StatTile
             label="Resets in"
@@ -280,13 +338,13 @@
         {/if}
         <StatTile
           label="opencode spend"
-          value={openCodeTotals ? usd(openCodeTotals.costUsd) : '—'}
           unit="real money"
+          value={openCodeTotals ? usd(openCodeTotals.costUsd) : '—'}
         />
         <StatTile
           label="Claude at API prices"
-          value={claudeTotals ? `~${usd(claudeTotals.costUsd)}` : '—'}
           unit="covered by the plan"
+          value={claudeTotals ? `~${usd(claudeTotals.costUsd)}` : '—'}
         />
       </section>
     {/if}
@@ -295,7 +353,9 @@
     <Card.Root class="q-card">
       <Card.Header class="q-head">
         <Card.Title class="q-title">Claude limits</Card.Title>
-        <span class="q-sub">Account-scoped — every signed-in machine reads the same numbers</span>
+        <span class="q-sub"
+          >Account-scoped — every signed-in machine reads the same numbers</span
+        >
         {#if planLabel}
           <Badge class="q-tag">{planLabel}</Badge>
         {/if}
@@ -321,18 +381,25 @@
                   <Table.Cell>{windowLabel(w)}</Table.Cell>
                   <Table.Cell class="wide">
                     <span
+                      aria-label="{windowLabel(w)} limit"
+                      aria-valuemax={100}
+                      aria-valuemin={0}
+                      aria-valuenow={w.percent}
                       class="track"
                       role="progressbar"
-                      aria-valuenow={w.percent}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-label="{windowLabel(w)} limit"
                     >
-                      <span class="fill {tone}" style="width: {Math.max(w.percent, 1)}%"></span>
+                      <span
+                        class="fill {tone}"
+                        style="width: {Math.max(w.percent, 1)}%"
+                      ></span>
                     </span>
                   </Table.Cell>
-                  <Table.Cell class="num {tone}">{Math.round(w.percent)}%</Table.Cell>
-                  <Table.Cell class="num muted">{resetsIn(w.resetsAt, now)}</Table.Cell>
+                  <Table.Cell class="num {tone}"
+                    >{Math.round(w.percent)}%</Table.Cell
+                  >
+                  <Table.Cell class="num muted"
+                    >{resetsIn(w.resetsAt, now)}</Table.Cell
+                  >
                 </Table.Row>
               {/each}
             </Table.Body>
@@ -355,7 +422,9 @@
               {#each claudeRows as row (row.key)}
                 <Table.Row>
                   <Table.Cell class="mono">{row.key}</Table.Cell>
-                  <Table.Cell class="num">{compactNumber(row.output)}</Table.Cell>
+                  <Table.Cell class="num"
+                    >{compactNumber(row.output)}</Table.Cell
+                  >
                   <Table.Cell class="num">~{usd(row.costUsd)}</Table.Cell>
                 </Table.Row>
               {/each}
@@ -365,8 +434,8 @@
 
         {#if claudeTotals}
           <p class="note">
-            <span class="tabular">~{usd(claudeTotals.costUsd)}</span> would cost on the API — your
-            plan already covers it.
+            <span class="tabular">~{usd(claudeTotals.costUsd)}</span>
+            would cost on the API — your plan already covers it.
           </p>
         {/if}
       </Card.Content>
@@ -377,7 +446,10 @@
       <Card.Root class="q-card">
         <Card.Header class="q-head">
           <Card.Title class="q-title">Sessions by spend</Card.Title>
-          <span class="q-sub">Live sessions ordered by cost — the top spender links to its detail</span>
+          <span class="q-sub"
+            >Live sessions ordered by cost — the top spender links to its
+            detail</span
+          >
         </Card.Header>
         <Card.Content class="q-body">
           <Table.Root class="q-table">
@@ -400,7 +472,9 @@
                   </Table.Cell>
                   <Table.Cell>
                     {#if i === 0}
-                      <a class="session-link" href="/session/{row.id}">{row.label}</a>
+                      <a class="session-link" href="/session/{row.id}"
+                        >{row.label}</a
+                      >
                     {:else}
                       {row.label}
                     {/if}
@@ -421,7 +495,10 @@
     <Card.Root class="q-card">
       <Card.Header class="q-head">
         <Card.Title class="q-title">opencode spend</Card.Title>
-        <span class="q-sub">Recorded per message by opencode itself — real money, not an estimate</span>
+        <span class="q-sub"
+          >Recorded per message by opencode itself — real money, not an
+          estimate</span
+        >
       </Card.Header>
 
       <Card.Content class="q-body">
@@ -429,8 +506,10 @@
           <div class="lede">
             <span class="big">{usd(openCodeTotals.costUsd)}</span>
             <span class="note">
-              {compactNumber(openCodeTotals.input)} in · {compactNumber(openCodeTotals.output)} out ·
-              {compactNumber(openCodeTotals.cacheRead)} cache read
+              {compactNumber(openCodeTotals.input)}
+              in · {compactNumber(openCodeTotals.output)} out ·
+              {compactNumber(openCodeTotals.cacheRead)}
+              cache read
             </span>
           </div>
         {/if}
@@ -448,7 +527,9 @@
               {#each openCodeRows as row (row.key)}
                 <Table.Row>
                   <Table.Cell class="mono">{row.key}</Table.Cell>
-                  <Table.Cell class="num">{compactNumber(row.output)}</Table.Cell>
+                  <Table.Cell class="num"
+                    >{compactNumber(row.output)}</Table.Cell
+                  >
                   <Table.Cell class="num">{usd(row.costUsd)}</Table.Cell>
                 </Table.Row>
               {/each}
@@ -465,7 +546,8 @@
       <Card.Root class="q-card unpriced">
         <Card.Content class="q-body">
           <p class="unpriced-text">
-            No published price for <span class="mono">{missing.join(', ')}</span> yet — the total
+            No published price for
+            <span class="mono">{missing.join(', ')}</span> yet — the total
             cannot account for it. Those models read as $0 rather than a guess.
           </p>
         </Card.Content>
@@ -482,7 +564,9 @@
       <Card.Root class="q-card">
         <Card.Header class="q-head">
           <Card.Title class="q-title">5-hour windows</Card.Title>
-          <span class="q-sub">The windows as they actually fell, last 3 days</span>
+          <span class="q-sub"
+            >The windows as they actually fell, last 3 days</span
+          >
         </Card.Header>
         <Card.Content class="q-body">
           <Table.Root class="q-table">
@@ -498,26 +582,35 @@
             {#each dayGroups as group (group.day)}
               <Table.Body>
                 <Table.Row class="dayrow">
-                  <Table.Head colspan={5} scope="colgroup">{group.day}</Table.Head>
+                  <Table.Head colspan={5} scope="colgroup"
+                    >{group.day}</Table.Head
+                  >
                 </Table.Row>
                 {#each group.blocks as block (block.harness + block.id)}
                   <Table.Row>
-                    <Table.Cell class="num-left">{clock(block.startTime)} – {clock(block.endTime)}</Table.Cell>
+                    <Table.Cell class="num-left"
+                      >{clock(block.startTime)}
+                      – {clock(block.endTime)}</Table.Cell
+                    >
                     <Table.Cell class="muted">{block.harness}</Table.Cell>
                     <Table.Cell class="num">
-                      {block.harness === 'Claude' ? '~' : ''}{usd(block.costUsd)}
+                      {block.harness === 'Claude' ? '~' : ''}
+                      {usd(block.costUsd)}
                     </Table.Cell>
                     <Table.Cell class="pace">
                       {#if block.isActive && block.burnRate}
                         {usd(block.burnRate.costPerHour)}/h
                         {#if projectable(block) && block.projection}
-                          · on pace for {block.harness === 'Claude'
+                          · on pace for
+                          {block.harness === 'Claude'
                             ? '~'
                             : ''}{usd(block.projection.totalCost)}
                         {/if}
                       {/if}
                     </Table.Cell>
-                    <Table.Cell class="mono muted">{block.models.join(' · ')}</Table.Cell>
+                    <Table.Cell class="mono muted"
+                      >{block.models.join(' · ')}</Table.Cell
+                    >
                   </Table.Row>
                 {/each}
               </Table.Body>
@@ -581,9 +674,15 @@
     line-height: var(--leading-numeric);
     font-variant-numeric: tabular-nums;
   }
-  .hero-amount.ok { color: var(--data-ok); }
-  .hero-amount.warn { color: var(--data-warn); }
-  .hero-amount.bad { color: var(--data-bad); }
+  .hero-amount.ok {
+    color: var(--data-ok);
+  }
+  .hero-amount.warn {
+    color: var(--data-warn);
+  }
+  .hero-amount.bad {
+    color: var(--data-bad);
+  }
   .hero-limit {
     font-size: var(--text-xl);
     color: var(--ink-muted);
@@ -602,9 +701,15 @@
     border-radius: var(--radius-pill);
     transition: width var(--c-500) ease-out;
   }
-  .hero-fill.ok { background: var(--data-ok); }
-  .hero-fill.warn { background: var(--data-warn); }
-  .hero-fill.bad { background: var(--data-bad); }
+  .hero-fill.ok {
+    background: var(--data-ok);
+  }
+  .hero-fill.warn {
+    background: var(--data-warn);
+  }
+  .hero-fill.bad {
+    background: var(--data-bad);
+  }
   .hero-meta {
     display: flex;
     align-items: center;
@@ -703,7 +808,6 @@
       gap: var(--space-4);
       padding: 0;
     }
-
 
     /* Table → hairline dividers, uppercase micro-label header, tabular numerics.
        Table.Root ships its own overflow-x-auto container, so the whole card

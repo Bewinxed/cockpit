@@ -1,37 +1,37 @@
 <script lang="ts">
-	import { HugeiconsIcon } from "@hugeicons/svelte"
-	import { SidebarLeftIcon } from '@hugeicons/core-free-icons';
-	import { Button } from "$lib/components/ui/button/index.js";
-	import { cn } from "$lib/utils.js";
-	import { useSidebar } from "./context.svelte.js";
-	import type { ComponentProps } from "svelte";
+  import { SidebarLeftIcon } from "@hugeicons/core-free-icons";
+  import { HugeiconsIcon } from "@hugeicons/svelte";
+  import type { ComponentProps } from "svelte";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import { cn } from "$lib/utils.js";
+  import { useSidebar } from "./context.svelte.js";
 
-	let {
-		ref = $bindable(null),
-		class: className,
-		onclick,
-		...restProps
-	}: ComponentProps<typeof Button> & {
-		onclick?: (e: MouseEvent) => void;
-	} = $props();
+  let {
+    ref = $bindable(null),
+    class: className,
+    onclick,
+    ...restProps
+  }: ComponentProps<typeof Button> & {
+    onclick?: (e: MouseEvent) => void;
+  } = $props();
 
-	const sidebar = useSidebar();
+  const sidebar = useSidebar();
 </script>
 
 <Button
-	bind:ref
-	data-sidebar="trigger"
-	data-slot="sidebar-trigger"
-	variant="ghost"
-	size="icon-sm"
-	class={cn("cn-sidebar-trigger", className)}
-	type="button"
-	onclick={(e) => {
+  class={cn("cn-sidebar-trigger", className)}
+  data-sidebar="trigger"
+  data-slot="sidebar-trigger"
+  onclick={(e) => {
 		onclick?.(e);
 		sidebar.toggle();
 	}}
-	{...restProps}
+  size="icon-sm"
+  type="button"
+  variant="ghost"
+  bind:ref
+  {...restProps}
 >
-	<HugeiconsIcon icon={SidebarLeftIcon} strokeWidth={2}  />
-	<span class="sr-only">Toggle Sidebar</span>
+  <HugeiconsIcon icon={SidebarLeftIcon} strokeWidth={2} />
+  <span class="sr-only">Toggle Sidebar</span>
 </Button>

@@ -1,9 +1,12 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <link rel="icon" href="%sveltekit.assets%/favicon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta charset="utf-8">
+    <link href="%sveltekit.assets%/favicon.png" rel="icon">
+    <meta
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+      name="viewport"
+    >
     <title>Whiffle — mission control for Claude Code</title>
     <!--
       The two faces the first viewport is actually set in, fetched alongside the
@@ -15,12 +18,12 @@
       hand us the resolved name.
     -->
     <link
-      rel="preload"
       as="font"
-      type="font/otf"
-      href="%sveltekit.assets%/fonts/TX-02-Regular.otf"
       crossorigin
-    />
+      href="%sveltekit.assets%/fonts/TX-02-Regular.otf"
+      rel="preload"
+      type="font/otf"
+    >
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">
@@ -60,10 +63,12 @@
       fallback. Shell.svelte owns the property from hydration onward.
     -->
     <script>
+      "use strict";
       try {
-        var w = parseInt(localStorage.getItem('whiffle-rail-width'), 10);
-        if (w >= 216 && w <= 520)
-          document.documentElement.style.setProperty('--rail-w', w + 'px');
+        var w = Number.parseInt(localStorage.getItem("whiffle-rail-width"), 10);
+        if (w >= 216 && w <= 520) {
+          document.documentElement.style.setProperty("--rail-w", w + "px");
+        }
       } catch (e) {
         /* No storage, or a value that is not a width: the cookie default stands. */
       }

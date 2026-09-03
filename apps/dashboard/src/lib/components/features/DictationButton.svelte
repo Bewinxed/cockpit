@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Button } from '$lib/components/ui/button';
-  import { IconMic } from '$lib/icons';
+  import { Button } from "$lib/components/ui/button";
+  import { IconMic } from "$lib/icons";
 
   interface Props {
     disabled?: boolean;
@@ -28,9 +28,9 @@
     continuous: boolean;
     interimResults: boolean;
     lang: string;
-    onresult: ((event: RecognitionEvent) => void) | null;
-    onerror: ((event: RecognitionErrorEvent) => void) | null;
     onend: (() => void) | null;
+    onerror: ((event: RecognitionErrorEvent) => void) | null;
+    onresult: ((event: RecognitionEvent) => void) | null;
     start(): void;
     stop(): void;
   }
@@ -45,20 +45,23 @@
   let Recognition = $state<RecognizerCtor | null>(null);
   let listening = $state(false);
   /** The last refusal, carried on the control rather than thrown at the reader. */
-  let fault = $state('');
+  let fault = $state("");
 
   // Looked up after mount, so the first client paint agrees with the server's,
   // which rendered nothing: a browser that cannot hear gets no control at all.
   $effect(() => {
     const scope = window as SpeechCapableWindow;
-    Recognition = scope.SpeechRecognition ?? scope.webkitSpeechRecognition ?? null;
+    Recognition =
+      scope.SpeechRecognition ?? scope.webkitSpeechRecognition ?? null;
   });
 
   // The recogniser lives exactly as long as the listening does: one is built
   // when the button goes on, and torn down — handlers first, so its own `end`
   // cannot turn the button back on — when it goes off or the dock unmounts.
   $effect(() => {
-    if (!listening || !Recognition) return;
+    if (!(listening && Recognition)) {
+      return;
+    }
 
     const live = new Recognition();
     live.continuous = true;
@@ -66,16 +69,21 @@
     live.lang = navigator.language;
 
     live.onresult = (event) => {
-      let settled = '';
-      let pending = '';
+      let settled = "";
+      let pending = "";
       // Everything before `resultIndex` has already been handed over.
       for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const result = event.results[i];
-        const spoken = result[0]?.transcript ?? '';
-        if (result.isFinal) settled += spoken;
-        else pending += spoken;
+        const spoken = result[0]?.transcript ?? "";
+        if (result.isFinal) {
+          settled += spoken;
+        } else {
+          pending += spoken;
+        }
       }
-      if (settled.trim()) onfinal(settled.trim());
+      if (settled.trim()) {
+        onfinal(settled.trim());
+      }
       oninterim(pending.trim());
     };
 
@@ -83,10 +91,10 @@
       // Far more often the reader's own microphone permission than a fault, so
       // it names itself on the button and nowhere else.
       fault =
-        event.error === 'not-allowed'
-          ? 'Microphone blocked'
+        event.error === "not-allowed"
+          ? "Microphone blocked"
           : `Dictation stopped: ${event.error}`;
-      console.debug('dictation error', event.error, event.message);
+      console.debug("dictation error", event.error, event.message);
       listening = false;
     };
 
@@ -101,12 +109,12 @@
       live.onerror = null;
       live.onend = null;
       live.stop();
-      oninterim('');
+      oninterim("");
     };
   });
 
   function toggle() {
-    fault = '';
+    fault = "";
     listening = !listening;
   }
 
@@ -119,15 +127,17 @@
 
 {#if Recognition}
   <Button
-    variant="ghost"
-    size="icon-sm"
+    aria-label={listening ? 'Stop dictation' : 'Dictate message'}
+    aria-pressed={listening}
     class={listening ? 'text-primary' : 'text-muted-foreground'}
     {disabled}
-    aria-pressed={listening}
-    aria-label={listening ? 'Stop dictation' : 'Dictate message'}
-    title={fault || (listening ? 'Stop dictation' : 'Dictate message')}
     onclick={toggle}
+    size="icon-sm"
+    title={fault || (listening ? 'Stop dictation' : 'Dictate message')}
+    variant="ghost"
   >
-    <IconMic class={listening ? 'animate-pulse motion-reduce:animate-none' : ''} />
+    <IconMic
+      class={listening ? 'animate-pulse motion-reduce:animate-none' : ''}
+    />
   </Button>
 {/if}

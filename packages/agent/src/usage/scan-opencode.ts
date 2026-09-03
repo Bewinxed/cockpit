@@ -1,10 +1,10 @@
-import { costForUsage, totalTokens } from '@whiffle/core';
-import type { RawOpenCodeMessage, UsageTokens } from '@whiffle/core';
-import { Database } from 'bun:sqlite';
-import { readdir } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
-import type { ScannedRecord } from './types';
+import { Database } from "bun:sqlite";
+import { readdir } from "node:fs/promises";
+import { homedir } from "node:os";
+import { basename, join } from "node:path";
+import type { RawOpenCodeMessage, UsageTokens } from "@whiffle/core";
+import { costForUsage, totalTokens } from "@whiffle/core";
+import type { ScannedRecord } from "./types";
 
 /**
  * opencode scanner (USAGE-SPEC.md §2.3, §5.2). Reads the live SQLite database
@@ -14,13 +14,16 @@ import type { ScannedRecord } from './types';
 
 /** `$OPENCODE_DATA_DIR` else `~/.local/share/opencode`. */
 export const opencodeDataDir = (): string =>
-  process.env.OPENCODE_DATA_DIR ?? join(homedir(), '.local', 'share', 'opencode');
+  process.env.OPENCODE_DATA_DIR ??
+  join(homedir(), ".local", "share", "opencode");
 
 /** `opencode.db` else the first `opencode-*.db`; null when neither exists. */
 export const openDbPath = async (): Promise<string | null> => {
   const dir = opencodeDataDir();
-  const primary = join(dir, 'opencode.db');
-  if (await Bun.file(primary).exists()) return primary;
+  const primary = join(dir, "opencode.db");
+  if (await Bun.file(primary).exists()) {
+    return primary;
+  }
 
   let entries;
   try {
@@ -28,30 +31,34 @@ export const openDbPath = async (): Promise<string | null> => {
   } catch {
     return null;
   }
-  const rotated = entries.filter((n) => n.startsWith('opencode-') && n.endsWith('.db')).sort();
+  const rotated = entries
+    .filter((n) => n.startsWith("opencode-") && n.endsWith(".db"))
+    .sort();
   return rotated.length > 0 ? join(dir, rotated[0]) : null;
 };
 
 interface MessageRow {
+  data: string;
   id: string;
   session_id: string;
   time_created: number;
-  data: string;
 }
 
 export interface OpencodeScanResult {
-  records: ScannedRecord[];
+  kept: number;
   /** Highest `time_created` seen, for the next incremental watermark. */
   maxTimeCreated: number;
   parsed: number;
-  kept: number;
+  records: ScannedRecord[];
 }
 
-const projectOf = (data: RawOpenCodeMessage): { project: string; projectPath: string | null } => {
+const projectOf = (
+  data: RawOpenCodeMessage
+): { project: string; projectPath: string | null } => {
   const root = data.path?.root ?? null;
   const cwd = data.path?.cwd ?? null;
-  const fromRoot = root ? basename(root) : '';
-  const project = fromRoot || (cwd ? basename(cwd) : '') || 'opencode';
+  const fromRoot = root ? basename(root) : "";
+  const project = fromRoot || (cwd ? basename(cwd) : "") || "opencode";
   return { project, projectPath: root };
 };
 
@@ -61,12 +68,15 @@ const projectOf = (data: RawOpenCodeMessage): { project: string; projectPath: st
  * is zero are skipped. `data.cost` is authoritative; computed pricing is only
  * the fallback when cost is absent/zero and tokens are non-zero.
  */
-export const scanOpencode = (dbPath: string, maxTimeCreated: number): OpencodeScanResult => {
+export const scanOpencode = (
+  dbPath: string,
+  maxTimeCreated: number
+): OpencodeScanResult => {
   const db = new Database(dbPath, { readonly: true });
   try {
     const rows = db
       .query<MessageRow, [number]>(
-        'SELECT id, session_id, time_created, data FROM message WHERE time_created > ?1'
+        "SELECT id, session_id, time_created, data FROM message WHERE time_created > ?1"
       )
       .all(maxTimeCreated);
 
@@ -74,7 +84,9 @@ export const scanOpencode = (dbPath: string, maxTimeCreated: number): OpencodeSc
     let nextMax = maxTimeCreated;
 
     for (const row of rows) {
-      if (row.time_created > nextMax) nextMax = row.time_created;
+      if (row.time_created > nextMax) {
+        nextMax = row.time_created;
+      }
 
       let data: RawOpenCodeMessage;
       try {
@@ -82,7 +94,9 @@ export const scanOpencode = (dbPath: string, maxTimeCreated: number): OpencodeSc
       } catch {
         continue;
       }
-      if (data.role !== 'assistant') continue;
+      if (data.role !== "assistant") {
+        continue;
+      }
 
       const t = data.tokens ?? {};
       const input = t.input ?? 0;
@@ -90,27 +104,46 @@ export const scanOpencode = (dbPath: string, maxTimeCreated: number): OpencodeSc
       const reasoning = t.reasoning ?? 0;
       const cacheRead = t.cache?.read ?? 0;
       const cacheWrite = t.cache?.write ?? 0;
-      if (input === 0 && output === 0 && reasoning === 0 && cacheRead === 0 && cacheWrite === 0) {
+      if (
+        input === 0 &&
+        output === 0 &&
+        reasoning === 0 &&
+        cacheRead === 0 &&
+        cacheWrite === 0
+      ) {
         continue;
       }
 
-      const model = data.modelID ?? '';
-      if (!model) continue;
+      const model = data.modelID ?? "";
+      if (!model) {
+        continue;
+      }
       const id = row.id;
       const sessionId = row.session_id;
-      if (!id || !sessionId) continue;
+      if (!(id && sessionId)) {
+        continue;
+      }
 
       const provider = data.providerID ?? null;
-      const tokens: UsageTokens = { input, output, cacheCreation: cacheWrite, cacheRead, reasoning };
+      const tokens: UsageTokens = {
+        input,
+        output,
+        cacheCreation: cacheWrite,
+        cacheRead,
+        reasoning,
+      };
 
-      let cost = typeof data.cost === 'number' && !Number.isNaN(data.cost) ? data.cost : 0;
+      let cost =
+        typeof data.cost === "number" && !Number.isNaN(data.cost)
+          ? data.cost
+          : 0;
       if ((data.cost === undefined || cost === 0) && totalTokens(tokens) > 0) {
         cost = costForUsage(provider ? `${provider}/${model}` : model, tokens);
       }
 
       const { project, projectPath } = projectOf(data);
       records.push({
-        harness: 'opencode',
+        harness: "opencode",
         ts: data.time?.created ?? row.time_created,
         sessionId,
         project,
@@ -125,7 +158,12 @@ export const scanOpencode = (dbPath: string, maxTimeCreated: number): OpencodeSc
       });
     }
 
-    return { records, maxTimeCreated: nextMax, parsed: rows.length, kept: records.length };
+    return {
+      records,
+      maxTimeCreated: nextMax,
+      parsed: rows.length,
+      kept: records.length,
+    };
   } finally {
     db.close();
   }

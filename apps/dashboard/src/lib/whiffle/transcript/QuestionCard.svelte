@@ -1,28 +1,38 @@
 <script lang="ts">
+  import type {
+    UserAnswers,
+    UserQuestion,
+    UserQuestionResult,
+  } from "@whiffle/core";
+  import { IconCheck, IconClose } from "$lib/icons";
+  import { questionsOf } from "../question";
   /**
    * An answered (or dismissed) `AskUserQuestion` as it settled in the transcript
    * history — the same `.hitl` anatomy as the live prompt, but read-only: the
    * chosen option carries `.sel`, and any freeform reply shows under the options.
    * Ported from the mock's `#q-card` (.hitl / .lede / .qopts / .kc).
    */
-  import type { Message } from '../types';
-  import type { UserQuestion, UserQuestionResult, UserAnswers } from '@whiffle/core';
-  import { questionsOf } from '../question';
-  import { IconCheck, IconClose } from '$lib/icons';
+  import type { Message } from "../types";
 
   let { message }: { message: Message } = $props();
 
-  const input = $derived((message.metadata?.toolInput ?? {}) as Record<string, unknown>);
+  const input = $derived(
+    (message.metadata?.toolInput ?? {}) as Record<string, unknown>
+  );
   const questions = $derived<UserQuestion[]>(
-    questionsOf(message.metadata?.toolName ?? '', input) ?? []
+    questionsOf(message.metadata?.toolName ?? "", input) ?? []
   );
-  const result = $derived(message.metadata?.toolUseResult as UserQuestionResult | undefined);
-  const answered = $derived(result?.outcome === 'answered');
-  const dismissed = $derived(result?.outcome === 'dismissed');
+  const result = $derived(
+    message.metadata?.toolUseResult as UserQuestionResult | undefined
+  );
+  const answered = $derived(result?.outcome === "answered");
+  const dismissed = $derived(result?.outcome === "dismissed");
   const answers = $derived<UserAnswers>(
-    result?.outcome === 'answered' ? result.answers : {}
+    result?.outcome === "answered" ? result.answers : {}
   );
-  const freeform = $derived(result?.outcome === 'answered' ? result.response : undefined);
+  const freeform = $derived(
+    result?.outcome === "answered" ? result.response : undefined
+  );
 
   const chosen = (question: string): string[] => {
     const value = answers[question];
@@ -39,7 +49,7 @@
   };
 </script>
 
-<section class="hitl" aria-label="Question from the agent">
+<section aria-label="Question from the agent" class="hitl">
   <h2>
     {#if answered}
       <span class="pill done"><IconCheck />answered</span>
@@ -66,7 +76,9 @@
   {/each}
 
   {#if freeform}
-    <p class="answer-free"><span class="lbl">In your own words</span>{freeform}</p>
+    <p class="answer-free">
+      <span class="lbl">In your own words</span>{freeform}
+    </p>
   {/if}
 </section>
 

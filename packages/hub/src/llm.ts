@@ -1,14 +1,14 @@
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import {
-  generateObject,
-  streamText,
-  Output,
-  jsonSchema,
   APICallError,
+  generateObject,
+  jsonSchema,
   NoObjectGeneratedError,
+  Output,
   RetryError,
-} from 'ai';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import * as v from 'valibot';
+  streamText,
+} from "ai";
+import * as v from "valibot";
 
 /**
  * Structured verdict a supervisor LLM returns for a single evaluation.
@@ -21,10 +21,10 @@ import * as v from 'valibot';
  */
 export const VerdictSchema = v.object({
   verdict: v.union([
-    v.literal('silent'),
-    v.literal('reply'),
-    v.literal('escalate'),
-    v.literal('ask_operator'),
+    v.literal("silent"),
+    v.literal("reply"),
+    v.literal("escalate"),
+    v.literal("ask_operator"),
   ]),
   message: v.string(),
   note: v.string(),
@@ -35,16 +35,16 @@ export type Verdict = v.InferOutput<typeof VerdictSchema>;
 /** JSON Schema for the provider's structured-output / guided-decoding mode. */
 const VerdictJsonSchema = jsonSchema<Verdict>(
   {
-    type: 'object',
+    type: "object",
     properties: {
       verdict: {
-        type: 'string',
-        enum: ['silent', 'reply', 'escalate', 'ask_operator'],
+        type: "string",
+        enum: ["silent", "reply", "escalate", "ask_operator"],
       },
-      message: { type: 'string' },
-      note: { type: 'string' },
+      message: { type: "string" },
+      note: { type: "string" },
     },
-    required: ['verdict', 'message', 'note'],
+    required: ["verdict", "message", "note"],
     additionalProperties: false,
   },
   {
@@ -52,9 +52,9 @@ const VerdictJsonSchema = jsonSchema<Verdict>(
       const result = v.safeParse(VerdictSchema, value);
       return result.success
         ? { success: true, value: result.output }
-        : { success: false, error: new Error('verdict schema mismatch') };
+        : { success: false, error: new Error("verdict schema mismatch") };
     },
-  },
+  }
 );
 
 /**
@@ -65,10 +65,10 @@ const VerdictJsonSchema = jsonSchema<Verdict>(
  * the provider silently strips `response_format` and the model free-texts.
  */
 function providerFor(baseUrl: string, apiKey?: string) {
-  const root = baseUrl.replace(/\/+$/, '');
+  const root = baseUrl.replace(/\/+$/, "");
   return createOpenAICompatible({
-    name: 'supervisor',
-    baseURL: root.endsWith('/v1') ? root : `${root}/v1`,
+    name: "supervisor",
+    baseURL: root.endsWith("/v1") ? root : `${root}/v1`,
     apiKey,
     supportsStructuredOutputs: true,
   });
@@ -81,7 +81,11 @@ function providerFor(baseUrl: string, apiKey?: string) {
  */
 export const RuleVerdictSchema = v.object({
   rule: v.string(),
-  verdict: v.union([v.literal('silent'), v.literal('reply'), v.literal('escalate')]),
+  verdict: v.union([
+    v.literal("silent"),
+    v.literal("reply"),
+    v.literal("escalate"),
+  ]),
   message: v.string(),
   note: v.string(),
 });
@@ -90,14 +94,14 @@ export type RuleVerdict = v.InferOutput<typeof RuleVerdictSchema>;
 
 const RuleVerdictJsonSchema = jsonSchema<RuleVerdict>(
   {
-    type: 'object',
+    type: "object",
     properties: {
-      rule: { type: 'string' },
-      verdict: { type: 'string', enum: ['silent', 'reply', 'escalate'] },
-      message: { type: 'string' },
-      note: { type: 'string' },
+      rule: { type: "string" },
+      verdict: { type: "string", enum: ["silent", "reply", "escalate"] },
+      message: { type: "string" },
+      note: { type: "string" },
     },
-    required: ['rule', 'verdict', 'message', 'note'],
+    required: ["rule", "verdict", "message", "note"],
     additionalProperties: false,
   },
   {
@@ -105,25 +109,25 @@ const RuleVerdictJsonSchema = jsonSchema<RuleVerdict>(
       const result = v.safeParse(RuleVerdictSchema, value);
       return result.success
         ? { success: true, value: result.output }
-        : { success: false, error: new Error('rule verdict schema mismatch') };
+        : { success: false, error: new Error("rule verdict schema mismatch") };
     },
-  },
+  }
 );
 
 export interface VerdictStreamRequest {
-  baseUrl: string;
   apiKey?: string;
-  model: string;
-  system: string;
-  user: string;
-  timeoutMs: number;
+  baseUrl: string;
   /** Budget scales with the number of rules; the caller knows how many. */
   maxOutputTokens: number;
+  model: string;
   /**
    * Invoked per completed array element AS IT STREAMS — the whole point:
    * the first rule's verdict acts while the model is still writing the rest.
    */
   onVerdict: (verdict: RuleVerdict) => void | Promise<void>;
+  system: string;
+  timeoutMs: number;
+  user: string;
 }
 
 export type VerdictStreamResult =
@@ -136,7 +140,9 @@ export type VerdictStreamResult =
  * Elements already delivered stay delivered when the stream later fails —
  * the error return carries how many made it out.
  */
-export async function verdictStream(req: VerdictStreamRequest): Promise<VerdictStreamResult> {
+export async function verdictStream(
+  req: VerdictStreamRequest
+): Promise<VerdictStreamResult> {
   const provider = providerFor(req.baseUrl, req.apiKey);
   const t0 = Date.now();
   let count = 0;
@@ -168,13 +174,13 @@ export async function verdictStream(req: VerdictStreamRequest): Promise<VerdictS
 // ── verdictFor ──────────────────────────────────────────────────────────
 
 export interface VerdictRequest {
-  baseUrl: string;
   apiKey?: string;
+  baseUrl: string;
   model: string;
   system: string;
-  user: string;
   /** The full evaluation budget, including cold-start time (PLAN.md C3: 240 000 ms). */
   timeoutMs: number;
+  user: string;
 }
 
 export type VerdictResult =
@@ -224,16 +230,26 @@ function classify(err: unknown): string {
 
   if (APICallError.isInstance(inner)) {
     const code = inner.statusCode;
-    if (code === 404) return 'unknown model';
-    if (code === 507) return 'insufficient VRAM';
-    if (code === 503) return 'cooldown';
+    if (code === 404) {
+      return "unknown model";
+    }
+    if (code === 507) {
+      return "insufficient VRAM";
+    }
+    if (code === 503) {
+      return "cooldown";
+    }
   }
 
-  if (NoObjectGeneratedError.isInstance(inner)) return 'unparseable verdict';
+  if (NoObjectGeneratedError.isInstance(inner)) {
+    return "unparseable verdict";
+  }
 
   // AbortSignal.timeout fires a DOMException with name 'TimeoutError', which
   // the SDK may surface directly or wrap in its own abort reason.
-  if (isAbort(err) || isAbort(inner)) return 'timed out';
+  if (isAbort(err) || isAbort(inner)) {
+    return "timed out";
+  }
 
   // Anything else gets the message, truncated.
   const msg = err instanceof Error ? err.message : String(err);
@@ -241,9 +257,15 @@ function classify(err: unknown): string {
 }
 
 function isAbort(err: unknown): boolean {
-  if (err instanceof DOMException && err.name === 'TimeoutError') return true;
-  if (err instanceof DOMException && err.name === 'AbortError') return true;
-  if (RetryError.isInstance(err) && err.reason === 'abort') return true;
+  if (err instanceof DOMException && err.name === "TimeoutError") {
+    return true;
+  }
+  if (err instanceof DOMException && err.name === "AbortError") {
+    return true;
+  }
+  if (RetryError.isInstance(err) && err.reason === "abort") {
+    return true;
+  }
   return false;
 }
 
@@ -255,8 +277,8 @@ export interface ProbeResult {
 }
 
 interface ModelEntry {
-  id: string;
   aliases?: string[];
+  id: string;
 }
 
 /** Under the router's 255 s socket cap (sourced: telegram-media.ts ROUTER_TIMEOUT_MS). */
@@ -269,13 +291,15 @@ const PROBE_TIMEOUT_MS = 15_000;
  */
 export async function probe(
   baseUrl: string,
-  handle: string,
+  handle: string
 ): Promise<ProbeResult> {
   try {
     const res = await fetch(`${baseUrl}/v1/models`, {
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
-    if (!res.ok) return { reachable: false };
+    if (!res.ok) {
+      return { reachable: false };
+    }
 
     const body = (await res.json()) as { data?: ModelEntry[] };
     const models = body.data ?? [];

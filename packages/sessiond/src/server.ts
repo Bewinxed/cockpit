@@ -18,23 +18,28 @@
  * inside the line it just cut.
  */
 
-import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
-import { chmodSync, mkdirSync } from 'node:fs';
-import { unlink } from 'node:fs/promises';
-import { createConnection, createServer, type Server, type Socket } from 'node:net';
-import { randomUUID } from 'node:crypto';
-import { dirname } from 'node:path';
-import { SessionRing, type BuildInfo } from '@whiffle/core';
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { chmodSync, mkdirSync } from "node:fs";
+import { unlink } from "node:fs/promises";
+import {
+  createConnection,
+  createServer,
+  type Server,
+  type Socket,
+} from "node:net";
+import { dirname } from "node:path";
+import { type BuildInfo, SessionRing } from "@whiffle/core";
 // The protocol lives behind its own subpath: `sessiond.ts` reaches for `node:os`
 // to derive the endpoint, and the core barrel is imported by the browser bundle.
 import {
+  type ProcSpec,
   SESSIOND_V1,
   type SessiondAck,
   type SessiondLine,
   type SessiondProcInfo,
   type SessiondServerMessage,
-  type ProcSpec,
-} from '@whiffle/core/sessiond';
+} from "@whiffle/core/sessiond";
 
 /**
  * The idempotency window, from the hub's own discipline
@@ -68,13 +73,21 @@ export const RING_BYTES = 8 * 1024 * 1024;
  * the agent's existing drain discipline (`agent/src/session.ts:57`,
  * `DRAIN_TIMEOUT_MS = 8_000`).
  */
-export const DRAIN_TIMEOUT_MS = 8_000;
+export const DRAIN_TIMEOUT_MS = 8000;
 
 /** A live (or recently dead) child, plus the ring nobody else may reach. */
 interface Proc {
-  procId: string;
+  alive: boolean;
+  bytes: number;
   child: ChildProcessWithoutNullStreams;
+  /** The spec's `cwd`, kept so a reattaching agent learns where this child runs. */
+  cwd?: string;
+  exitCode: number | null;
+  /** Bytes of the current, not-yet-terminated stdout line. Framing only. */
+  partial: string;
+  procId: string;
   ring: SessionRing;
+  signal: NodeJS.Signals | null;
   /**
    * Byte size of each resident ring entry, indexed exactly as the ring is
    * (`(seq - 1) % SESSIOND_RING_LINES`), so an overwritten entry can be subtracted
@@ -82,23 +95,15 @@ interface Proc {
    * replayable.
    */
   sizes: number[];
-  bytes: number;
-  /** Bytes of the current, not-yet-terminated stdout line. Framing only. */
-  partial: string;
-  alive: boolean;
-  exitCode: number | null;
-  signal: NodeJS.Signals | null;
-  /** The spec's `cwd`, kept so a reattaching agent learns where this child runs. */
-  cwd?: string;
 }
 
 /** One attached agent. Cursors are per-proc, because subscriptions are. */
 export interface Conn {
-  socket: Socket;
   /** Line framing for the agent's own NDJSON — the protocol, not a payload. */
   buffer: string;
   /** procId → the last seq this connection has been sent. */
   cursors: Map<string, number>;
+  socket: Socket;
 }
 
 interface Settled {
@@ -113,7 +118,7 @@ export interface SessiondOptions {
   now?: () => number;
 }
 
-const DEFAULT_BUILD: BuildInfo = { version: '0.1.0', startedAt: Date.now() };
+const DEFAULT_BUILD: BuildInfo = { version: "0.1.0", startedAt: Date.now() };
 
 /**
  * The daemon, minus its process wrapper. Constructed and driven directly by
@@ -157,9 +162,13 @@ export class SessiondServer {
     try {
       await this.#bind(endpoint);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error;
+      if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") {
+        throw error;
+      }
       if (await probe(endpoint)) {
-        throw new Error(`[sessiond] another sessiond is already listening on ${endpoint}`);
+        throw new Error(
+          `[sessiond] another sessiond is already listening on ${endpoint}`
+        );
       }
       await unlink(endpoint);
       await this.#bind(endpoint);
@@ -171,9 +180,9 @@ export class SessiondServer {
   #bind(endpoint: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const server = createServer((socket) => this.#accept(socket));
-      server.once('error', reject);
+      server.once("error", reject);
       server.listen(endpoint, () => {
-        server.removeListener('error', reject);
+        server.removeListener("error", reject);
         this.#server = server;
         resolve();
       });
@@ -195,17 +204,17 @@ export class SessiondServer {
   // ---------------------------------------------------------------- connections
 
   #accept(socket: Socket): void {
-    const conn: Conn = { socket, buffer: '', cursors: new Map() };
+    const conn: Conn = { socket, buffer: "", cursors: new Map() };
     this.#conns.add(conn);
-    socket.setEncoding('utf8');
-    socket.on('data', (chunk: string) => this.#onData(conn, chunk));
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk: string) => this.#onData(conn, chunk));
     // A dropped agent is the normal case, not an incident: children keep
     // running, rings keep filling, and the reattach reads its backlog out of
     // the ring. That is the whole tmux property, and it needs no code here.
-    socket.on('error', () => this.#conns.delete(conn));
-    socket.on('close', () => this.#conns.delete(conn));
+    socket.on("error", () => this.#conns.delete(conn));
+    socket.on("close", () => this.#conns.delete(conn));
     this.#send(conn, {
-      type: 'welcome',
+      type: "welcome",
       epoch: this.epoch,
       capabilities: [SESSIOND_V1],
       build: this.#build,
@@ -215,12 +224,14 @@ export class SessiondServer {
 
   #onData(conn: Conn, chunk: string): void {
     conn.buffer += chunk;
-    let nl = conn.buffer.indexOf('\n');
+    let nl = conn.buffer.indexOf("\n");
     while (nl >= 0) {
       const line = conn.buffer.slice(0, nl);
       conn.buffer = conn.buffer.slice(nl + 1);
-      if (line.trim()) this.#onLine(conn, line);
-      nl = conn.buffer.indexOf('\n');
+      if (line.trim()) {
+        this.#onLine(conn, line);
+      }
+      nl = conn.buffer.indexOf("\n");
     }
   }
 
@@ -232,7 +243,7 @@ export class SessiondServer {
     try {
       message = JSON.parse(line); // protocol envelope off the socket, never a payload
     } catch {
-      this.#send(conn, ack('', 'failed', 'malformed: not json'));
+      this.#send(conn, ack("", "failed", "malformed: not json"));
       return;
     }
     this.handle(conn, message);
@@ -244,16 +255,20 @@ export class SessiondServer {
    */
   handle(conn: Conn, message: unknown): void {
     const msg = message as Record<string, unknown>;
-    const type = typeof msg?.type === 'string' ? msg.type : '';
-    const commandId = typeof msg?.commandId === 'string' ? msg.commandId : '';
+    const type = typeof msg?.type === "string" ? msg.type : "";
+    const commandId = typeof msg?.commandId === "string" ? msg.commandId : "";
 
-    if (type === 'subscribe') {
-      this.#subscribe(conn, String(msg.procId ?? ''), msg.afterSeq as number | undefined);
+    if (type === "subscribe") {
+      this.#subscribe(
+        conn,
+        String(msg.procId ?? ""),
+        msg.afterSeq as number | undefined
+      );
       return;
     }
-    if (type === 'list') {
+    if (type === "list") {
       this.#send(conn, {
-        type: 'welcome',
+        type: "welcome",
         epoch: this.epoch,
         capabilities: [SESSIOND_V1],
         build: this.#build,
@@ -276,37 +291,52 @@ export class SessiondServer {
 
     let settlement: SessiondAck;
     switch (type) {
-      case 'spawn':
-        settlement = this.#spawn(commandId, String(msg.procId ?? ''), msg.spec as ProcSpec);
-        break;
-      case 'write':
-        settlement = this.#write(commandId, String(msg.procId ?? ''), String(msg.data ?? ''));
-        break;
-      case 'signal':
-        settlement = this.#signal(
+      case "spawn":
+        settlement = this.#spawn(
           commandId,
-          String(msg.procId ?? ''),
-          (msg.sig as NodeJS.Signals) ?? 'SIGTERM',
+          String(msg.procId ?? ""),
+          msg.spec as ProcSpec
         );
         break;
-      case 'stdin_end':
-        settlement = this.#stdinEnd(commandId, String(msg.procId ?? ''));
+      case "write":
+        settlement = this.#write(
+          commandId,
+          String(msg.procId ?? ""),
+          String(msg.data ?? "")
+        );
+        break;
+      case "signal":
+        settlement = this.#signal(
+          commandId,
+          String(msg.procId ?? ""),
+          (msg.sig as NodeJS.Signals) ?? "SIGTERM"
+        );
+        break;
+      case "stdin_end":
+        settlement = this.#stdinEnd(commandId, String(msg.procId ?? ""));
         break;
       default:
         // §5: unknown types are ANSWERED, never fatal. This is precisely how
         // the agent evolves past a months-old sessiond — it probes, reads
         // `unsupported`, and falls back. Closing the connection here would
         // turn every future agent feature into a sessiond release.
-        this.#send(conn, ack(commandId, 'failed', `unsupported: ${type || '(missing type)'}`));
+        this.#send(
+          conn,
+          ack(commandId, "failed", `unsupported: ${type || "(missing type)"}`)
+        );
         return;
     }
-    if (commandId) this.#settled.set(commandId, { ack: settlement, at: this.#now() });
+    if (commandId) {
+      this.#settled.set(commandId, { ack: settlement, at: this.#now() });
+    }
     this.#send(conn, settlement);
   }
 
   #lookupSettled(commandId: string): SessiondAck | undefined {
     const entry = this.#settled.get(commandId);
-    if (!entry) return undefined;
+    if (!entry) {
+      return undefined;
+    }
     if (this.#now() - entry.at > COMMAND_TTL_MS) {
       this.#settled.delete(commandId);
       return undefined;
@@ -316,20 +346,32 @@ export class SessiondServer {
 
   // -------------------------------------------------------------------- verbs
 
-  #spawn(commandId: string, procId: string, spec: ProcSpec | undefined): SessiondAck {
-    if (!procId || !spec?.command) return ack(commandId, 'failed', 'spawn: procId and spec.command required');
+  #spawn(
+    commandId: string,
+    procId: string,
+    spec: ProcSpec | undefined
+  ): SessiondAck {
+    if (!(procId && spec?.command)) {
+      return ack(
+        commandId,
+        "failed",
+        "spawn: procId and spec.command required"
+      );
+    }
     const existing = this.#procs.get(procId);
     // A fresh commandId for a live procId is the agent's deliberate relaunch
     // (the kill-and-replace semantics it has today); the dedup map above is
     // what keeps a mere retry from landing here.
-    if (existing?.alive) existing.child.kill('SIGKILL');
+    if (existing?.alive) {
+      existing.child.kill("SIGKILL");
+    }
 
     const child = spawn(spec.command, spec.args ?? [], {
       cwd: spec.cwd,
       // The spec is built entirely agent-side and handed over opaque (§3.2):
       // sessiond does not read, validate or enrich a single entry of it.
       env: spec.env ? { ...process.env, ...spec.env } : process.env,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ["pipe", "pipe", "pipe"],
     }) as ChildProcessWithoutNullStreams;
 
     const proc: Proc = {
@@ -338,7 +380,7 @@ export class SessiondServer {
       ring: new SessionRing(SESSIOND_RING_LINES),
       sizes: [],
       bytes: 0,
-      partial: '',
+      partial: "",
       alive: true,
       exitCode: null,
       signal: null,
@@ -346,41 +388,47 @@ export class SessiondServer {
     };
     this.#procs.set(procId, proc);
 
-    child.stdout.setEncoding('utf8');
-    child.stdout.on('data', (chunk: string) => this.#ingest(proc, chunk));
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => this.#ingest(proc, chunk));
     // stderr is not a second stream in the protocol: it is drained so the
     // pipe can never fill and wedge the child (§6's "no path from a slow
     // agent to a blocked child"), and otherwise ignored.
     child.stderr.resume();
-    child.stdin.on('error', () => {
+    child.stdin.on("error", () => {
       /* a write to a stdin whose child already died is not an event */
     });
-    child.on('error', () => this.#reap(proc, null, null));
-    child.on('exit', (code, signal) => this.#reap(proc, code, signal));
-    return ack(commandId, 'applied');
+    child.on("error", () => this.#reap(proc, null, null));
+    child.on("exit", (code, signal) => this.#reap(proc, code, signal));
+    return ack(commandId, "applied");
   }
 
   #write(commandId: string, procId: string, data: string): SessiondAck {
     const proc = this.#procs.get(procId);
-    if (!proc?.alive) return ack(commandId, 'failed', `write: ${procId} is not alive`);
+    if (!proc?.alive) {
+      return ack(commandId, "failed", `write: ${procId} is not alive`);
+    }
     // Bytes, unread. Whatever this is — a user turn, a control_response, an
     // image — sessiond's only opinion is that it reaches stdin intact.
     proc.child.stdin.write(data);
-    return ack(commandId, 'applied');
+    return ack(commandId, "applied");
   }
 
   #signal(commandId: string, procId: string, sig: NodeJS.Signals): SessiondAck {
     const proc = this.#procs.get(procId);
-    if (!proc?.alive) return ack(commandId, 'failed', `signal: ${procId} is not alive`);
+    if (!proc?.alive) {
+      return ack(commandId, "failed", `signal: ${procId} is not alive`);
+    }
     proc.child.kill(sig);
-    return ack(commandId, 'applied');
+    return ack(commandId, "applied");
   }
 
   #stdinEnd(commandId: string, procId: string): SessiondAck {
     const proc = this.#procs.get(procId);
-    if (!proc?.alive) return ack(commandId, 'failed', `stdin_end: ${procId} is not alive`);
+    if (!proc?.alive) {
+      return ack(commandId, "failed", `stdin_end: ${procId} is not alive`);
+    }
     proc.child.stdin.end();
-    return ack(commandId, 'applied');
+    return ack(commandId, "applied");
   }
 
   #subscribe(conn: Conn, procId: string, afterSeq: number | undefined): void {
@@ -399,9 +447,9 @@ export class SessiondServer {
       // honest refusal.
       conn.cursors.set(procId, 0);
       if (afterSeq === undefined || afterSeq === 0) {
-        this.#send(conn, { type: 'proc.backlog', procId, events: [] });
+        this.#send(conn, { type: "proc.backlog", procId, events: [] });
       } else {
-        this.#send(conn, { type: 'proc.reset', procId, nextSeq: 1 });
+        this.#send(conn, { type: "proc.reset", procId, nextSeq: 1 });
       }
       return;
     }
@@ -409,18 +457,22 @@ export class SessiondServer {
     if (afterSeq === undefined) {
       // Follow from now: an empty backlog, so the agent sees the same
       // choreography (backlog-then-deltas) on both paths.
-      this.#send(conn, { type: 'proc.backlog', procId, events: [] });
+      this.#send(conn, { type: "proc.backlog", procId, events: [] });
       return;
     }
     if (!proc.ring.canReplay(afterSeq)) {
       // §6: an honest refusal, never a partial replay. The agent turns this
       // into a visible seam in the transcript rather than a stream that
       // silently skipped the lines nobody will ever look for.
-      this.#send(conn, { type: 'proc.reset', procId, nextSeq: proc.ring.head + 1 });
+      this.#send(conn, {
+        type: "proc.reset",
+        procId,
+        nextSeq: proc.ring.head + 1,
+      });
       return;
     }
     this.#send(conn, {
-      type: 'proc.backlog',
+      type: "proc.backlog",
       procId,
       events: proc.ring.since(afterSeq).map(toLine),
     });
@@ -434,11 +486,11 @@ export class SessiondServer {
    */
   #ingest(proc: Proc, chunk: string): void {
     proc.partial += chunk;
-    let nl = proc.partial.indexOf('\n');
+    let nl = proc.partial.indexOf("\n");
     while (nl >= 0) {
       this.#record(proc, proc.partial.slice(0, nl));
       proc.partial = proc.partial.slice(nl + 1);
-      nl = proc.partial.indexOf('\n');
+      nl = proc.partial.indexOf("\n");
     }
   }
 
@@ -459,19 +511,23 @@ export class SessiondServer {
     }
     const line: SessiondLine = { seq: event.seq, procId: proc.procId, data };
     for (const conn of this.#conns) {
-      if (!conn.cursors.has(proc.procId)) continue;
+      if (!conn.cursors.has(proc.procId)) {
+        continue;
+      }
       conn.cursors.set(proc.procId, line.seq);
-      this.#send(conn, { type: 'proc.line', event: line });
+      this.#send(conn, { type: "proc.line", event: line });
     }
   }
 
   #reap(proc: Proc, code: number | null, signal: NodeJS.Signals | null): void {
-    if (!proc.alive) return;
+    if (!proc.alive) {
+      return;
+    }
     // The final line often arrives without its newline; record it rather than
     // lose the record that explains the death.
     if (proc.partial) {
       this.#record(proc, proc.partial);
-      proc.partial = '';
+      proc.partial = "";
     }
     proc.alive = false;
     proc.exitCode = code;
@@ -479,14 +535,23 @@ export class SessiondServer {
     // A proc `#spawn` has already replaced under its id is nobody's session
     // any more: its exit, announced under that id, would land on the
     // successor's subscriber as the successor's own death.
-    if (this.#procs.get(proc.procId) !== proc) return;
+    if (this.#procs.get(proc.procId) !== proc) {
+      return;
+    }
     for (const conn of this.#conns) {
-      this.#send(conn, { type: 'proc.exit', procId: proc.procId, exitCode: code, signal });
+      this.#send(conn, {
+        type: "proc.exit",
+        procId: proc.procId,
+        exitCode: code,
+        signal,
+      });
     }
   }
 
   #send(conn: Conn, message: SessiondServerMessage): void {
-    if (conn.socket.destroyed) return;
+    if (conn.socket.destroyed) {
+      return;
+    }
     conn.socket.write(`${JSON.stringify(message)}\n`);
   }
 
@@ -514,17 +579,23 @@ export class SessiondServer {
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
     for (const proc of alive) {
-      if (proc.alive) proc.child.kill('SIGKILL');
+      if (proc.alive) {
+        proc.child.kill("SIGKILL");
+      }
     }
   }
 
   /** Stop listening and drop the socket file. Children are drain's business. */
   async close(): Promise<void> {
-    for (const conn of this.#conns) conn.socket.destroy();
+    for (const conn of this.#conns) {
+      conn.socket.destroy();
+    }
     this.#conns.clear();
     const server = this.#server;
     this.#server = undefined;
-    if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
+    if (server) {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
     if (this.#endpoint) {
       await unlink(this.#endpoint).catch(() => {
         /* already unlinked */
@@ -534,14 +605,22 @@ export class SessiondServer {
   }
 }
 
-const ack = (commandId: string, stage: SessiondAck['stage'], reason?: string): SessiondAck => ({
-  type: 'ack',
+const ack = (
+  commandId: string,
+  stage: SessiondAck["stage"],
+  reason?: string
+): SessiondAck => ({
+  type: "ack",
   commandId,
   stage,
   ...(reason ? { reason } : {}),
 });
 
-const toLine = (event: { seq: number; sessionId: string; frame: unknown }): SessiondLine => ({
+const toLine = (event: {
+  seq: number;
+  sessionId: string;
+  frame: unknown;
+}): SessiondLine => ({
   seq: event.seq,
   procId: event.sessionId,
   data: event.frame as string,
@@ -551,11 +630,11 @@ const toLine = (event: { seq: number; sessionId: string; frame: unknown }): Sess
 const probe = (endpoint: string): Promise<boolean> =>
   new Promise((resolve) => {
     const socket = createConnection(endpoint);
-    socket.once('connect', () => {
+    socket.once("connect", () => {
       socket.destroy();
       resolve(true);
     });
-    socket.once('error', () => {
+    socket.once("error", () => {
       socket.destroy();
       resolve(false);
     });

@@ -1,24 +1,29 @@
 <script lang="ts">
+  import { untrack } from "svelte";
+  import { quintOut } from "svelte/easing";
+  import { fly } from "svelte/transition";
+  import { Input } from "$lib/components/ui/input";
   /** Find in session. The transcript is virtualized, so native find only ever
    *  sees the handful of groups currently mounted — this matches the store's
    *  text instead and asks the page to scroll the hit into view. */
-  import { IconChevronDown, IconChevronUp, IconClose, IconSearch } from '$lib/icons';
-  import { Input } from '$lib/components/ui/input';
-  import { untrack } from 'svelte';
-  import { fly } from 'svelte/transition';
-  import { quintOut } from 'svelte/easing';
-  import type { JsonValue, TranscriptGroup } from '$lib/whiffle/types';
+  import {
+    IconChevronDown,
+    IconChevronUp,
+    IconClose,
+    IconSearch,
+  } from "$lib/icons";
+  import type { JsonValue, TranscriptGroup } from "$lib/whiffle/types";
 
   interface Props {
     groups: TranscriptGroup[];
-    onJump: (groupIndex: number) => void;
     onClose: () => void;
+    onJump: (groupIndex: number) => void;
   }
 
   let { groups, onJump, onClose }: Props = $props();
 
   let input = $state<HTMLInputElement | null>(null);
-  let query = $state('');
+  let query = $state("");
   /** Position within `matches`, reset by every edit of the query. */
   let current = $state(0);
 
@@ -34,32 +39,41 @@
 
   /** Per field, so one enormous tool payload cannot decide what a scan costs. */
   const field = (value: JsonValue | undefined) =>
-    value === undefined ? '' : JSON.stringify(value).slice(0, 20_000);
+    value === undefined ? "" : JSON.stringify(value).slice(0, 20_000);
 
   function groupText(group: TranscriptGroup): string {
-    if (group.kind === 'single') return group.message.content;
-    if (group.kind === 'subagent') {
-      return [group.branch.description ?? '', ...group.branch.messages.map((m) => m.content)].join(
-        '\n'
-      );
+    if (group.kind === "single") {
+      return group.message.content;
+    }
+    if (group.kind === "subagent") {
+      return [
+        group.branch.description ?? "",
+        ...group.branch.messages.map((m) => m.content),
+      ].join("\n");
     }
     return group.messages
       .map((m) =>
-        [m.metadata?.toolName ?? '', field(m.metadata?.toolInput), field(m.metadata?.toolResult)].join(
-          ' '
-        )
+        [
+          m.metadata?.toolName ?? "",
+          field(m.metadata?.toolInput),
+          field(m.metadata?.toolResult),
+        ].join(" ")
       )
-      .join('\n');
+      .join("\n");
   }
 
   // Scanning every group on each keystroke is sub-millisecond at transcript
   // sizes, so there is nothing for a debounce to save.
   const matches = $derived.by(() => {
     const needle = query.trim().toLowerCase();
-    if (needle.length < 2) return [];
+    if (needle.length < 2) {
+      return [];
+    }
     const hits: number[] = [];
     groups.forEach((group, index) => {
-      if (groupText(group).toLowerCase().includes(needle)) hits.push(index);
+      if (groupText(group).toLowerCase().includes(needle)) {
+        hits.push(index);
+      }
     });
     return hits;
   });
@@ -70,28 +84,34 @@
   const target = $derived(matches[current] ?? -1);
 
   $effect(() => {
-    if (target < 0) return;
+    if (target < 0) {
+      return;
+    }
     untrack(() => onJump(target));
   });
 
   function step(delta: number) {
-    if (!matches.length) return;
+    if (!matches.length) {
+      return;
+    }
     current = (current + delta + matches.length) % matches.length;
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
+    if (event.key === "Escape") {
       event.preventDefault();
       onClose();
       return;
     }
-    if (event.key !== 'Enter') return;
+    if (event.key !== "Enter") {
+      return;
+    }
     event.preventDefault();
     step(event.shiftKey ? -1 : 1);
   }
 
   const control =
-    'flex min-h-6 shrink-0 items-center rounded px-1 transition-colors hover:bg-accent hover:text-accent-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30';
+    "flex min-h-6 shrink-0 items-center rounded px-1 transition-colors hover:bg-accent hover:text-accent-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30";
 </script>
 
 <div
@@ -101,13 +121,13 @@
 >
   <IconSearch class="size-3.5 shrink-0 text-muted-foreground" />
   <Input
-    bind:ref={input}
-    bind:value={query}
-    class="h-auto w-56 border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
-    placeholder="Find in session"
     aria-label="Find in session"
+    class="h-auto w-56 border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
     oninput={() => (current = 0)}
     onkeydown={handleKeydown}
+    placeholder="Find in session"
+    bind:ref={input}
+    bind:value={query}
   />
   {#if query.trim()}
     <span class="shrink-0 text-xs text-muted-foreground tabular-nums">
@@ -115,24 +135,29 @@
     </span>
   {/if}
   <button
-    type="button"
+    aria-label="Previous match"
     class={control}
     disabled={matches.length === 0}
-    aria-label="Previous match"
     onclick={() => step(-1)}
+    type="button"
   >
     <IconChevronUp class="size-3.5" />
   </button>
   <button
-    type="button"
+    aria-label="Next match"
     class={control}
     disabled={matches.length === 0}
-    aria-label="Next match"
     onclick={() => step(1)}
+    type="button"
   >
     <IconChevronDown class="size-3.5" />
   </button>
-  <button type="button" class={control} aria-label="Close search" onclick={onClose}>
+  <button
+    aria-label="Close search"
+    class={control}
+    onclick={onClose}
+    type="button"
+  >
     <IconClose class="size-3.5" />
   </button>
 </div>

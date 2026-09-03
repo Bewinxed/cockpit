@@ -6,16 +6,17 @@
  * queried and the results are merged, so the picker shows everything the fleet
  * can run. Kept in localStorage across visits.
  */
-import { untrack } from 'svelte';
-import type { InstanceRow, ModelInfo } from '@whiffle/core';
-import { whiffle, loadModels, isCustodyRefusal } from './client.svelte';
-import { readJson, writeJson } from './storage';
+
+import type { InstanceRow, ModelInfo } from "@whiffle/core";
+import { untrack } from "svelte";
+import { isCustodyRefusal, loadModels, whiffle } from "./client.svelte";
+import { readJson, writeJson } from "./storage";
 
 /**
  * Both keys hang off one prefix so the imminent product rename is one edit.
  * Nothing else may write the literal.
  */
-export const MODEL_STORAGE_PREFIX = 'whiffle-models';
+export const MODEL_STORAGE_PREFIX = "whiffle-models";
 const OFFERED_KEY = MODEL_STORAGE_PREFIX;
 const RECENT_KEY = `${MODEL_STORAGE_PREFIX}:recent`;
 
@@ -27,7 +28,7 @@ const isKnownModel = (id: string): boolean =>
   store.offered.some((row) => covers(row, id));
 
 /** What the form sends when the user has not chosen: nothing, and the SDK picks. */
-export const MODEL_DEFAULT = '';
+export const MODEL_DEFAULT = "";
 
 const store = $state({
   offered: [] as ModelInfo[],
@@ -40,7 +41,7 @@ const store = $state({
 // What the last visit learned, read once as the module loads rather than from a
 // getter — a read that writes is a render that mutates. Nothing to read on the
 // server, where the picker is a trigger and no more.
-if (typeof localStorage !== 'undefined') {
+if (typeof localStorage !== "undefined") {
   store.offered = readJson<ModelInfo[]>(OFFERED_KEY, []);
   store.recent = readJson<string[]>(RECENT_KEY, []);
 
@@ -63,8 +64,10 @@ function liveByHarness(): InstanceRow[] {
   const seen = new Set<string>();
   const result: InstanceRow[] = [];
   for (const row of whiffle.runningInstances) {
-    const harness = row.harness ?? 'claude';
-    if (seen.has(harness)) continue;
+    const harness = row.harness ?? "claude";
+    if (seen.has(harness)) {
+      continue;
+    }
     seen.add(harness);
     result.push(row);
   }
@@ -84,21 +87,31 @@ const asked = new Set<string>();
 
 async function ask(): Promise<void> {
   if (liveByHarness().length === 0) {
-    throw new Error('A session has to be running to ask what models it offers.');
+    throw new Error(
+      "A session has to be running to ask what models it offers."
+    );
   }
   const rows = liveByHarness().filter((row) => !asked.has(row.id));
-  if (rows.length === 0) return;
-  for (const row of rows) asked.add(row.id);
+  if (rows.length === 0) {
+    return;
+  }
+  for (const row of rows) {
+    asked.add(row.id);
+  }
   store.loading = true;
   store.error = null;
   let refused: unknown;
   try {
     const lists = await Promise.all(
       rows.map((row) =>
-        loadModels(row.id, row.machineId).catch((error: unknown): ModelInfo[] => {
-          if (!isCustodyRefusal(error)) refused ??= error;
-          return [];
-        })
+        loadModels(row.id, row.machineId).catch(
+          (error: unknown): ModelInfo[] => {
+            if (!isCustodyRefusal(error)) {
+              refused ??= error;
+            }
+            return [];
+          }
+        )
       )
     );
     // Merge and deduplicate by value — first occurrence wins (preserves order).
@@ -106,12 +119,16 @@ async function ask(): Promise<void> {
     const merged: ModelInfo[] = [];
     for (const list of lists) {
       for (const model of list) {
-        if (seen.has(model.value)) continue;
+        if (seen.has(model.value)) {
+          continue;
+        }
         seen.add(model.value);
         merged.push(model);
       }
     }
-    if (merged.length === 0 && refused !== undefined) throw refused;
+    if (merged.length === 0 && refused !== undefined) {
+      throw refused;
+    }
     store.offered = merged;
     writeJson(OFFERED_KEY, merged);
   } finally {
@@ -125,7 +142,9 @@ export const models = {
   },
   /** Typed-in ids the offered list does not cover, newest first. */
   get recent(): string[] {
-    return store.recent.filter((id) => !store.offered.some((row) => covers(row, id)));
+    return store.recent.filter(
+      (id) => !store.offered.some((row) => covers(row, id))
+    );
   },
   get loading(): boolean {
     return store.loading;
@@ -148,7 +167,9 @@ export const models = {
  */
 export function ensureModels(): void {
   untrack(() => {
-    if (store.offered.length > 0 || !hasLiveSession()) return;
+    if (store.offered.length > 0 || !hasLiveSession()) {
+      return;
+    }
     void ask().catch((error: unknown) => {
       store.error = error instanceof Error ? error.message : String(error);
     });
@@ -176,7 +197,9 @@ export const covers = (row: ModelInfo, model: string): boolean =>
 
 /** What to call a model in a trigger: the offered name, or the id as typed. */
 export function modelLabel(model: string): string {
-  if (!model) return 'Default';
+  if (!model) {
+    return "Default";
+  }
   return models.offered.find((row) => covers(row, model))?.displayName ?? model;
 }
 
@@ -189,7 +212,7 @@ export function modelLabel(model: string): string {
  * Pure string work, so it lives in a plain module — `models.svelte.ts` is full
  * of Svelte runes and `$app/*` imports, which no plain `bun test` can load.
  */
-export { providerOf } from './provider';
+export { providerOf } from "./provider";
 
 /**
  * Remembers an id the user typed, so the next session can pick it off a list.
@@ -200,8 +223,15 @@ export { providerOf } from './provider';
  */
 export function rememberModel(model: string): void {
   const id = model.trim();
-  if (!id) return;
-  if (store.offered.length > 0 && !isKnownModel(id)) return;
-  store.recent = [id, ...store.recent.filter((seen) => seen !== id)].slice(0, RECENT_LIMIT);
+  if (!id) {
+    return;
+  }
+  if (store.offered.length > 0 && !isKnownModel(id)) {
+    return;
+  }
+  store.recent = [id, ...store.recent.filter((seen) => seen !== id)].slice(
+    0,
+    RECENT_LIMIT
+  );
   writeJson(RECENT_KEY, store.recent);
 }

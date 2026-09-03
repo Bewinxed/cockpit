@@ -5,9 +5,14 @@
  * an id across the fleet), and a link that carried them went stale the moment
  * the transcript moved. A bare id is shareable, bookmarkable, and never wrong.
  */
-import { deriveTitleFromFirstMessage, type SDKSessionInfo } from '@whiffle/core';
+import {
+  deriveTitleFromFirstMessage,
+  type SDKSessionInfo,
+} from "@whiffle/core";
 
-export function transcriptHref(info: Pick<SDKSessionInfo, 'sessionId'>): string {
+export function transcriptHref(
+  info: Pick<SDKSessionInfo, "sessionId">
+): string {
   return `/session/${info.sessionId}`;
 }
 
@@ -38,18 +43,24 @@ export function resolveSessionTitle(input: {
   id?: string | null;
 }): string {
   const named = input.title?.trim();
-  if (named) return named;
+  if (named) {
+    return named;
+  }
 
   const first = input.firstMessage?.trim();
   if (first) {
     const derived = fromFirstMessage(first);
-    if (derived) return derived;
+    if (derived) {
+      return derived;
+    }
   }
 
-  const leaf = (input.cwd ?? '').split('/').filter(Boolean).pop();
-  if (leaf) return leaf;
+  const leaf = (input.cwd ?? "").split("/").filter(Boolean).pop();
+  if (leaf) {
+    return leaf;
+  }
 
-  return input.id ? input.id.slice(0, 8) : 'session';
+  return input.id ? input.id.slice(0, 8) : "session";
 }
 
 /** The same title, for a stored session the machine's catalog described. */
@@ -68,7 +79,7 @@ export function sessionTitle(info: SDKSessionInfo): string {
  * whiffle#3c872de1"), so the rail and the transcript agree on what to call it.
  */
 export function delegateHandle(row: { id: string; cwd: string }): string {
-  const leaf = row.cwd.split('/').filter(Boolean).pop() ?? 'session';
+  const leaf = row.cwd.split("/").filter(Boolean).pop() ?? "session";
   return `${leaf}#${row.id.slice(0, 8)}`;
 }
 
@@ -82,8 +93,12 @@ export function resolveInstanceId(
   id: string | null | undefined,
   instances: ReadonlyArray<{ id: string }>
 ): string | undefined {
-  if (!id) return undefined;
-  if (instances.some((row) => row.id === id)) return id;
+  if (!id) {
+    return undefined;
+  }
+  if (instances.some((row) => row.id === id)) {
+    return id;
+  }
   if (id.length >= 8) {
     const matches = instances.filter((row) => row.id.startsWith(id));
     return matches.length === 1 ? matches[0].id : undefined;

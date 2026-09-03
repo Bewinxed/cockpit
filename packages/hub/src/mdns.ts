@@ -1,7 +1,7 @@
-import { WHIFFLE_ENV, WHIFFLE_MDNS_TYPE, readEnv } from '@whiffle/core';
-import { Bonjour } from 'bonjour-service';
-import { hostname } from 'node:os';
-import { HUB_VERSION } from './config';
+import { hostname } from "node:os";
+import { readEnv, WHIFFLE_ENV, WHIFFLE_MDNS_TYPE } from "@whiffle/core";
+import { Bonjour } from "bonjour-service";
+import { HUB_VERSION } from "./config";
 
 /**
  * Announces the hub on the local link, so `whiffle up` on a machine plugged into
@@ -13,8 +13,8 @@ import { HUB_VERSION } from './config';
  * carry that case.
  */
 export const advertise = (port: number): void => {
-  if (readEnv(WHIFFLE_ENV.noMdns) === '1') {
-    console.log('[hub] mDNS advertisement disabled');
+  if (readEnv(WHIFFLE_ENV.noMdns) === "1") {
+    console.log("[hub] mDNS advertisement disabled");
     return;
   }
 
@@ -25,11 +25,13 @@ export const advertise = (port: number): void => {
     const service = bonjour.publish({
       name: `whiffle-${hostname()}`,
       type: WHIFFLE_MDNS_TYPE,
-      protocol: 'tcp',
+      protocol: "tcp",
       port,
       txt: { version: HUB_VERSION },
     });
-    service.on('error', (error: Error) => console.log(`[hub] mDNS unavailable: ${error.message}`));
+    service.on("error", (error: Error) =>
+      console.log(`[hub] mDNS unavailable: ${error.message}`)
+    );
     console.log(`[hub] advertising _${WHIFFLE_MDNS_TYPE}._tcp on :${port}`);
   } catch (error) {
     console.log(`[hub] mDNS unavailable: ${(error as Error).message}`);

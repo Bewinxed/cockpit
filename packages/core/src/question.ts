@@ -1,4 +1,4 @@
-import type { PermissionResult, UserAnswers, UserQuestion } from './harness';
+import type { PermissionResult, UserAnswers, UserQuestion } from "./harness";
 
 /**
  * The reader's choices, back the way the tool reads them: the question tool's
@@ -21,10 +21,11 @@ export function answeredQuestionInput(
 }
 
 /** What a question denied with nothing said is: the reader walked away from it. */
-export const QUESTION_DISMISSED = 'The user dismissed the question without answering it.';
+export const QUESTION_DISMISSED =
+  "The user dismissed the question without answering it.";
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
+  typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
 
@@ -35,11 +36,15 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
  * the option label it chose, so the `multiSelect` flag it never saw is applied
  * here, from the question the harness actually parked.
  */
-function shapedAnswers(questions: UserQuestion[], answers: UserAnswers): UserAnswers {
+function shapedAnswers(
+  questions: UserQuestion[],
+  answers: UserAnswers
+): UserAnswers {
   const shaped: UserAnswers = {};
   for (const [question, value] of Object.entries(answers)) {
     const asked = questions.find((q) => q.question === question);
-    shaped[question] = asked?.multiSelect && !Array.isArray(value) ? [value] : value;
+    shaped[question] =
+      asked?.multiSelect && !Array.isArray(value) ? [value] : value;
   }
   return shaped;
 }
@@ -50,8 +55,10 @@ function shapedAnswers(questions: UserQuestion[], answers: UserAnswers): UserAns
  * and a denial that says something.
  */
 export type SettledQuestion =
-  | (Extract<PermissionResult, { behavior: 'allow' }> & { updatedInput?: Record<string, unknown> })
-  | Extract<PermissionResult, { behavior: 'deny' }>;
+  | (Extract<PermissionResult, { behavior: "allow" }> & {
+      updatedInput?: Record<string, unknown>;
+    })
+  | Extract<PermissionResult, { behavior: "deny" }>;
 
 /**
  * A parked question's answer, settled the way the harness that asked it can
@@ -67,13 +74,17 @@ export function settledQuestionResult(
   parked: { input: Record<string, unknown>; questions: UserQuestion[] },
   result: PermissionResult
 ): SettledQuestion {
-  if (result.behavior === 'deny') return { ...result, message: result.message || QUESTION_DISMISSED };
+  if (result.behavior === "deny") {
+    return { ...result, message: result.message || QUESTION_DISMISSED };
+  }
 
   const sent = asRecord(result.updatedInput);
   // Allowed with no input of its own runs the tool as the model wrote it —
   // already whole, and not ours to rewrite. Anything that is not an input
   // object is not one either, and goes no further.
-  if (!sent) return { ...result, updatedInput: undefined };
+  if (!sent) {
+    return { ...result, updatedInput: undefined };
+  }
 
   const answers = asRecord(sent.answers) as UserAnswers | null;
   const input = { ...parked.input, ...sent };

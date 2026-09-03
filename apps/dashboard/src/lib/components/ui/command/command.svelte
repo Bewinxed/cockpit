@@ -1,25 +1,25 @@
 <script lang="ts">
-	import { Command as CommandPrimitive } from "bits-ui";
-	import { cn } from "$lib/utils.js";
+  import { Command as CommandPrimitive } from "bits-ui";
+  import { cn } from "$lib/utils.js";
 
-	export type CommandRootApi = CommandPrimitive.Root;
+  export type CommandRootApi = CommandPrimitive.Root;
 
-	let {
-		api = $bindable(null),
-		ref = $bindable(null),
-		value = $bindable(""),
-		class: className,
-		...restProps
-	}: CommandPrimitive.RootProps & {
-		api?: CommandRootApi | null;
-	} = $props();
+  let {
+    api = $bindable(null),
+    ref = $bindable(null),
+    value = $bindable(""),
+    class: className,
+    ...restProps
+  }: CommandPrimitive.RootProps & {
+    api?: CommandRootApi | null;
+  } = $props();
 </script>
 
 <CommandPrimitive.Root
-	bind:this={api}
-	bind:value
-	bind:ref
-	data-slot="command"
-	class={cn("rounded-[var(--radius-control)] bg-popover p-1 text-popover-foreground flex size-full flex-col overflow-hidden", className)}
-	{...restProps}
+  class={cn("rounded-[var(--radius-control)] bg-popover p-1 text-popover-foreground flex size-full flex-col overflow-hidden", className)}
+  data-slot="command"
+  bind:this={api}
+  bind:ref
+  bind:value
+  {...restProps}
 />

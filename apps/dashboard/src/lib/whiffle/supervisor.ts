@@ -1,4 +1,4 @@
-import type { SupervisorEvent } from '@whiffle/core';
+import type { SupervisorEvent } from "@whiffle/core";
 
 /**
  * The dashboard's side of the supervisor REST surface. Fetch wrappers in the
@@ -12,8 +12,10 @@ async function said(response: Response): Promise<string> {
   const body = await response.text();
   try {
     const parsed: unknown = JSON.parse(body);
-    if (typeof parsed === 'string') return parsed;
-    if (parsed && typeof parsed === 'object' && 'message' in parsed) {
+    if (typeof parsed === "string") {
+      return parsed;
+    }
+    if (parsed && typeof parsed === "object" && "message" in parsed) {
       return String((parsed as { message: unknown }).message);
     }
   } catch {
@@ -22,14 +24,20 @@ async function said(response: Response): Promise<string> {
   return body || `the hub answered ${response.status}`;
 }
 
-async function send<T>(url: string, init: RequestInit, attempt: string): Promise<T> {
+async function send<T>(
+  url: string,
+  init: RequestInit,
+  attempt: string
+): Promise<T> {
   const response = await fetch(url, init);
-  if (!response.ok) throw new Error(`Could not ${attempt} — ${await said(response)}.`);
+  if (!response.ok) {
+    throw new Error(`Could not ${attempt} — ${await said(response)}.`);
+  }
   return (await response.json()) as T;
 }
 
 const json = (body: unknown): RequestInit => ({
-  headers: { 'Content-Type': 'application/json' },
+  headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),
 });
 
@@ -50,24 +58,24 @@ export interface SupervisorStatus {
 
 /** What `PUT /api/supervisor/config` accepts. */
 export interface SupervisorConfigPayload {
-  enabled: boolean;
-  baseUrl: string;
-  model: string;
   apiKey?: string;
+  baseUrl: string;
+  enabled: boolean;
+  model: string;
 }
 
 /** Read the supervisor's config + live reachability probe. */
 export const loadSupervisor = (): Promise<SupervisorStatus> =>
-  send<SupervisorStatus>('/api/supervisor', {}, 'load supervisor status');
+  send<SupervisorStatus>("/api/supervisor", {}, "load supervisor status");
 
 /** Write the supervisor's config. */
 export const saveSupervisorConfig = (
   payload: SupervisorConfigPayload
 ): Promise<{ ok: true }> =>
   send<{ ok: true }>(
-    '/api/supervisor/config',
-    { method: 'PUT', ...json(payload) },
-    'save supervisor config'
+    "/api/supervisor/config",
+    { method: "PUT", ...json(payload) },
+    "save supervisor config"
   );
 
 /** Read the intervention log, optionally filtered by session. */
@@ -76,12 +84,16 @@ export const loadSupervisorEvents = (opts?: {
   limit?: number;
 }): Promise<SupervisorEvent[]> => {
   const params = new URLSearchParams();
-  if (opts?.instanceId) params.set('instanceId', opts.instanceId);
-  if (opts?.limit != null) params.set('limit', String(opts.limit));
+  if (opts?.instanceId) {
+    params.set("instanceId", opts.instanceId);
+  }
+  if (opts?.limit != null) {
+    params.set("limit", String(opts.limit));
+  }
   const qs = params.toString();
   return send<SupervisorEvent[]>(
-    `/api/supervisor/events${qs ? `?${qs}` : ''}`,
+    `/api/supervisor/events${qs ? `?${qs}` : ""}`,
     {},
-    'load supervisor events'
+    "load supervisor events"
   );
 };

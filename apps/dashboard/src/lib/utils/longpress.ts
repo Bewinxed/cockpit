@@ -24,17 +24,23 @@ export function enableLongPressMenus(): () => void {
   let fired = false;
 
   const cancel = () => {
-    if (timer) clearTimeout(timer);
+    if (timer) {
+      clearTimeout(timer);
+    }
     timer = null;
   };
 
   const onTouchStart = (event: TouchEvent) => {
-    if (event.touches.length !== 1) return cancel();
+    if (event.touches.length !== 1) {
+      return cancel();
+    }
     const touch = event.touches[0];
     const target = event.target as HTMLElement | null;
     // Only where a menu actually is — a long press on a paragraph should keep
     // meaning what the platform says it means (text selection).
-    if (!target?.closest('[data-slot="context-menu-trigger"]')) return;
+    if (!target?.closest('[data-slot="context-menu-trigger"]')) {
+      return;
+    }
     startX = touch.clientX;
     startY = touch.clientY;
     fired = false;
@@ -42,7 +48,7 @@ export function enableLongPressMenus(): () => void {
     timer = setTimeout(() => {
       fired = true;
       target.dispatchEvent(
-        new MouseEvent('contextmenu', {
+        new MouseEvent("contextmenu", {
           bubbles: true,
           cancelable: true,
           clientX: startX,
@@ -54,8 +60,12 @@ export function enableLongPressMenus(): () => void {
 
   const onTouchMove = (event: TouchEvent) => {
     const touch = event.touches[0];
-    if (!touch) return cancel();
-    if (Math.hypot(touch.clientX - startX, touch.clientY - startY) > SLOP_PX) cancel();
+    if (!touch) {
+      return cancel();
+    }
+    if (Math.hypot(touch.clientX - startX, touch.clientY - startY) > SLOP_PX) {
+      cancel();
+    }
   };
 
   const onTouchEnd = (event: TouchEvent) => {
@@ -72,16 +82,25 @@ export function enableLongPressMenus(): () => void {
   // propagating once it has claimed an item, so a bubble listener on document
   // never hears a press that starts on a draggable row — which is every row
   // with a menu. Capture runs first and cannot be silenced from below.
-  document.addEventListener('touchstart', onTouchStart, { passive: true, capture: true });
-  document.addEventListener('touchmove', onTouchMove, { passive: true, capture: true });
-  document.addEventListener('touchend', onTouchEnd, { capture: true });
-  document.addEventListener('touchcancel', cancel, { passive: true, capture: true });
+  document.addEventListener("touchstart", onTouchStart, {
+    passive: true,
+    capture: true,
+  });
+  document.addEventListener("touchmove", onTouchMove, {
+    passive: true,
+    capture: true,
+  });
+  document.addEventListener("touchend", onTouchEnd, { capture: true });
+  document.addEventListener("touchcancel", cancel, {
+    passive: true,
+    capture: true,
+  });
 
   return () => {
     cancel();
-    document.removeEventListener('touchstart', onTouchStart, { capture: true });
-    document.removeEventListener('touchmove', onTouchMove, { capture: true });
-    document.removeEventListener('touchend', onTouchEnd, { capture: true });
-    document.removeEventListener('touchcancel', cancel, { capture: true });
+    document.removeEventListener("touchstart", onTouchStart, { capture: true });
+    document.removeEventListener("touchmove", onTouchMove, { capture: true });
+    document.removeEventListener("touchend", onTouchEnd, { capture: true });
+    document.removeEventListener("touchcancel", cancel, { capture: true });
   };
 }

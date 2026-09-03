@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { FleetAgent, FleetConfig, FleetSkillMeta } from "@whiffle/core";
   /**
    * What the fleet's machines carry: MCP servers, skills, subagents, memory,
    * and hooks — one panel visible at a time behind a labelled tab selector,
@@ -6,37 +7,38 @@
    * strip above the tabs so fleet-wide failures are visible without hunting
    * through panels. (JOURNEY.md §4)
    */
-  import { onMount, untrack } from 'svelte';
-  import type { FleetAgent, FleetConfig, FleetSkillMeta } from '@whiffle/core';
-  import * as Tooltip from '$lib/components/ui/tooltip';
-  import * as Card from '$lib/components/ui/card';
-  import * as Tabs from '$lib/components/ui/tabs';
-  import { whiffle } from '$lib/whiffle/client.svelte';
-  import type { FleetMemoryDocRow, FleetMemoryRow } from '$lib/whiffle/fleet';
-  import type { FleetHook } from '$lib/whiffle/hooks';
-  import FleetAgents from '$lib/whiffle/FleetAgents.svelte';
-  import FleetHooks from '$lib/whiffle/FleetHooks.svelte';
-  import FleetMcp from '$lib/whiffle/FleetMcp.svelte';
-  import FleetMemory from '$lib/whiffle/FleetMemory.svelte';
-  import FleetSkills from '$lib/whiffle/FleetSkills.svelte';
-  import FleetTrouble from '$lib/whiffle/FleetTrouble.svelte';
-  import ToolMatrix from '$lib/whiffle/ToolMatrix.svelte';
-  import { orderMachines } from '$lib/whiffle/rail.svelte';
+  import { onMount, untrack } from "svelte";
+  import { page } from "$app/state";
+  import * as Card from "$lib/components/ui/card";
+  import * as Tabs from "$lib/components/ui/tabs";
+  import * as Tooltip from "$lib/components/ui/tooltip";
   import {
-    IconToolGeneric,
-    IconToolMcp,
     IconBoltDuo,
-    IconSubagentDuo,
     IconBookDuo,
     IconHookDuo,
-  } from '$lib/icons';
-  import { page } from '$app/state';
-  import type { PageData } from './$types';
+    IconSubagentDuo,
+    IconToolGeneric,
+    IconToolMcp,
+  } from "$lib/icons";
+  import { whiffle } from "$lib/whiffle/client.svelte";
+  import FleetAgents from "$lib/whiffle/FleetAgents.svelte";
+  import FleetHooks from "$lib/whiffle/FleetHooks.svelte";
+  import FleetMcp from "$lib/whiffle/FleetMcp.svelte";
+  import FleetMemory from "$lib/whiffle/FleetMemory.svelte";
+  import FleetSkills from "$lib/whiffle/FleetSkills.svelte";
+  import FleetTrouble from "$lib/whiffle/FleetTrouble.svelte";
+  import type { FleetMemoryDocRow, FleetMemoryRow } from "$lib/whiffle/fleet";
+  import type { FleetHook } from "$lib/whiffle/hooks";
+  import { orderMachines } from "$lib/whiffle/rail.svelte";
+  import ToolMatrix from "$lib/whiffle/ToolMatrix.svelte";
+  import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
 
   const machines = $derived(orderMachines(whiffle.machines));
-  const online = $derived(machines.filter((one) => one.status === 'online').length);
+  const online = $derived(
+    machines.filter((one) => one.status === "online").length
+  );
 
   /**
    * The hub's desired state, re-seeded when `data` changes (e.g. on navigation)
@@ -73,25 +75,25 @@
     return () => clearTimeout(timer);
   });
 
-  const TAB_ORDER = ['tools', 'mcp', 'skills', 'agents', 'memory', 'hooks'];
-  const activeTab = $derived(page.url.searchParams.get('tab') ?? 'tools');
-  let tabDir = $state<'left' | 'right'>('right');
+  const TAB_ORDER = ["tools", "mcp", "skills", "agents", "memory", "hooks"];
+  const activeTab = $derived(page.url.searchParams.get("tab") ?? "tools");
+  let tabDir = $state<"left" | "right">("right");
 
   function switchTab(value: string) {
     const fromIdx = TAB_ORDER.indexOf(activeTab);
     const toIdx = TAB_ORDER.indexOf(value);
-    tabDir = toIdx > fromIdx ? 'right' : 'left';
+    tabDir = toIdx > fromIdx ? "right" : "left";
 
     const url = new URL(location.href);
-    url.searchParams.set('tab', value);
-    history.replaceState(history.state, '', url);
+    url.searchParams.set("tab", value);
+    history.replaceState(history.state, "", url);
   }
 
   /* Dress shadcn Card as the Quiet Ledger raised panel (--surface-raised,
      --radius-panel, --shadow-lifted) — never the stock bg-card/ring
      shadcn ships. tailwind-merge drops the defaults these override. */
   const panelClass =
-    'gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--space-5)] shadow-[var(--shadow-lifted)] ring-0';
+    "gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--space-5)] shadow-[var(--shadow-lifted)] ring-0";
 </script>
 
 <svelte:head>
@@ -101,146 +103,197 @@
 <!-- The fleet panels all reach for a tooltip; without an ancestor provider they
      throw on the server, which is what used to leave /tools a 500 on a cold load. -->
 <Tooltip.Provider>
-<div class="page">
-  <div class="col">
-    <p class="sub">
-      {online} of {machines.length} machines reported
-    </p>
+  <div class="page">
+    <div class="col">
+      <p class="sub">{online} of {machines.length} machines reported</p>
 
-    <Card.Root id="fleet-trouble" class="scroll-mt-6 {panelClass}">
-      <header class="phead">
-        <h2>Needs attention</h2>
-        <span class="psub">Everything the fleet could not fetch or could not apply</span>
-      </header>
-      <div class="pbody">
-        <FleetTrouble {machines} {skills} plugins={config.plugins} {settling} />
-      </div>
-    </Card.Root>
+      <Card.Root class="scroll-mt-6 {panelClass}" id="fleet-trouble">
+        <header class="phead">
+          <h2>Needs attention</h2>
+          <span class="psub"
+            >Everything the fleet could not fetch or could not apply</span
+          >
+        </header>
+        <div class="pbody">
+          <FleetTrouble
+            {machines}
+            plugins={config.plugins}
+            {settling}
+            {skills}
+          />
+        </div>
+      </Card.Root>
 
-    <Tabs.Root value={activeTab} onValueChange={switchTab} data-tab-dir={tabDir}>
-      <Tabs.List class="tab-strip" variant="line">
-        <Tabs.Trigger value="tools">
-          <IconToolGeneric class="tab-icon" /><span class="tab-label">Tools</span> <span class="badge">{data.catalog.length}</span>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="mcp">
-          <IconToolMcp class="tab-icon" /><span class="tab-label">MCP</span> <span class="badge">{config.mcp.length}</span>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="skills">
-          <IconBoltDuo class="tab-icon" /><span class="tab-label">Skills</span> <span class="badge">{skills.length}</span>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="agents">
-          <IconSubagentDuo class="tab-icon" /><span class="tab-label">Agents</span> <span class="badge">{agents.length}</span>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="memory">
-          <IconBookDuo class="tab-icon" /><span class="tab-label">Memory</span>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="hooks">
-          <IconHookDuo class="tab-icon" /><span class="tab-label">Hooks</span> <span class="badge">{hooks.length}</span>
-        </Tabs.Trigger>
-      </Tabs.List>
+      <Tabs.Root
+        data-tab-dir={tabDir}
+        onValueChange={switchTab}
+        value={activeTab}
+      >
+        <Tabs.List class="tab-strip" variant="line">
+          <Tabs.Trigger value="tools">
+            <IconToolGeneric class="tab-icon" />
+            <span class="tab-label">Tools</span>
+            <span class="badge">{data.catalog.length}</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="mcp">
+            <IconToolMcp class="tab-icon" /><span class="tab-label">MCP</span>
+            <span class="badge">{config.mcp.length}</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="skills">
+            <IconBoltDuo class="tab-icon" />
+            <span class="tab-label">Skills</span>
+            <span class="badge">{skills.length}</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="agents">
+            <IconSubagentDuo class="tab-icon" />
+            <span class="tab-label">Agents</span>
+            <span class="badge">{agents.length}</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="memory">
+            <IconBookDuo class="tab-icon" />
+            <span class="tab-label">Memory</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="hooks">
+            <IconHookDuo class="tab-icon" /><span class="tab-label">Hooks</span>
+            <span class="badge">{hooks.length}</span>
+          </Tabs.Trigger>
+        </Tabs.List>
 
-      <!-- Only render the active panel. The old code rendered all 6 panels
+        <!-- Only render the active panel. The old code rendered all 6 panels
            (242KB of hidden HTML including 106KB for Skills alone), blocking the
            main thread for 243ms on mount. {#if} defers rendering until the
            tab is selected. -->
-      {#if activeTab === 'tools'}
-      <Tabs.Content value="tools">
-        <Card.Root class={panelClass}>
-          <header class="phead">
-            <h2>Tool matrix</h2>
-            <span class="psub">Workflow CLIs, machine by machine</span>
-          </header>
-          <div class="pbody">
-            <ToolMatrix
-              {machines}
-              {settling}
-              catalog={data.catalog}
-              policies={data.policies}
-              error={data.toolsError}
-            />
-          </div>
-        </Card.Root>
-      </Tabs.Content>
-      {/if}
+        {#if activeTab === 'tools'}
+          <Tabs.Content value="tools">
+            <Card.Root class={panelClass}>
+              <header class="phead">
+                <h2>Tool matrix</h2>
+                <span class="psub">Workflow CLIs, machine by machine</span>
+              </header>
+              <div class="pbody">
+                <ToolMatrix
+                  catalog={data.catalog}
+                  error={data.toolsError}
+                  {machines}
+                  policies={data.policies}
+                  {settling}
+                />
+              </div>
+            </Card.Root>
+          </Tabs.Content>
+        {/if}
 
-      {#if activeTab === 'mcp'}
-      <Tabs.Content value="mcp">
-        <Card.Root id="fleet-mcp" class="scroll-mt-6 {panelClass}">
-          <header class="phead">
-            <h2>MCP servers</h2>
-            <span class="psub">Written to every machine, online now or when it returns</span>
-          </header>
-          <div class="pbody">
-            <FleetMcp servers={config.mcp} {machines} {settling} error={data.fleetError} />
-          </div>
-        </Card.Root>
-      </Tabs.Content>
-      {/if}
+        {#if activeTab === 'mcp'}
+          <Tabs.Content value="mcp">
+            <Card.Root class="scroll-mt-6 {panelClass}" id="fleet-mcp">
+              <header class="phead">
+                <h2>MCP servers</h2>
+                <span class="psub"
+                  >Written to every machine, online now or when it returns</span
+                >
+              </header>
+              <div class="pbody">
+                <FleetMcp
+                  error={data.fleetError}
+                  {machines}
+                  servers={config.mcp}
+                  {settling}
+                />
+              </div>
+            </Card.Root>
+          </Tabs.Content>
+        {/if}
 
-      {#if activeTab === 'skills'}
-      <Tabs.Content value="skills">
-        <Card.Root id="fleet-skills" class="scroll-mt-6 {panelClass}">
-          <header class="phead">
-            <h2>Skills &amp; plugins</h2>
-            <span class="psub">Fetched once for the fleet, or cloned from a marketplace</span>
-          </header>
-          <div class="pbody">
-            <FleetSkills {config} {skills} {machines} {settling} error={data.fleetError} />
-          </div>
-        </Card.Root>
-      </Tabs.Content>
-      {/if}
+        {#if activeTab === 'skills'}
+          <Tabs.Content value="skills">
+            <Card.Root class="scroll-mt-6 {panelClass}" id="fleet-skills">
+              <header class="phead">
+                <h2>Skills &amp; plugins</h2>
+                <span class="psub"
+                  >Fetched once for the fleet, or cloned from a
+                  marketplace</span
+                >
+              </header>
+              <div class="pbody">
+                <FleetSkills
+                  {config}
+                  error={data.fleetError}
+                  {machines}
+                  {settling}
+                  {skills}
+                />
+              </div>
+            </Card.Root>
+          </Tabs.Content>
+        {/if}
 
-      {#if activeTab === 'agents'}
-      <Tabs.Content value="agents">
-        <Card.Root class={panelClass}>
-          <header class="phead">
-            <h2>Subagents</h2>
-            <span class="psub">Markdown files that land in ~/.claude/agents everywhere</span>
-          </header>
-          <div class="pbody">
-            <FleetAgents {agents} {machines} {settling} error={data.fleetError} />
-          </div>
-        </Card.Root>
-      </Tabs.Content>
-      {/if}
+        {#if activeTab === 'agents'}
+          <Tabs.Content value="agents">
+            <Card.Root class={panelClass}>
+              <header class="phead">
+                <h2>Subagents</h2>
+                <span class="psub"
+                  >Markdown files that land in ~/.claude/agents everywhere</span
+                >
+              </header>
+              <div class="pbody">
+                <FleetAgents
+                  {agents}
+                  error={data.fleetError}
+                  {machines}
+                  {settling}
+                />
+              </div>
+            </Card.Root>
+          </Tabs.Content>
+        {/if}
 
-      {#if activeTab === 'memory'}
-      <Tabs.Content value="memory">
-        <Card.Root id="fleet-memory" class="scroll-mt-6 {panelClass}">
-          <header class="phead">
-            <h2>Memory</h2>
-            <span class="psub">The user CLAUDE.md the whole fleet reads</span>
-          </header>
-          <div class="pbody">
-            <FleetMemory
-              bind:memory
-              bind:docs={memoryDocs}
-              {machines}
-              {settling}
-              error={data.fleetError}
-            />
-          </div>
-        </Card.Root>
-      </Tabs.Content>
-      {/if}
+        {#if activeTab === 'memory'}
+          <Tabs.Content value="memory">
+            <Card.Root class="scroll-mt-6 {panelClass}" id="fleet-memory">
+              <header class="phead">
+                <h2>Memory</h2>
+                <span class="psub"
+                  >The user CLAUDE.md the whole fleet reads</span
+                >
+              </header>
+              <div class="pbody">
+                <FleetMemory
+                  error={data.fleetError}
+                  {machines}
+                  {settling}
+                  bind:docs={memoryDocs}
+                  bind:memory
+                />
+              </div>
+            </Card.Root>
+          </Tabs.Content>
+        {/if}
 
-      {#if activeTab === 'hooks'}
-      <Tabs.Content value="hooks">
-        <Card.Root id="fleet-hooks" class="scroll-mt-6 {panelClass}">
-          <header class="phead">
-            <h2>Hooks</h2>
-            <span class="psub">Scripts and calls run on a session's own lifecycle events</span>
-          </header>
-          <div class="pbody">
-            <FleetHooks {hooks} {machines} {settling} error={data.hooksError} />
-          </div>
-        </Card.Root>
-      </Tabs.Content>
-      {/if}
-    </Tabs.Root>
+        {#if activeTab === 'hooks'}
+          <Tabs.Content value="hooks">
+            <Card.Root class="scroll-mt-6 {panelClass}" id="fleet-hooks">
+              <header class="phead">
+                <h2>Hooks</h2>
+                <span class="psub"
+                  >Scripts and calls run on a session's own lifecycle
+                  events</span
+                >
+              </header>
+              <div class="pbody">
+                <FleetHooks
+                  error={data.hooksError}
+                  {hooks}
+                  {machines}
+                  {settling}
+                />
+              </div>
+            </Card.Root>
+          </Tabs.Content>
+        {/if}
+      </Tabs.Root>
+    </div>
   </div>
-</div>
 </Tooltip.Provider>
 
 <style>
@@ -331,17 +384,23 @@
   }
 
   /* Tab content slides horizontally on switch, keyed to tab order. */
-  :global([data-tab-dir='right'] [data-state='active'][role='tabpanel']) {
+  :global([data-tab-dir="right"] [data-state="active"][role="tabpanel"]) {
     animation: tab-slide-from-right 150ms cubic-bezier(0.32, 0.72, 0, 1) both;
   }
-  :global([data-tab-dir='left'] [data-state='active'][role='tabpanel']) {
+  :global([data-tab-dir="left"] [data-state="active"][role="tabpanel"]) {
     animation: tab-slide-from-left 150ms cubic-bezier(0.32, 0.72, 0, 1) both;
   }
 
   @keyframes tab-slide-from-right {
-    from { transform: translateX(4%); opacity: 0; }
+    from {
+      transform: translateX(4%);
+      opacity: 0;
+    }
   }
   @keyframes tab-slide-from-left {
-    from { transform: translateX(-4%); opacity: 0; }
+    from {
+      transform: translateX(-4%);
+      opacity: 0;
+    }
   }
 </style>

@@ -5,14 +5,14 @@
    * textarea and enable switch. State reads from the instance row in the store;
    * writes go through `PUT /api/autopilot/:id` via autopilot.ts.
    */
-  import type { InstanceRow } from '@whiffle/core';
-  import { IsMobile } from '$lib/hooks/is-mobile.svelte';
-  import { IconSkill } from '$lib/icons';
-  import * as Popover from '$lib/components/ui/popover';
-  import * as Drawer from '$lib/components/ui/drawer';
-  import Switch from '$lib/components/ui/switch/switch.svelte';
-  import { setAutopilot } from './autopilot';
-  import { whiffle } from './client.svelte';
+  import type { InstanceRow } from "@whiffle/core";
+  import * as Drawer from "$lib/components/ui/drawer";
+  import * as Popover from "$lib/components/ui/popover";
+  import Switch from "$lib/components/ui/switch/switch.svelte";
+  import { IsMobile } from "$lib/hooks/is-mobile.svelte";
+  import { IconSkill } from "$lib/icons";
+  import { setAutopilot } from "./autopilot";
+  import { whiffle } from "./client.svelte";
 
   let {
     instanceId,
@@ -29,7 +29,7 @@
   let error = $state<string | null>(null);
 
   /** Local draft — seeded from the instance row each time the popover opens. */
-  let draft = $state('');
+  let draft = $state("");
   let enabled = $state(false);
 
   const active = $derived(instance?.autopilot?.enabled === true);
@@ -47,51 +47,59 @@
     return whiffle.supervisorActivityOf(instanceId);
   });
   $effect(() => {
-    if (activity?.phase !== 'settled') return;
-    const remaining = Math.max(100, 2_600 - (Date.now() - activity.at));
+    if (activity?.phase !== "settled") {
+      return;
+    }
+    const remaining = Math.max(100, 2600 - (Date.now() - activity.at));
     const timer = setTimeout(() => activityTick++, remaining + 50);
     return () => clearTimeout(timer);
   });
-  const evaluating = $derived(activity?.phase === 'evaluating');
-  const settled = $derived(activity?.phase === 'settled' ? activity.verdict : null);
+  const evaluating = $derived(activity?.phase === "evaluating");
+  const settled = $derived(
+    activity?.phase === "settled" ? activity.verdict : null
+  );
   const verdictInk = $derived(
-    settled === 'reply'
-      ? 'var(--accent-solid)'
-      : settled === 'escalate' || settled === 'ask'
-        ? 'var(--status-attn-ink)'
-        : settled === 'error'
-          ? 'var(--error-11)'
-          : 'var(--ink-muted)'
+    settled === "reply"
+      ? "var(--accent-solid)"
+      : settled === "escalate" || settled === "ask"
+        ? "var(--status-attn-ink)"
+        : settled === "error"
+          ? "var(--error-11)"
+          : "var(--ink-muted)"
   );
   const presence = $derived(
     evaluating
-      ? 'The supervisor is reading this turn…'
-      : settled === 'silent'
-        ? 'Supervisor: let it pass'
-        : settled === 'reply'
-          ? 'Supervisor: replied'
-          : settled === 'escalate' || settled === 'ask'
-            ? 'Supervisor: escalated to you'
-            : settled === 'error'
-              ? 'Supervisor: errored'
+      ? "The supervisor is reading this turn…"
+      : settled === "silent"
+        ? "Supervisor: let it pass"
+        : settled === "reply"
+          ? "Supervisor: replied"
+          : settled === "escalate" || settled === "ask"
+            ? "Supervisor: escalated to you"
+            : settled === "error"
+              ? "Supervisor: errored"
               : null
   );
 
   function seed() {
-    draft = instance?.autopilot?.prompt ?? '';
+    draft = instance?.autopilot?.prompt ?? "";
     enabled = instance?.autopilot?.enabled ?? false;
     error = null;
   }
 
   function onOpenChange(next: boolean) {
-    if (next) seed();
+    if (next) {
+      seed();
+    }
     open = next;
   }
 
   async function save() {
-    if (saving) return;
+    if (saving) {
+      return;
+    }
     if (enabled && draft.trim().length < 10) {
-      error = 'The standing prompt needs at least 10 characters.';
+      error = "The standing prompt needs at least 10 characters.";
       return;
     }
     saving = true;
@@ -111,45 +119,48 @@
   <div class="ap-body">
     <label class="ap-row">
       <span class="ap-label">Autopilot</span>
-      <Switch bind:checked={enabled} size="sm" />
+      <Switch size="sm" bind:checked={enabled} />
     </label>
 
     <textarea
+      aria-label="Standing prompt"
       class="ap-prompt"
-      bind:value={draft}
       placeholder="What should the autopilot watch for and how should it respond?"
       rows="4"
-      aria-label="Standing prompt"
+      bind:value={draft}
     ></textarea>
 
     {#if error}
       <p class="ap-error">{error}</p>
     {/if}
 
-    <button class="ap-save" type="button" onclick={save} disabled={saving}>
+    <button class="ap-save" disabled={saving} onclick={save} type="button">
       {saving ? 'Saving…' : 'Save'}
     </button>
   </div>
 {/snippet}
 
 {#if narrow.current}
-  <Drawer.Root bind:open onOpenChange={onOpenChange}>
+  <Drawer.Root {onOpenChange} bind:open>
     <Drawer.Trigger>
       {#snippet child({ props })}
         <button
           {...props}
-          class="ap-trigger"
-          class:ap-active={active}
-          type="button"
-          aria-pressed={active}
           aria-label={active ? 'Autopilot enabled' : 'Autopilot'}
+          aria-pressed={active}
+          class="ap-trigger"
           title={presence ?? (active ? 'Autopilot enabled' : 'Autopilot')}
+          type="button"
+          class:ap-active={active}
         >
           {#if evaluating}
-            <span class="ap-halo ap-halo-spin" aria-hidden="true"></span>
+            <span aria-hidden="true" class="ap-halo ap-halo-spin"></span>
           {:else if settled}
             {#key activity}
-              <span class="ap-halo ap-halo-pulse" style:--verdict-ink={verdictInk} aria-hidden="true"
+              <span
+                aria-hidden="true"
+                class="ap-halo ap-halo-pulse"
+                style:--verdict-ink={verdictInk}
               ></span>
             {/key}
           {/if}
@@ -157,7 +168,9 @@
         </button>
       {/snippet}
     </Drawer.Trigger>
-    <Drawer.Content class="max-h-[85vh] pb-[calc(1rem+env(safe-area-inset-bottom))]">
+    <Drawer.Content
+      class="max-h-[85vh] pb-[calc(1rem+env(safe-area-inset-bottom))]"
+    >
       <Drawer.Header class="p-0 pb-3 text-left">
         <Drawer.Title class="text-left">Autopilot</Drawer.Title>
       </Drawer.Header>
@@ -165,23 +178,26 @@
     </Drawer.Content>
   </Drawer.Root>
 {:else}
-  <Popover.Root bind:open onOpenChange={onOpenChange}>
+  <Popover.Root {onOpenChange} bind:open>
     <Popover.Trigger>
       {#snippet child({ props })}
         <button
           {...props}
-          class="ap-trigger"
-          class:ap-active={active}
-          type="button"
-          aria-pressed={active}
           aria-label={active ? 'Autopilot enabled' : 'Autopilot'}
+          aria-pressed={active}
+          class="ap-trigger"
           title={presence ?? (active ? 'Autopilot enabled' : 'Autopilot')}
+          type="button"
+          class:ap-active={active}
         >
           {#if evaluating}
-            <span class="ap-halo ap-halo-spin" aria-hidden="true"></span>
+            <span aria-hidden="true" class="ap-halo ap-halo-spin"></span>
           {:else if settled}
             {#key activity}
-              <span class="ap-halo ap-halo-pulse" style:--verdict-ink={verdictInk} aria-hidden="true"
+              <span
+                aria-hidden="true"
+                class="ap-halo ap-halo-pulse"
+                style:--verdict-ink={verdictInk}
               ></span>
             {/key}
           {/if}
@@ -189,7 +205,7 @@
         </button>
       {/snippet}
     </Popover.Trigger>
-    <Popover.Content align="start" side="top" sideOffset={8} class="w-72 p-0">
+    <Popover.Content align="start" class="w-72 p-0" side="top" sideOffset={8}>
       <div class="ap-popover-inner">
         <p class="ap-title">Autopilot</p>
         {@render body()}
@@ -199,7 +215,7 @@
 {/if}
 
 {#if presence}
-  <span class="sr-only" role="status" aria-live="polite">{presence}</span>
+  <span aria-live="polite" class="sr-only" role="status">{presence}</span>
 {/if}
 
 <style>
@@ -226,7 +242,11 @@
   .ap-halo {
     position: absolute;
     inset: -3px;
-    border-radius: calc(var(--radius-panel) - var(--cin-pad, var(--space-2)) + 3px);
+    border-radius: calc(
+      var(--radius-panel) -
+      var(--cin-pad, var(--space-2)) +
+      3px
+    );
     pointer-events: none;
     padding: 1.5px;
     -webkit-mask:

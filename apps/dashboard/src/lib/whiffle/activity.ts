@@ -3,7 +3,7 @@
  * (NEW.md §8 Phase 3). Kept out of the runes module so it stays a plain rule
  * anything can call, including a script driving the hub.
  */
-export type Activity = 'working' | 'blocked' | 'idle';
+export type Activity = "working" | "blocked" | "idle";
 
 /**
  * Blocked wins over working: a session with a parked permission is not making
@@ -14,31 +14,39 @@ export function activityOf(session: {
   busy: boolean;
   subagents?: Record<string, { status: string }>;
 }): Activity {
-  if (session.pending.length > 0) return 'blocked';
+  if (session.pending.length > 0) {
+    return "blocked";
+  }
   // A background subagent outlives the turn that spawned it: the main loop goes
   // quiet and `busy` drops, while the work the session was asked for carries on
   // somewhere else. Reporting that as idle is how a rail full of running agents
   // reads as a rail with nothing happening.
-  return session.busy || runningSubagents(session.subagents) > 0 ? 'working' : 'idle';
+  return session.busy || runningSubagents(session.subagents) > 0
+    ? "working"
+    : "idle";
 }
 
 /** How many of a session's subagents are still going — 0 for a session with none. */
 export function runningSubagents(
   subagents: Record<string, { status: string }> | undefined
 ): number {
-  if (!subagents) return 0;
+  if (!subagents) {
+    return 0;
+  }
   let running = 0;
   for (const branch of Object.values(subagents)) {
-    if (branch.status === 'running' || branch.status === 'starting') running += 1;
+    if (branch.status === "running" || branch.status === "starting") {
+      running += 1;
+    }
   }
   return running;
 }
 
 /** The word each state is shown as — the enum is wire vocabulary, not copy. */
 export const ACTIVITY_LABEL: Record<Activity, string> = {
-  working: 'Working',
-  blocked: 'Needs you',
-  idle: 'Idle',
+  working: "Working",
+  blocked: "Needs you",
+  idle: "Idle",
 };
 
 /**
@@ -48,10 +56,11 @@ export const ACTIVITY_LABEL: Record<Activity, string> = {
  * renders it as its own glyph now (leaf Y1) rather than this word in a pill —
  * the word survives only as that glyph's accessible name and tooltip.
  */
-export const SLEEPING_LABEL = 'Sleeping';
+export const SLEEPING_LABEL = "Sleeping";
 
 /** Why that is not a failure, wherever a sleeping row can carry a tooltip. */
-export const SLEEPING_HINT = 'Sleeping — it resumes when you open or message it.';
+export const SLEEPING_HINT =
+  "Sleeping — it resumes when you open or message it.";
 
 /**
  * The fifth word, for the status the old system could not admit at all: a row
@@ -62,10 +71,11 @@ export const SLEEPING_HINT = 'Sleeping — it resumes when you open or message i
  * fate as {@link SLEEPING_LABEL}: `ActivityDot`'s hollow glyph carries this
  * now, and the word survives as its accessible name and tooltip only.
  */
-export const UNKNOWN_LABEL = 'Unknown';
+export const UNKNOWN_LABEL = "Unknown";
 
 /** Why an unknown row is not the same as idle or asleep, for its tooltip. */
-export const UNKNOWN_HINT = "Unknown — the hub can't currently reach this session's machine.";
+export const UNKNOWN_HINT =
+  "Unknown — the hub can't currently reach this session's machine.";
 
 /**
  * The same fact as {@link UNKNOWN_HINT}, said once at the level it is actually
@@ -73,4 +83,5 @@ export const UNKNOWN_HINT = "Unknown — the hub can't currently reach this sess
  * session on an unreachable box repeated `UNKNOWN_HINT` on its own row; the
  * measured count on one board was 176 identical copies of one fact.
  */
-export const MACHINE_UNREACHABLE_HINT = "The hub can't currently reach this machine.";
+export const MACHINE_UNREACHABLE_HINT =
+  "The hub can't currently reach this machine.";

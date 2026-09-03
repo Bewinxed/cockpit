@@ -1,27 +1,27 @@
 <script lang="ts">
+  import type { SDKSessionInfo } from "@whiffle/core";
   /**
    * Right-click on a stored session, wherever one is listed. The row itself stays
    * a link — the trigger only wraps it, so it keeps its place in the tab order and
    * the context-menu key still reaches this menu from the keyboard.
    */
-  import type { Snippet } from 'svelte';
-  import { goto } from '$app/navigation';
-  import type { SDKSessionInfo } from '@whiffle/core';
+  import type { Snippet } from "svelte";
+  import { goto } from "$app/navigation";
+  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { Button } from "$lib/components/ui/button";
+  import * as ContextMenu from "$lib/components/ui/context-menu";
+  import * as Dialog from "$lib/components/ui/dialog";
+  import { Input } from "$lib/components/ui/input";
   import {
     IconCopy,
     IconExternal,
     IconFork,
     IconPenLine,
     IconTrash,
-  } from '$lib/icons';
-  import * as AlertDialog from '$lib/components/ui/alert-dialog';
-  import * as ContextMenu from '$lib/components/ui/context-menu';
-  import * as Dialog from '$lib/components/ui/dialog';
-  import { Button } from '$lib/components/ui/button';
-  import { Input } from '$lib/components/ui/input';
-  import { forkSession, loadCatalog, machineControl } from './client.svelte';
-  import { copyToClipboard } from './copy';
-  import { sessionTitle, transcriptHref } from './links';
+  } from "$lib/icons";
+  import { forkSession, loadCatalog, machineControl } from "./client.svelte";
+  import { copyToClipboard } from "./copy";
+  import { sessionTitle, transcriptHref } from "./links";
 
   let {
     machineId,
@@ -34,7 +34,7 @@
   const where = $derived({ dir: info.cwd || undefined });
 
   let renaming = $state(false);
-  let title = $state('');
+  let title = $state("");
   let confirmingDelete = $state(false);
   let busy = $state(false);
 
@@ -46,10 +46,18 @@
   async function rename(event: SubmitEvent) {
     event.preventDefault();
     const next = title.trim();
-    if (!next || busy) return;
+    if (!next || busy) {
+      return;
+    }
     busy = true;
     try {
-      await machineControl(machineId, 'renameSession', [info.sessionId, next, where], undefined, info.harness);
+      await machineControl(
+        machineId,
+        "renameSession",
+        [info.sessionId, next, where],
+        undefined,
+        info.harness
+      );
       await loadCatalog(machineId);
       renaming = false;
     } finally {
@@ -60,7 +68,13 @@
   async function remove() {
     busy = true;
     try {
-      await machineControl(machineId, 'deleteSession', [info.sessionId, where], undefined, info.harness);
+      await machineControl(
+        machineId,
+        "deleteSession",
+        [info.sessionId, where],
+        undefined,
+        info.harness
+      );
       await loadCatalog(machineId);
       confirmingDelete = false;
     } finally {
@@ -71,7 +85,7 @@
   async function fork() {
     const instanceId = forkSession({
       machineId,
-      cwd: info.cwd ?? '',
+      cwd: info.cwd ?? "",
       sessionId: info.sessionId,
       harness: info.harness,
     });
@@ -111,14 +125,19 @@
       <IconCopy />
       Copy path
     </ContextMenu.Item>
-    <ContextMenu.Item onSelect={() => copyToClipboard('Session id', info.sessionId)}>
+    <ContextMenu.Item
+      onSelect={() => copyToClipboard('Session id', info.sessionId)}
+    >
       <IconCopy />
       Copy session id
     </ContextMenu.Item>
 
     <ContextMenu.Separator />
 
-    <ContextMenu.Item variant="destructive" onSelect={() => (confirmingDelete = true)}>
+    <ContextMenu.Item
+      onSelect={() => (confirmingDelete = true)}
+      variant="destructive"
+    >
       <IconTrash />
       Delete transcript
     </ContextMenu.Item>
@@ -131,14 +150,20 @@
       <Dialog.Header>
         <Dialog.Title>Rename session</Dialog.Title>
         <Dialog.Description>
-          What this session is called in your history. It does not change the transcript.
+          What this session is called in your history. It does not change the
+          transcript.
         </Dialog.Description>
       </Dialog.Header>
       <!-- First tabbable thing in the dialog, so it is what opens focused. -->
-      <Input bind:value={title} aria-label="Session title" autocomplete="off" />
+      <Input aria-label="Session title" autocomplete="off" bind:value={title} />
       <Dialog.Footer>
-        <Button type="button" variant="outline" onclick={() => (renaming = false)}>Cancel</Button>
-        <Button type="submit" disabled={busy || !title.trim()}>Rename</Button>
+        <Button
+          onclick={() => (renaming = false)}
+          type="button"
+          variant="outline"
+          >Cancel</Button
+        >
+        <Button disabled={busy || !title.trim()} type="submit">Rename</Button>
       </Dialog.Footer>
     </form>
   </Dialog.Content>
@@ -149,13 +174,17 @@
     <AlertDialog.Header>
       <AlertDialog.Title>Delete this transcript?</AlertDialog.Title>
       <AlertDialog.Description>
-        “{sessionTitle(info)}” is removed from {info.cwd || 'this machine'}, for good. Nothing else
-        on the machine is touched.
+        “{sessionTitle(info)}” is removed from {info.cwd || 'this machine'}, for
+        good. Nothing else on the machine is touched.
       </AlertDialog.Description>
     </AlertDialog.Header>
     <AlertDialog.Footer>
       <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action variant="destructive" disabled={busy} onclick={remove}>
+      <AlertDialog.Action
+        disabled={busy}
+        onclick={remove}
+        variant="destructive"
+      >
         Delete transcript
       </AlertDialog.Action>
     </AlertDialog.Footer>

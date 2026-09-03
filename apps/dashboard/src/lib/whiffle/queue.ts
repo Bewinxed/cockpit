@@ -10,8 +10,8 @@
  * simply vanish. The daemon now announces its queue, and these two functions
  * are where that announcement takes over from the guess.
  */
-import type { QueuedMessage } from '@whiffle/core';
-import type { Message } from './types';
+import type { QueuedMessage } from "@whiffle/core";
+import type { Message } from "./types";
 
 /** The parts of a session's state a queue move touches. */
 export interface QueueTarget {
@@ -34,15 +34,19 @@ export interface QueueTarget {
  * mid-queue — has no copy to take back and simply gains the row.
  */
 export function ingestQueued(target: QueueTarget, entry: QueuedMessage): void {
-  if (target.queued.some((queued) => queued.queueId === entry.queueId)) return;
+  if (target.queued.some((queued) => queued.queueId === entry.queueId)) {
+    return;
+  }
   const guess = target.messages.findLast(
     (message) =>
-      message.type === 'user' &&
+      message.type === "user" &&
       message.metadata?.queuedLocally === true &&
       !message.sdkUuid &&
       message.content === entry.text
   );
-  if (guess) target.messages = target.messages.filter((message) => message !== guess);
+  if (guess) {
+    target.messages = target.messages.filter((message) => message !== guess);
+  }
   target.queued = [...target.queued, entry];
 }
 
@@ -53,6 +57,8 @@ export function ingestQueued(target: QueueTarget, entry: QueuedMessage): void {
  * and a tab that subscribed a moment late never saw it at all.
  */
 export function retireQueued(target: QueueTarget, queueId: string): void {
-  if (!target.queued.some((queued) => queued.queueId === queueId)) return;
+  if (!target.queued.some((queued) => queued.queueId === queueId)) {
+    return;
+  }
   target.queued = target.queued.filter((queued) => queued.queueId !== queueId);
 }

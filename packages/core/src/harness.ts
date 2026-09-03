@@ -21,18 +21,18 @@
  */
 
 /** The harnesses whiffle can spawn sessions on. Adding one is a new adapter. */
-export type HarnessKind = 'claude' | 'opencode' | 'pi';
+export type HarnessKind = "claude" | "opencode" | "pi";
 
-export const HARNESSES: readonly HarnessKind[] = ['claude', 'opencode', 'pi'];
+export const HARNESSES: readonly HarnessKind[] = ["claude", "opencode", "pi"];
 
 /** How a session answers tool permissions. The union is Claude Code's; others map onto it. */
 export type PermissionMode =
-  | 'default'
-  | 'acceptEdits'
-  | 'bypassPermissions'
-  | 'plan'
-  | 'dontAsk'
-  | 'auto';
+  | "default"
+  | "acceptEdits"
+  | "bypassPermissions"
+  | "plan"
+  | "dontAsk"
+  | "auto";
 
 /**
  * How hard the model thinks, and how much it spends doing it: Claude Code's
@@ -46,46 +46,52 @@ export type PermissionMode =
  * spends tokens in all of those places. A harness with no such knob reports
  * `effort: false` rather than mapping onto this.
  */
-export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
 
 /** A session's own word on what it is doing right now. */
-export type NeutralStatus = 'compacting' | 'requesting' | null;
+export type NeutralStatus = "compacting" | "requesting" | null;
 
 /* ------------------------------------------------------------------ MCP — */
 
 /** MCP server config shapes, re-declared so `fleet.ts` stops importing the SDK. */
 export interface McpStdioServerConfig {
-  type?: 'stdio';
-  command: string;
+  alwaysLoad?: boolean;
   args?: string[];
+  command: string;
   env?: Record<string, string>;
   timeout?: number;
-  alwaysLoad?: boolean;
+  type?: "stdio";
 }
 
 export interface McpSSEServerConfig {
-  type: 'sse';
-  url: string;
+  alwaysLoad?: boolean;
   headers?: Record<string, string>;
   timeout?: number;
-  alwaysLoad?: boolean;
+  type: "sse";
+  url: string;
 }
 
 export interface McpHttpServerConfig {
-  type: 'http';
-  url: string;
+  alwaysLoad?: boolean;
   headers?: Record<string, string>;
   timeout?: number;
-  alwaysLoad?: boolean;
+  type: "http";
+  url: string;
 }
 
 export interface McpServerStatus {
-  name: string;
-  status: 'connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled' | string;
-  serverInfo?: { name: string; version?: string };
-  error?: string;
   config?: Record<string, unknown>;
+  error?: string;
+  name: string;
   scope?: string;
+  serverInfo?: { name: string; version?: string };
+  status:
+    | "connected"
+    | "failed"
+    | "needs-auth"
+    | "pending"
+    | "disabled"
+    | string;
   tools?: { name: string; description?: string }[];
 }
 
@@ -93,10 +99,12 @@ export interface McpServerStatus {
 
 /** One model a session offers. `value` is the wire id; `resolvedModel` the alias. */
 export interface ModelInfo {
-  value: string;
-  resolvedModel?: string;
-  displayName: string;
   description?: string;
+  displayName: string;
+  resolvedModel?: string;
+  supportedEffortLevels?: EffortLevel[];
+  supportsAdaptiveThinking?: boolean;
+  supportsAutoMode?: boolean;
   /**
    * Whether this model has an effort scale, and which of its stops it reaches.
    * The pair is the *only* thing that decides what an effort control offers —
@@ -104,41 +112,47 @@ export interface ModelInfo {
    * have them is a list that is wrong by the next release.
    */
   supportsEffort?: boolean;
-  supportedEffortLevels?: EffortLevel[];
-  supportsAdaptiveThinking?: boolean;
   supportsFastMode?: boolean;
-  supportsAutoMode?: boolean;
+  value: string;
 }
 
 /* ------------------------------------------------------------- commands — */
 
 /** What the composer's `/` menu renders. Replaces the SDK's `SlashCommand`. */
 export interface SlashCommand {
-  name: string;
-  description: string;
-  argumentHint: string;
   aliases?: string[];
+  argumentHint: string;
+  description: string;
+  name: string;
 }
 
 /* ----------------------------------------------------------- permissions — */
 
 export type PermissionUpdateDestination =
-  | 'userSettings'
-  | 'projectSettings'
-  | 'localSettings'
-  | 'session'
-  | 'cliArg';
+  | "userSettings"
+  | "projectSettings"
+  | "localSettings"
+  | "session"
+  | "cliArg";
 
 /** A permission the SDK suggests persisting, so "always allow" has something to write. */
 export type PermissionUpdate =
   | {
-      type: 'addRules' | 'replaceRules' | 'removeRules';
+      type: "addRules" | "replaceRules" | "removeRules";
       rules: { toolName: string; ruleContent?: string }[];
-      behavior: 'allow' | 'deny' | 'ask';
+      behavior: "allow" | "deny" | "ask";
       destination: PermissionUpdateDestination;
     }
-  | { type: 'setMode'; mode: PermissionMode; destination: PermissionUpdateDestination }
-  | { type: 'addDirectories' | 'removeDirectories'; directories: string[]; destination: PermissionUpdateDestination };
+  | {
+      type: "setMode";
+      mode: PermissionMode;
+      destination: PermissionUpdateDestination;
+    }
+  | {
+      type: "addDirectories" | "removeDirectories";
+      directories: string[];
+      destination: PermissionUpdateDestination;
+    };
 
 /**
  * Whether a machine's daemon can actually start sessions for a harness.
@@ -147,25 +161,33 @@ export type PermissionUpdate =
  * refused the secret (`errSecInteractionNotAllowed`). Generalized: every
  * harness reports its own auth word through the same three states.
  */
-export type AuthState = 'authenticated' | 'unauthenticated' | 'unreadable-credentials';
+export type AuthState =
+  | "authenticated"
+  | "unauthenticated"
+  | "unreadable-credentials";
 
 /** A parked permission's answer. `remember` is opencode's "always". */
 export type PermissionResult =
   | {
-      behavior: 'allow';
+      behavior: "allow";
       updatedInput?: unknown;
       updatedPermissions?: PermissionUpdate[];
       remember?: boolean;
       toolUseID?: string;
     }
-  | { behavior: 'deny'; message: string; interrupt?: boolean; toolUseID?: string };
+  | {
+      behavior: "deny";
+      message: string;
+      interrupt?: boolean;
+      toolUseID?: string;
+    };
 
 /** One question of an `AskUserQuestion`-shaped prompt, as every harness can express. */
 export interface UserQuestion {
-  question: string;
   header: string;
-  options: { label: string; description: string }[];
   multiSelect: boolean;
+  options: { label: string; description: string }[];
+  question: string;
 }
 
 /** The reader's choices, back the way the tool reads them. */
@@ -182,13 +204,13 @@ export type UserAnswers = Record<string, string | string[]>;
  * option `label`. The union is the truth; nothing coerces it.
  */
 export interface UserQuestionAnswered {
-  outcome: 'answered';
-  questions: UserQuestion[];
-  answers: UserAnswers;
-  /** Freeform text the reader typed instead of selecting a structured option. */
-  response?: string;
   /** Per-question notes (preview selections), keyed by question text. */
   annotations?: Record<string, { notes?: string; preview?: string }>;
+  answers: UserAnswers;
+  outcome: "answered";
+  questions: UserQuestion[];
+  /** Freeform text the reader typed instead of selecting a structured option. */
+  response?: string;
 }
 
 /**
@@ -199,7 +221,7 @@ export interface UserQuestionAnswered {
  * answer.
  */
 export interface UserQuestionDismissed {
-  outcome: 'dismissed';
+  outcome: "dismissed";
   questions: UserQuestion[];
 }
 
@@ -218,17 +240,17 @@ export type UserQuestionResult = UserQuestionAnswered | UserQuestionDismissed;
 
 /** A stored session as the catalog lists it. `harness` says who owns the id. */
 export interface NeutralSessionInfo {
-  sessionId: string;
-  harness: HarnessKind;
-  summary?: string;
-  lastModified: number;
-  fileSize?: number;
+  createdAt?: number;
   customTitle?: string;
+  cwd?: string;
+  fileSize?: number;
   firstPrompt?: string;
   gitBranch?: string;
-  cwd?: string;
+  harness: HarnessKind;
+  lastModified: number;
+  sessionId: string;
+  summary?: string;
   tag?: string;
-  createdAt?: number;
 }
 
 /** Kept name for one release: the dashboard imported this from the SDK re-export. */
@@ -236,12 +258,10 @@ export type SDKSessionInfo = NeutralSessionInfo;
 
 /** A stored transcript entry. `message` is the {@link NeutralMessage} the turn wrote. */
 export interface SessionMessage {
-  type: 'user' | 'assistant' | 'system';
-  uuid: string;
-  session_id: string;
   message: unknown;
-  parent_tool_use_id: string | null;
   parent_agent_id: string | null;
+  parent_tool_use_id: string | null;
+  session_id: string;
   /**
    * When the turn was actually written, ISO-8601, as the harness recorded it.
    * Optional in both directions: a daemon older than this field sends nothing,
@@ -252,6 +272,8 @@ export interface SessionMessage {
    * was opened.
    */
   timestamp?: string;
+  type: "user" | "assistant" | "system";
+  uuid: string;
 }
 
 /**
@@ -260,24 +282,29 @@ export interface SessionMessage {
  * The dashboard renders this one shape regardless of which answered.
  */
 export interface NeutralTask {
-  id: string;
-  subject: string;
-  description?: string;
-  status: 'pending' | 'in_progress' | 'completed';
-  owner?: string;
-  blocks: string[];
   blockedBy: string[];
+  blocks: string[];
+  description?: string;
+  id: string;
+  owner?: string;
+  status: "pending" | "in_progress" | "completed";
+  subject: string;
 }
 
 /* ------------------------------------------------------ neutral messages — */
 
 export type NeutralContentBlock =
-  | { type: 'text'; text: string }
-  | { type: 'thinking'; thinking: string; signature?: string }
-  | { type: 'redacted_thinking' }
-  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+  | { type: "text"; text: string }
+  | { type: "thinking"; thinking: string; signature?: string }
+  | { type: "redacted_thinking" }
   | {
-      type: 'tool_result';
+      type: "tool_use";
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+    }
+  | {
+      type: "tool_result";
       tool_use_id: string;
       content: unknown;
       is_error?: boolean;
@@ -285,23 +312,32 @@ export type NeutralContentBlock =
       /** The answer payload of an `AskUserQuestion` tool result, normalised by the harness adapter. */
       questionResult?: UserQuestionResult;
     }
-  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
+  | {
+      type: "image";
+      source: { type: "base64"; media_type: string; data: string };
+    };
 
 export type NeutralAssistantBlock = Extract<
   NeutralContentBlock,
-  { type: 'text' | 'thinking' | 'redacted_thinking' | 'tool_use' }
+  { type: "text" | "thinking" | "redacted_thinking" | "tool_use" }
 >;
 
 export type NeutralOrigin =
-  | { kind: 'human' }
-  | { kind: 'peer'; from?: string; name?: string; fromSession?: string; body?: string }
+  | { kind: "human" }
+  | {
+      kind: "peer";
+      from?: string;
+      name?: string;
+      fromSession?: string;
+      body?: string;
+    }
   /**
    * Whiffle's own word, not the user's and not another session's: today, a rule
    * that fired. `name` is what fired it, e.g. `rule:Honest caveat`. Kept apart
    * from `peer` so a transcript can say who is really talking — a model that
    * mistakes a rule for the user apologises to nobody.
    */
-  | { kind: 'system'; name?: string };
+  | { kind: "system"; name?: string };
 
 /**
  * Whether a user message was put into the session by whiffle rather than typed
@@ -315,26 +351,22 @@ export type NeutralOrigin =
  * them, and the chat stayed empty until a refresh.
  */
 export const isInjected = (origin?: NeutralOrigin): boolean =>
-  origin?.kind === 'peer' || origin?.kind === 'system';
+  origin?.kind === "peer" || origin?.kind === "system";
 
 export interface NeutralAssistantMessage {
-  type: 'assistant';
-  uuid?: string;
-  session_id?: string;
-  parent_tool_use_id?: string | null;
   message: { model?: string; content: NeutralAssistantBlock[] };
+  parent_tool_use_id?: string | null;
   /** The harness's own event, verbatim, for renderers that need more than this. */
   raw?: unknown;
+  session_id?: string;
+  type: "assistant";
+  uuid?: string;
 }
 
 export interface NeutralUserMessage {
-  type: 'user';
-  uuid?: string;
-  session_id?: string;
-  parent_tool_use_id?: string | null;
-  message: { role: 'user'; content: string | NeutralContentBlock[] };
+  message: { role: "user"; content: string | NeutralContentBlock[] };
   origin?: NeutralOrigin;
-  shouldQuery?: boolean;
+  parent_tool_use_id?: string | null;
   /**
    * The {@link QueuedMessage} this turn was: set by the harness on the real
    * message the model finally read, so a client can retire the queued row it
@@ -344,6 +376,10 @@ export interface NeutralUserMessage {
    */
   queueId?: string;
   raw?: unknown;
+  session_id?: string;
+  shouldQuery?: boolean;
+  type: "user";
+  uuid?: string;
 }
 
 /**
@@ -362,13 +398,13 @@ export interface NeutralUserMessage {
  * broadcast state — what a reader needs is that pictures are riding with it.
  */
 export interface QueuedMessage {
+  /** How many images ride with it; absent when none do. */
+  images?: number;
   queueId: string;
   /** What was typed, before the harness folded pastes or images into the turn. */
   text: string;
   /** When the harness took it, ISO-8601. */
   timestamp: string;
-  /** How many images ride with it; absent when none do. */
-  images?: number;
 }
 
 /**
@@ -376,39 +412,48 @@ export interface QueuedMessage {
  * busy to start. Carries the {@link QueuedMessage} fields flat, the way every
  * other system subtype carries its own.
  */
-export const MESSAGE_QUEUED = 'message_queued';
+export const MESSAGE_QUEUED = "message_queued";
 
 /** And the one announcing the moment it was consumed: `queueId` alone. */
-export const MESSAGE_DEQUEUED = 'message_dequeued';
+export const MESSAGE_DEQUEUED = "message_dequeued";
 
 export interface NeutralStreamMessage {
-  type: 'stream_event';
-  uuid?: string;
-  session_id?: string;
-  parent_tool_use_id?: string | null;
   event:
-    | { type: 'content_block_start'; content_block: { type: 'thinking'; thinking: string } }
-    | { type: 'content_block_delta'; delta: { type: 'text_delta'; text: string } }
-    | { type: 'content_block_delta'; delta: { type: 'thinking_delta'; thinking: string } }
-    | { type: 'content_block_stop' }
-    | { type: 'message_stop' };
+    | {
+        type: "content_block_start";
+        content_block: { type: "thinking"; thinking: string };
+      }
+    | {
+        type: "content_block_delta";
+        delta: { type: "text_delta"; text: string };
+      }
+    | {
+        type: "content_block_delta";
+        delta: { type: "thinking_delta"; thinking: string };
+      }
+    | { type: "content_block_stop" }
+    | { type: "message_stop" };
+  parent_tool_use_id?: string | null;
   raw?: unknown;
+  session_id?: string;
+  type: "stream_event";
+  uuid?: string;
 }
 
 export interface NeutralResultMessage {
-  type: 'result';
-  uuid?: string;
-  session_id?: string;
-  subtype: string;
-  is_error: boolean;
-  errors?: string[];
-  total_cost_usd?: number;
-  num_turns?: number;
-  result?: string;
-  stop_reason?: string | null;
   /** Prompt-cache tokens the turn read from / wrote to, when the harness reports them. */
   cache?: { read: number; write: number };
+  errors?: string[];
+  is_error: boolean;
+  num_turns?: number;
   raw?: unknown;
+  result?: string;
+  session_id?: string;
+  stop_reason?: string | null;
+  subtype: string;
+  total_cost_usd?: number;
+  type: "result";
+  uuid?: string;
 }
 
 /**
@@ -417,62 +462,62 @@ export interface NeutralResultMessage {
  * harness that emits a subtype nothing here names degrades to a generic line.
  */
 export interface NeutralSystemMessage {
-  type: 'system';
-  uuid?: string;
-  session_id?: string;
-  subtype: string;
-  // init
-  model?: string;
-  permissionMode?: PermissionMode;
-  cwd?: string;
-  tools?: string[];
-  mcp_servers?: { name: string; status: string }[];
-  slash_commands?: string[];
-  skills?: string[];
-  // status — the session's own word (`compacting`/`requesting`/null), and the
-  // task-notification status (`completed`/`failed`/`stopped`), which the SDK
-  // also names `status`. Kept as one loose field; the folder reads it per subtype.
-  status?: NeutralStatus | string;
-  compact_result?: 'success' | 'failed';
+  // commands_changed
+  commands?: SlashCommand[];
   compact_error?: string;
   // compact_boundary
-  compact_metadata?: { trigger?: 'manual' | 'auto'; pre_tokens?: number };
+  compact_metadata?: { trigger?: "manual" | "auto"; pre_tokens?: number };
+  compact_result?: "success" | "failed";
+  // model_fallback
+  content?: string;
+  cwd?: string;
+  description?: string;
+  exit_code?: number;
+  fallback_model?: string;
   // hook_response
   hook_name?: string;
-  exit_code?: number;
-  stdout?: string;
-  stderr?: string;
-  // task_started / task_progress / task_notification / task_updated
-  tool_use_id?: string;
-  task_id?: string;
-  subagent_type?: string;
-  description?: string;
-  summary?: string;
+  images?: number;
   last_tool_name?: string;
+  mcp_servers?: { name: string; status: string }[];
+  // init
+  model?: string;
   patch?: { description?: string; status?: string; error?: string };
+  permissionMode?: PermissionMode;
   // message_queued / message_dequeued — the harness's own input queue, made
   // observable ({@link QueuedMessage}). `queueId` is on both; the rest only on
   // the announcement.
   queueId?: string;
+  raw?: unknown;
+  session_id?: string;
+  skills?: string[];
+  slash_commands?: string[];
+  // status — the session's own word (`compacting`/`requesting`/null), and the
+  // task-notification status (`completed`/`failed`/`stopped`), which the SDK
+  // also names `status`. Kept as one loose field; the folder reads it per subtype.
+  status?: NeutralStatus | string;
+  stderr?: string;
+  stdout?: string;
+  subagent_type?: string;
+  subtype: string;
+  summary?: string;
+  task_id?: string;
   text?: string;
   timestamp?: string;
-  images?: number;
-  // commands_changed
-  commands?: SlashCommand[];
-  // model_fallback
-  content?: string;
-  fallback_model?: string;
-  raw?: unknown;
+  // task_started / task_progress / task_notification / task_updated
+  tool_use_id?: string;
+  tools?: string[];
+  type: "system";
+  uuid?: string;
 }
 
 /** A frame that has no neutral meaning yet, forwarded whole for a future renderer. */
 export interface NeutralRawMessage {
-  type: 'raw';
-  uuid?: string;
-  session_id?: string;
-  parent_tool_use_id?: string | null;
   harness: HarnessKind;
   message: unknown;
+  parent_tool_use_id?: string | null;
+  session_id?: string;
+  type: "raw";
+  uuid?: string;
 }
 
 export type NeutralMessage =
@@ -503,49 +548,49 @@ export type SDKStatus = NeutralStatus;
 
 /** What a harness can do, so the dashboard gates features instead of guessing. */
 export interface HarnessCapabilities {
-  interrupt: boolean;
-  permissionModes: PermissionMode[];
-  setModel: boolean;
+  compaction: boolean;
+  contextUsage: boolean;
+  costUsd: boolean;
+  deleteSession: boolean;
   /** The reasoning-effort scale, at spawn and mid-session. */
   effort: boolean;
-  contextUsage: boolean;
-  supportedModels: boolean;
-  supportedCommands: boolean;
-  mcpStatus: boolean;
-  mcpControl: boolean;
-  listSessions: boolean;
-  getSessionMessages: boolean;
-  renameSession: boolean;
-  deleteSession: boolean;
+  /** The harness applies the hub's fleet config (MCP/skills/memory/agents) to its own files. */
+  fleet: boolean;
   /** Fork a stored session into a new one. */
   fork: boolean;
-  /** Rewind / resume-at-message. */
-  rewind: boolean;
-  /** The scratch-tag the catalog filter reads. */
-  tagSession: boolean;
-  skills: boolean;
-  subagents: boolean;
-  tasks: boolean;
-  compaction: boolean;
-  costUsd: boolean;
-  thinking: boolean;
-  images: boolean;
+  getSessionMessages: boolean;
   /** Peer-to-peer hand-off tools (`mcp__whiffle__*` for claude). */
   handoff: boolean;
   hooks: boolean;
+  images: boolean;
+  interrupt: boolean;
+  listSessions: boolean;
+  mcpControl: boolean;
+  mcpStatus: boolean;
+  permissionModes: PermissionMode[];
   plugins: boolean;
-  /** The harness applies the hub's fleet config (MCP/skills/memory/agents) to its own files. */
-  fleet: boolean;
+  renameSession: boolean;
+  /** Rewind / resume-at-message. */
+  rewind: boolean;
+  setModel: boolean;
+  skills: boolean;
+  subagents: boolean;
+  supportedCommands: boolean;
+  supportedModels: boolean;
+  /** The scratch-tag the catalog filter reads. */
+  tagSession: boolean;
+  tasks: boolean;
+  thinking: boolean;
 }
 
 /** What a machine knows about one harness: is it installed, can it work, what can it do. */
 export interface HarnessReport {
+  auth: AuthState;
+  capabilities: HarnessCapabilities;
   harness: HarnessKind;
   installed: boolean;
   /** The CLI/SDK version, when it can be read. */
   version?: string;
-  auth: AuthState;
-  capabilities: HarnessCapabilities;
 }
 
 /** The default for a harness adapter that reports nothing; adapters override. */
@@ -585,9 +630,9 @@ export const CAPABILITIES_NONE: HarnessCapabilities = {
  * through unchanged; the opencode and pi adapters map them onto their own
  * surfaces. The dashboard calls these by name, never the harness's own words.
  */
-export const CONTROL_INTERRUPT = 'interrupt';
-export const CONTROL_SET_PERMISSION_MODE = 'setPermissionMode';
-export const CONTROL_SET_MODEL = 'setModel';
+export const CONTROL_INTERRUPT = "interrupt";
+export const CONTROL_SET_PERMISSION_MODE = "setPermissionMode";
+export const CONTROL_SET_MODEL = "setModel";
 /**
  * The one verb here that is not a `Query` method: claude spends it on
  * `applyFlagSettings({ effortLevel })`, where `max` is session-scoped and never
@@ -595,21 +640,21 @@ export const CONTROL_SET_MODEL = 'setModel';
  * wants. Named after the setting, like `setModel`, because that is what the
  * dashboard is asking for.
  */
-export const CONTROL_SET_EFFORT = 'setEffort';
-export const CONTROL_CONTEXT_USAGE = 'getContextUsage';
-export const CONTROL_SUPPORTED_MODELS = 'supportedModels';
-export const CONTROL_SUPPORTED_COMMANDS = 'supportedCommands';
-export const CONTROL_MCP_STATUS = 'mcpServerStatus';
-export const CONTROL_MCP_RECONNECT = 'reconnectMcpServer';
-export const CONTROL_MCP_TOGGLE = 'toggleMcpServer';
+export const CONTROL_SET_EFFORT = "setEffort";
+export const CONTROL_CONTEXT_USAGE = "getContextUsage";
+export const CONTROL_SUPPORTED_MODELS = "supportedModels";
+export const CONTROL_SUPPORTED_COMMANDS = "supportedCommands";
+export const CONTROL_MCP_STATUS = "mcpServerStatus";
+export const CONTROL_MCP_RECONNECT = "reconnectMcpServer";
+export const CONTROL_MCP_TOGGLE = "toggleMcpServer";
 
 /** Machine-scoped session-catalog controls, answered by whichever harness owns the id. */
-export const CONTROL_LIST_SESSIONS = 'listSessions';
-export const CONTROL_GET_SESSION_INFO = 'getSessionInfo';
-export const CONTROL_GET_SESSION_MESSAGES = 'getSessionMessages';
-export const CONTROL_RENAME_SESSION = 'renameSession';
-export const CONTROL_TAG_SESSION = 'tagSession';
-export const CONTROL_DELETE_SESSION = 'deleteSession';
+export const CONTROL_LIST_SESSIONS = "listSessions";
+export const CONTROL_GET_SESSION_INFO = "getSessionInfo";
+export const CONTROL_GET_SESSION_MESSAGES = "getSessionMessages";
+export const CONTROL_RENAME_SESSION = "renameSession";
+export const CONTROL_TAG_SESSION = "tagSession";
+export const CONTROL_DELETE_SESSION = "deleteSession";
 
 /** A session's plan, answered by whichever harness owns it (`NeutralTask[]`). */
-export const CONTROL_GET_TODOS = 'getTodos';
+export const CONTROL_GET_TODOS = "getTodos";

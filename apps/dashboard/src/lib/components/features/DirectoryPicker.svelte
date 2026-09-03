@@ -1,19 +1,20 @@
 <script lang="ts">
+  import type { FsEntry, SDKSessionInfo } from "@whiffle/core";
+  import { Button } from "$lib/components/ui/button";
+  import * as Collapsible from "$lib/components/ui/collapsible";
   /** Walks a machine's filesystem over the `fs` verb so a cwd can be picked, not typed. */
-  import { IconArrowUp, IconCheck, IconFolder, IconSpinner } from '$lib/icons';
-  import type { FsEntry, SDKSessionInfo } from '@whiffle/core';
-  import { Button } from '$lib/components/ui/button';
-  import * as Collapsible from '$lib/components/ui/collapsible';
-  import { whiffle, machineFs } from '$lib/whiffle/client.svelte';
+  import { IconArrowUp, IconCheck, IconFolder, IconSpinner } from "$lib/icons";
+  import { machineFs, whiffle } from "$lib/whiffle/client.svelte";
 
   let {
     machineId,
     value,
     onSelect,
-  }: { machineId: string; value: string; onSelect: (path: string) => void } = $props();
+  }: { machineId: string; value: string; onSelect: (path: string) => void } =
+    $props();
 
   let open = $state(false);
-  let path = $state('/');
+  let path = $state("/");
   let entries = $state<FsEntry[]>([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
@@ -23,28 +24,36 @@
 
   const dirs = $derived(
     entries
-      .filter((entry) => entry.kind === 'dir' && !entry.name.startsWith('.'))
+      .filter((entry) => entry.kind === "dir" && !entry.name.startsWith("."))
       .sort((a, b) => a.name.localeCompare(b.name))
   );
 
-  const parent = $derived(path === '/' ? null : path.replace(/\/[^/]+$/, '') || '/');
+  const parent = $derived(
+    path === "/" ? null : path.replace(/\/[^/]+$/, "") || "/"
+  );
 
-  const join = (dir: string, name: string) => (dir === '/' ? `/${name}` : `${dir}/${name}`);
+  const join = (dir: string, name: string) =>
+    dir === "/" ? `/${name}` : `${dir}/${name}`;
 
   /** Whatever the field already says, else where this machine was working last. */
   function seed(): string {
-    if (value.startsWith('/')) return trim(value);
+    if (value.startsWith("/")) {
+      return trim(value);
+    }
     const recent = whiffle
       .catalogOf(machineId)
       .reduce<SDKSessionInfo | null>(
-        (best, info) => (info.cwd && (!best || info.lastModified > best.lastModified) ? info : best),
+        (best, info) =>
+          info.cwd && (!best || info.lastModified > best.lastModified)
+            ? info
+            : best,
         null
       );
-    return trim(recent?.cwd ?? '/');
+    return trim(recent?.cwd ?? "/");
   }
 
   /** Typed cwds arrive with trailing slashes; `parent` and `join` assume none. */
-  const trim = (path: string) => path.replace(/(?!^)\/+$/, '');
+  const trim = (path: string) => path.replace(/(?!^)\/+$/, "");
 
   async function go(next: string) {
     path = next;
@@ -56,13 +65,17 @@
     }
     loading = true;
     try {
-      const listed = await machineFs<FsEntry[]>(machineId, 'list', next);
+      const listed = await machineFs<FsEntry[]>(machineId, "list", next);
       cache.set(next, listed);
       // A faster click already moved on; that listing wins.
-      if (path !== next) return;
+      if (path !== next) {
+        return;
+      }
       entries = listed;
     } catch (err) {
-      if (path !== next) return;
+      if (path !== next) {
+        return;
+      }
       entries = [];
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -96,7 +109,7 @@
   }}
 />
 
-<Collapsible.Root {open} onOpenChange={toggle} class="flex flex-col">
+<Collapsible.Root class="flex flex-col" onOpenChange={toggle} {open}>
   <Collapsible.Trigger
     class="flex items-center gap-1.5 self-start text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
   >
@@ -108,20 +121,26 @@
     <div class="mt-2 flex flex-col gap-2 border-t border-border pt-2">
       <div class="flex items-center gap-2">
         <Button
-          variant="ghost"
-          size="icon-xs"
           aria-label="Parent directory"
           disabled={!parent}
           onclick={() => parent && go(parent)}
+          size="icon-xs"
+          variant="ghost"
         >
           <IconArrowUp />
         </Button>
-        <span class="truncate font-mono text-xs text-muted-foreground" title={path}>{path}</span>
+        <span
+          class="truncate font-mono text-xs text-muted-foreground"
+          title={path}
+          >{path}</span
+        >
       </div>
 
       <div class="max-h-56 overflow-y-auto">
         {#if loading}
-          <span class="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
+          <span
+            class="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground"
+          >
             <IconSpinner class="size-3.5 animate-spin" />
             Reading directory…
           </span>
@@ -130,22 +149,24 @@
         {:else}
           {#each dirs as dir (dir.name)}
             <Button
-              variant="ghost"
-              size="sm"
               class="w-full justify-start font-mono text-[13px] font-normal"
               onclick={() => go(join(path, dir.name))}
+              size="sm"
+              variant="ghost"
             >
               <IconFolder class="shrink-0 opacity-70" />
               <span class="truncate">{dir.name}</span>
             </Button>
           {:else}
-            <span class="block px-2 py-1 text-xs text-muted-foreground">No subdirectories.</span>
+            <span class="block px-2 py-1 text-xs text-muted-foreground"
+              >No subdirectories.</span
+            >
           {/each}
         {/if}
       </div>
 
       <div class="flex justify-end">
-        <Button size="xs" onclick={use}>
+        <Button onclick={use} size="xs">
           <IconCheck />
           Use this directory
         </Button>

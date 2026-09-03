@@ -1,4 +1,4 @@
-<script module lang="ts">
+<script lang="ts" module>
   /**
    * The digits belong to exactly one card. The composer can park several
    * requests at once, and two question cards both answering "2" is worse than
@@ -11,6 +11,11 @@
 </script>
 
 <script lang="ts">
+  import type {
+    PermissionResult,
+    UserAnswers,
+    UserQuestion,
+  } from "@whiffle/core";
   /**
    * The one human-in-the-loop surface, floating above the composer: a permission
    * gate (a measurably-symmetric Approve / Deny pair, with scope-widening kept
@@ -19,19 +24,18 @@
    * command whose stages this card's wait line reads. Ported from the mock's
    * `.hitl`.
    */
-  import { onMount } from 'svelte';
-  import type { PermissionResult, UserAnswers, UserQuestion } from '@whiffle/core';
+  import { onMount } from "svelte";
+  import { Button } from "$lib/components/ui/button";
+  import { IconArrowUp, IconCheck, IconClose, IconShield } from "$lib/icons";
+  import { isTyping } from "$lib/utils/typing";
   import {
-    whiffle,
     commandRecord,
-    permissionAnswer,
     type PendingPermission,
-  } from '../client.svelte';
-  import { questionsOf, questionAnswer } from '../question';
-  import { permissionSummary, suggestedRule } from '../permission-summary';
-  import { IconArrowUp, IconCheck, IconClose, IconShield } from '$lib/icons';
-  import { Button } from '$lib/components/ui/button';
-  import { isTyping } from '$lib/utils/typing';
+    permissionAnswer,
+    whiffle,
+  } from "../client.svelte";
+  import { permissionSummary, suggestedRule } from "../permission-summary";
+  import { questionAnswer, questionsOf } from "../question";
 
   let {
     request,
@@ -51,9 +55,11 @@
   const questions = $derived(questionsOf(request.toolName, input));
   const summary = $derived(permissionSummary(request.toolName, input));
   const command = $derived(
-    typeof input.command === 'string' ? input.command : null
+    typeof input.command === "string" ? input.command : null
   );
-  const rule = $derived(request.suggestions ? suggestedRule(request.suggestions) : null);
+  const rule = $derived(
+    request.suggestions ? suggestedRule(request.suggestions) : null
+  );
 
   // The reader's selections, keyed by question text — the shape the tool reads.
   let answers = $state<UserAnswers>({});
@@ -74,28 +80,38 @@
   let current = $state(0);
 
   function advance(): void {
-    if (!questions) return;
+    if (!questions) {
+      return;
+    }
     const next = questions.findIndex((q) => !isAnswered(q));
-    if (next !== -1) current = next;
+    if (next !== -1) {
+      current = next;
+    }
   }
 
   function toggle(index: number, label: string): void {
     const q = questions?.[index];
-    if (!q || !answerable) return;
+    if (!(q && answerable)) {
+      return;
+    }
     current = index;
     if (!q.multiSelect) {
       // Re-picking the chosen option clears it, so a mis-keyed digit is undoable
       // with the same digit rather than only by picking something else.
       const chosen = answers[q.question] === label;
-      answers = { ...answers, [q.question]: chosen ? '' : label };
-      if (!chosen) advance();
+      answers = { ...answers, [q.question]: chosen ? "" : label };
+      if (!chosen) {
+        advance();
+      }
       return;
     }
     const value = answers[q.question];
     const list = Array.isArray(value) ? value : value ? [value] : [];
     answers = {
       ...answers,
-      [q.question]: list.includes(label) ? list.filter((l) => l !== label) : [...list, label],
+      [q.question]: list.includes(label)
+        ? list.filter((l) => l !== label)
+        : [...list, label],
     };
   }
 
@@ -110,7 +126,7 @@
   // cannot answer twice — and both paths refuse while the hub is unreachable,
   // where the answer would resolve into nothing and leave the turn wedged.
   let sent = $state(false);
-  const answerable = $derived(!sent && whiffle.hub === 'connected');
+  const answerable = $derived(!sent && whiffle.hub === "connected");
 
   /**
    * The command this card's answer went out as. The card reads its OWN id
@@ -122,27 +138,33 @@
   const record = $derived(commandId ? commandRecord(commandId) : null);
   /** What the answer was refused with, once the tracker has called it off. */
   const refused = $derived(
-    record?.stage === 'failed'
+    record?.stage === "failed"
       ? record.reason
         ? `Couldn't send that answer. ${record.reason}`
         : "Couldn't send that answer."
       : null
   );
 
-  function answer(kind: 'allow' | 'deny' | 'always'): void {
-    if (!answerable) return;
+  function answer(kind: "allow" | "deny" | "always"): void {
+    if (!answerable) {
+      return;
+    }
     sent = true;
     commandId = onanswer(permissionAnswer(request, kind));
   }
 
   /* Only a question card claims the digits, and only one of them at a time. */
-  const claim = Symbol('prompt');
+  const claim = Symbol("prompt");
   onMount(() => {
-    if (!questions) return;
+    if (!questions) {
+      return;
+    }
     claimants.push(claim);
     return () => {
       const at = claimants.indexOf(claim);
-      if (at !== -1) claimants.splice(at, 1);
+      if (at !== -1) {
+        claimants.splice(at, 1);
+      }
     };
   });
   const ownsKeys = $derived(!!questions && claimants[0] === claim);
@@ -157,28 +179,36 @@
    * answering: an answer cannot be keyed in twice, or into a dead socket.
    */
   function handleKeydown(event: KeyboardEvent): void {
-    if (!ownsKeys || !answerable) return;
-    if (event.metaKey || event.ctrlKey || event.altKey || isTyping()) return;
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      answer('deny');
+    if (!(ownsKeys && answerable)) {
       return;
     }
-    if (event.key >= '1' && event.key <= '9') {
+    if (event.metaKey || event.ctrlKey || event.altKey || isTyping()) {
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      answer("deny");
+      return;
+    }
+    if (event.key >= "1" && event.key <= "9") {
       const option = questions?.[current]?.options[Number(event.key) - 1];
-      if (!option) return;
+      if (!option) {
+        return;
+      }
       event.preventDefault();
       toggle(current, option.label);
       return;
     }
-    if (event.key === 'Enter' && allAnswered) {
+    if (event.key === "Enter" && allAnswered) {
       event.preventDefault();
       submitQuestion();
     }
   }
 
   function submitQuestion(): void {
-    if (!answerable) return;
+    if (!answerable) {
+      return;
+    }
     sent = true;
     commandId = onanswer(questionAnswer(input, answers));
   }
@@ -187,9 +217,9 @@
      shadcn (no 4/8/12 padding ladder, no pill radius, no --primary fill).
      Control height sits on the scale — --space-8 (32) fine, 44 coarse. */
   const btnBase =
-    'h-[var(--space-8)] pointer-coarse:h-11 gap-[var(--space-2)] ' +
-    'rounded-[var(--radius-control)] px-[var(--space-3)] ' +
-    'text-[length:var(--text-base)] font-medium ' +
+    "h-[var(--space-8)] pointer-coarse:h-11 gap-[var(--space-2)] " +
+    "rounded-[var(--radius-control)] px-[var(--space-3)] " +
+    "text-[length:var(--text-base)] font-medium " +
     "[&_svg:not([class*='size-'])]:size-3";
 
   /* The permission gate is symmetric by DESIGN.md law: Approve and Deny are
@@ -200,10 +230,11 @@
      arbitrary properties tailwind-merge cannot collapse, so recolouring bg-
      alone leaves the dark gradient painted OVER the raised fill — dark-mode
      ink on a near-black button. Neutralize them explicitly. */
-  const flat = '![background-image:none] ![box-shadow:none] hover:brightness-100';
+  const flat =
+    "![background-image:none] ![box-shadow:none] hover:brightness-100";
   const peer =
     `${btnBase} ${flat} flex-1 min-w-0 border border-[var(--border-control)] ` +
-    'bg-[var(--surface-raised)] hover:bg-[var(--surface-hover)]';
+    "bg-[var(--surface-raised)] hover:bg-[var(--surface-hover)]";
   /* `!` on the text colours, deliberately: the Button's default variant ships
      `text-primary-foreground`, and tailwind-merge does not reliably recognise
      `text-[color:var(…)]` as the same text-colour group — both classes reach
@@ -216,46 +247,62 @@
      brand treatment (gradient + inset action shadow). */
   const primary =
     `${btnBase} px-[var(--space-4)] border-0 text-[color:var(--on-brand)] ` +
-    'bg-[var(--brand-solid)] [background-image:var(--gradient-action)] ' +
-    '[box-shadow:var(--shadow-action)]';
+    "bg-[var(--brand-solid)] [background-image:var(--gradient-action)] " +
+    "[box-shadow:var(--shadow-action)]";
   const dismiss =
     `${btnBase} ${flat} border border-[var(--border-control)] bg-[var(--surface-raised)] ` +
-    '!text-[color:var(--ink-body)] hover:bg-[var(--surface-hover)]';
+    "!text-[color:var(--ink-body)] hover:bg-[var(--surface-hover)]";
 
   /* A standing grant must read as consequential — warning tint, warning ink,
      a real edge (DESIGN.md §"A standing grant must read as consequential"). */
   const widen =
     `${btnBase} ${flat} border border-[var(--status-attn-ink)] bg-[var(--status-attn-bg)] ` +
-    '!text-[color:var(--status-attn-ink)]';
+    "!text-[color:var(--status-attn-ink)]";
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
-<section class="hitl" aria-label={questions ? 'Question from the agent' : 'Permission request'}>
+<section
+  aria-label={questions ? 'Question from the agent' : 'Permission request'}
+  class="hitl"
+>
   {#if questions}
-    <h2><span class="pill attn"><IconArrowUp />needs you</span>Question from the agent</h2>
+    <h2>
+      <span class="pill attn"><IconArrowUp />needs you</span>Question from the
+      agent
+    </h2>
     {#each questions as q, qi (q.question)}
       <p class="lede">{q.question}</p>
       <div class="qopts">
         {#each q.options as opt, i (opt.label)}
           {@const live = ownsKeys && qi === current && i < 9}
           <button
-            type="button"
-            aria-pressed={isSelected(q.question, opt.label)}
             aria-keyshortcuts={live ? String(i + 1) : undefined}
-            class:sel={isSelected(q.question, opt.label)}
+            aria-pressed={isSelected(q.question, opt.label)}
             onclick={() => toggle(qi, opt.label)}
+            type="button"
+            class:sel={isSelected(q.question, opt.label)}
           >
-            <span class="kc" class:dim={!live}>{i + 1}</span><span>{opt.label}</span>
+            <span class="kc" class:dim={!live}>{i + 1}</span
+            ><span>{opt.label}</span>
           </button>
         {/each}
       </div>
     {/each}
     <div class="qact">
-      <Button class={primary} disabled={!allAnswered || !answerable} onclick={submitQuestion}>
+      <Button
+        class={primary}
+        disabled={!allAnswered || !answerable}
+        onclick={submitQuestion}
+      >
         <IconCheck />Answer
       </Button>
-      <Button class={dismiss} disabled={!answerable} onclick={() => answer('deny')}>Dismiss</Button>
+      <Button
+        class={dismiss}
+        disabled={!answerable}
+        onclick={() => answer('deny')}
+        >Dismiss</Button
+      >
     </div>
     <!-- One line, three truths: the answer is out, the socket cannot carry it
          yet, or the hub called it off and said why. A live region, so the last
@@ -266,9 +313,14 @@
       </p>
     {/if}
   {:else}
-    <h2><span class="pill attn"><IconArrowUp />needs you</span>Permission — {request.toolName}</h2>
+    <h2>
+      <span class="pill attn"><IconArrowUp />needs you</span>Permission —
+      {request.toolName}
+    </h2>
     <p class="lede">{summary}</p>
-    {#if command}<div class="cmd">{command}</div>{/if}
+    {#if command}
+      <div class="cmd">{command}</div>
+    {/if}
     <!-- The disclosed payload: a summary line is not enough to grant on — an
          Edit/Write/WebFetch shows one sentence and hides the file, the diff, the
          URL it is actually about. Every field of the tool input is here, one
@@ -286,10 +338,18 @@
       </div>
     </details>
     <div class="choice">
-      <Button class={grant} disabled={!answerable} onclick={() => answer('allow')}>
+      <Button
+        class={grant}
+        disabled={!answerable}
+        onclick={() => answer('allow')}
+      >
         <IconCheck />Approve
       </Button>
-      <Button class={refuse} disabled={!answerable} onclick={() => answer('deny')}>
+      <Button
+        class={refuse}
+        disabled={!answerable}
+        onclick={() => answer('deny')}
+      >
         <IconClose />Deny
       </Button>
     </div>
@@ -303,8 +363,15 @@
     {/if}
     {#if rule}
       <div class="widen">
-        <p>This would allow <span class="mono">{rule.full}</span> for {rule.scope} — a wider grant than the request above.</p>
-        <Button class={widen} disabled={!answerable} onclick={() => answer('always')}>
+        <p>
+          This would allow <span class="mono">{rule.full}</span> for
+          {rule.scope} — a wider grant than the request above.
+        </p>
+        <Button
+          class={widen}
+          disabled={!answerable}
+          onclick={() => answer('always')}
+        >
           <IconShield />Always allow {rule.short}
         </Button>
       </div>
@@ -407,7 +474,7 @@
     display: none;
   }
   .disclose > summary::before {
-    content: '▸';
+    content: "▸";
     margin-right: var(--space-2);
     transition: transform var(--c-100) var(--e-in);
   }

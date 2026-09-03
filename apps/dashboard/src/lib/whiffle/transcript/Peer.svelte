@@ -1,39 +1,49 @@
 <script lang="ts">
+  import { IconArrowRight, IconRules, IconSubagent } from "$lib/icons";
+  import { whiffle } from "../client.svelte";
+  import { resolveInstanceId } from "../links";
   /**
    * Reported speech — a message another session sent, or a rule firing. Never
    * the reader's own words, so it rides the rail as a peer note with a mark that
    * says who, rather than a `.who` turn. Quiet Ledger reported-speech line.
    */
-  import type { Message } from '../types';
-  import { IconSubagent, IconRules, IconArrowRight } from '$lib/icons';
-  import { whiffle } from '../client.svelte';
-  import { resolveInstanceId } from '../links';
-  import MessageBody from './MessageBody.svelte';
+  import type { Message } from "../types";
+  import MessageBody from "./MessageBody.svelte";
 
   let { message }: { message: Message } = $props();
 
   const meta = $derived(message.metadata ?? {});
   const isRule = $derived(!!meta.ruleName);
   const isReport = $derived(!!meta.reportKind);
-  const failed = $derived(meta.reportKind === 'failed');
+  const failed = $derived(meta.reportKind === "failed");
   /** The delegate a report came from, by name and — where the fleet still has its row — by link. */
-  const sender = $derived(isReport ? (meta.peerName ?? '') : '');
-  const senderId = $derived(isReport ? resolveInstanceId(meta.peerSession, whiffle.instances) : undefined);
+  const sender = $derived(isReport ? (meta.peerName ?? "") : "");
+  const senderId = $derived(
+    isReport
+      ? resolveInstanceId(meta.peerSession, whiffle.instances)
+      : undefined
+  );
 
   const label = $derived(
     isRule
-      ? (meta.ruleName ?? 'rule')
+      ? (meta.ruleName ?? "rule")
       : isReport
         ? failed
-          ? 'report — failed'
-          : 'report'
-        : (meta.peerName ?? meta.peerFrom ?? 'peer')
+          ? "report — failed"
+          : "report"
+        : (meta.peerName ?? meta.peerFrom ?? "peer")
   );
 </script>
 
 <div class="peer" class:err={failed}>
   <span class="tag">
-    {#if isRule}<IconRules />{:else if isReport}<IconArrowRight />{:else}<IconSubagent />{/if}
+    {#if isRule}
+      <IconRules />
+    {:else if isReport}
+      <IconArrowRight />
+    {:else}
+      <IconSubagent />
+    {/if}
     {label}
   </span>
   {#if sender}

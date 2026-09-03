@@ -19,33 +19,37 @@
  * gestures competing for one press is worse than one of them not existing —
  * especially when the commands the menu carries do the same jobs.
  */
-import { draggable, dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
-import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine';
+
+import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
+import {
+  draggable,
+  dropTargetForElements,
+} from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import {
   attachClosestEdge,
-  extractClosestEdge,
   type Edge,
-} from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
-import { getReorderDestinationIndex } from '@atlaskit/pragmatic-drag-and-drop-hitbox/util/get-reorder-destination-index';
-import { workspace } from './workspace.svelte';
-import { workingSet } from '../working-set.svelte';
+  extractClosestEdge,
+} from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
+import { getReorderDestinationIndex } from "@atlaskit/pragmatic-drag-and-drop-hitbox/util/get-reorder-destination-index";
+import { workingSet } from "../working-set.svelte";
+import { workspace } from "./workspace.svelte";
 
 /** What rides a drag. Never the transcript — only which conversation it is. */
 export interface SessionDrag {
-  kind: 'whiffle/session';
-  sessionId: string;
   /** The group it came from, or `null` when dragged in from the fleet. */
   from: string | null;
+  kind: "whiffle/session";
+  sessionId: string;
 }
 
 const isSessionDrag = (data: Record<string | symbol, unknown>): boolean =>
-  data.kind === 'whiffle/session' && typeof data.sessionId === 'string';
+  data.kind === "whiffle/session" && typeof data.sessionId === "string";
 
 /** The payload as we wrote it, read back off pdnd's loose record. */
 const asDrag = (data: Record<string | symbol, unknown>): SessionDrag | null =>
   isSessionDrag(data)
     ? {
-        kind: 'whiffle/session',
+        kind: "whiffle/session",
         sessionId: data.sessionId as string,
         from: (data.from as string | null) ?? null,
       }
@@ -76,7 +80,9 @@ function edgeAt(
   data: Record<string | symbol, unknown>
 ): Edge | null {
   const rect = element.getBoundingClientRect();
-  if (rect.width === 0 || rect.height === 0) return null;
+  if (rect.width === 0 || rect.height === 0) {
+    return null;
+  }
   const x = input.clientX - rect.left;
   const y = input.clientY - rect.top;
   const nearEdge =
@@ -90,10 +96,10 @@ function edgeAt(
 /* ── What the indicators read ─────────────────────────────────────────── */
 
 interface DropHint {
-  /** The group being hovered. */
-  leafId: string | null;
   /** Which edge a drop would split against, or `null` to join its tabs. */
   edge: Edge | null;
+  /** The group being hovered. */
+  leafId: string | null;
 }
 
 const hint = $state<DropHint>({ leafId: null, edge: null });
@@ -131,7 +137,8 @@ const clearHints = () => {
 
 /** Touch keeps its long-press menu; the pointer path is for pointers. */
 const coarse = (): boolean =>
-  typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+  typeof window !== "undefined" &&
+  window.matchMedia("(pointer: coarse)").matches;
 
 /* ── Actions ──────────────────────────────────────────────────────────── */
 
@@ -142,26 +149,38 @@ const coarse = (): boolean =>
  */
 export function dragSession(
   node: HTMLElement,
-  params: { sessionId: string; from?: string | null; ctx?: () => { machine?: string | null; cwd?: string; harness?: string } | null }
+  params: {
+    sessionId: string;
+    from?: string | null;
+    ctx?: () => {
+      machine?: string | null;
+      cwd?: string;
+      harness?: string;
+    } | null;
+  }
 ) {
   let current = params;
-  if (coarse()) return { update: (next: typeof params) => (current = next) };
+  if (coarse()) {
+    return { update: (next: typeof params) => (current = next) };
+  }
 
   const cleanup = draggable({
     element: node,
     getInitialData: (): Record<string, unknown> => ({
-      kind: 'whiffle/session',
+      kind: "whiffle/session",
       sessionId: current.sessionId,
       from: current.from ?? null,
     }),
     onDragStart: () => {
-      node.dataset.dragging = '';
+      node.dataset.dragging = "";
       // A conversation dragged in from the board is not open yet, and the
       // machine and folder it is addressed by have to be recorded BEFORE it
       // lands — a stored session without them resolves to a different
       // conversation that happens to share an id.
       const ctx = current.ctx?.();
-      if (ctx) workingSet.visit(current.sessionId, ctx);
+      if (ctx) {
+        workingSet.visit(current.sessionId, ctx);
+      }
     },
     onDrop: () => {
       delete node.dataset.dragging;
@@ -181,16 +200,22 @@ export function dragSession(
  */
 export function paneDropTarget(node: HTMLElement, leafId: string) {
   let current = leafId;
-  if (coarse()) return { update: (next: string) => (current = next) };
+  if (coarse()) {
+    return { update: (next: string) => (current = next) };
+  }
 
   const allowedEdge = (
     edge: Edge | null,
     raw: Record<string | symbol, unknown>
   ): Edge | null => {
-    if (!edge) return null;
+    if (!edge) {
+      return null;
+    }
     const data = asDrag(raw);
     const leaf = workspace.leaf(current);
-    if (data?.from === current && (leaf?.tabs.length ?? 0) < 2) return null;
+    if (data?.from === current && (leaf?.tabs.length ?? 0) < 2) {
+      return null;
+    }
     return edge;
   };
 
@@ -200,14 +225,19 @@ export function paneDropTarget(node: HTMLElement, leafId: string) {
     getData: ({ input, element }) =>
       attachClosestEdge(
         { leafId: current },
-        { element, input, allowedEdges: ['top', 'right', 'bottom', 'left'] }
+        { element, input, allowedEdges: ["top", "right", "bottom", "left"] }
       ),
     onDrag: ({ self, location, source }) => {
       // Only the innermost group under the pointer answers; without this a
       // nested split lights up every ancestor it sits inside.
-      if (location.current.dropTargets[0]?.element !== node) return;
+      if (location.current.dropTargets[0]?.element !== node) {
+        return;
+      }
       hint.leafId = current;
-      hint.edge = allowedEdge(edgeAt(node, location.current.input, self.data), source.data);
+      hint.edge = allowedEdge(
+        edgeAt(node, location.current.input, self.data),
+        source.data
+      );
     },
     onDragLeave: () => {
       if (hint.leafId === current) {
@@ -216,14 +246,24 @@ export function paneDropTarget(node: HTMLElement, leafId: string) {
       }
     },
     onDrop: ({ self, location, source }) => {
-      if (location.current.dropTargets[0]?.element !== node) return;
+      if (location.current.dropTargets[0]?.element !== node) {
+        return;
+      }
       const data = asDrag(source.data);
       // Recomputed here rather than trusted from the hover: see `edgeAt`.
-      const edge = allowedEdge(edgeAt(node, location.current.input, self.data), source.data);
+      const edge = allowedEdge(
+        edgeAt(node, location.current.input, self.data),
+        source.data
+      );
       clearHints();
-      if (!data) return;
-      if (edge) workspace.split(current, edge, data.sessionId);
-      else workspace.move(data.sessionId, current);
+      if (!data) {
+        return;
+      }
+      if (edge) {
+        workspace.split(current, edge, data.sessionId);
+      } else {
+        workspace.move(data.sessionId, current);
+      }
     },
   });
 
@@ -241,7 +281,9 @@ export function tabDropTarget(
   params: { leafId: string; index: number; sessionId: string }
 ) {
   let current = params;
-  if (coarse()) return { update: (next: typeof params) => (current = next) };
+  if (coarse()) {
+    return { update: (next: typeof params) => (current = next) };
+  }
 
   const cleanup = dropTargetForElements({
     element: node,
@@ -249,45 +291,57 @@ export function tabDropTarget(
     getData: ({ input, element }) =>
       attachClosestEdge(
         { leafId: current.leafId, index: current.index },
-        { element, input, allowedEdges: ['left', 'right'] }
+        { element, input, allowedEdges: ["left", "right"] }
       ),
     onDrag: ({ self, source }) => {
       const data = asDrag(source.data);
       const leaf = workspace.leaf(current.leafId);
-      if (!leaf || !data) return;
+      if (!(leaf && data)) {
+        return;
+      }
       const startIndex = leaf.tabs.indexOf(data.sessionId);
       tabHint.leafId = current.leafId;
       tabHint.index = getReorderDestinationIndex({
         startIndex: startIndex === -1 ? leaf.tabs.length : startIndex,
         indexOfTarget: current.index,
         closestEdgeOfTarget: extractClosestEdge(self.data),
-        axis: 'horizontal',
+        axis: "horizontal",
       });
     },
     onDragLeave: () => {
-      if (tabHint.leafId === current.leafId) tabHint.index = null;
+      if (tabHint.leafId === current.leafId) {
+        tabHint.index = null;
+      }
     },
     onDrop: ({ self, source }) => {
       const data = asDrag(source.data);
       const leaf = workspace.leaf(current.leafId);
       const edge = extractClosestEdge(self.data);
       clearHints();
-      if (!leaf || !data) return;
+      if (!(leaf && data)) {
+        return;
+      }
       const startIndex = leaf.tabs.indexOf(data.sessionId);
       const index = getReorderDestinationIndex({
         startIndex: startIndex === -1 ? leaf.tabs.length : startIndex,
         indexOfTarget: current.index,
         closestEdgeOfTarget: edge,
-        axis: 'horizontal',
+        axis: "horizontal",
       });
       // Same strip is a reorder — the conversation is already here and only
       // its place in the row changes, which must not disturb its pane.
-      if (startIndex !== -1) workspace.reorder(current.leafId, data.sessionId, index);
-      else workspace.move(data.sessionId, current.leafId, index);
+      if (startIndex === -1) {
+        workspace.move(data.sessionId, current.leafId, index);
+      } else {
+        workspace.reorder(current.leafId, data.sessionId, index);
+      }
     },
   });
 
-  return { update: (next: typeof params) => (current = next), destroy: cleanup };
+  return {
+    update: (next: typeof params) => (current = next),
+    destroy: cleanup,
+  };
 }
 
 export { combine };

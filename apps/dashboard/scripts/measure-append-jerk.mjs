@@ -24,17 +24,17 @@
  *   }
  */
 
-import { chromium } from 'playwright-core';
+import { chromium } from "playwright-core";
 
 const id = process.argv[2];
 if (!id) {
-  console.error('usage: node scripts/measure-append-jerk.mjs <session-id>');
+  console.error("usage: node scripts/measure-append-jerk.mjs <session-id>");
   process.exit(1);
 }
 
 const url = process.env.WHIFFLE_URL || `http://localhost:3000/session/${id}`;
 const WAIT_MS = Number(process.env.WAIT_MS || 6000);
-const RECORD_MS = Number(process.env.RECORD_MS || 30000);
+const RECORD_MS = Number(process.env.RECORD_MS || 30_000);
 
 // The transcript scroller in SessionPane.svelte is bound via
 // `bind:this={scroller}` (class `... overflow-y-auto overscroll-contain ...`),
@@ -44,7 +44,7 @@ const RECORD_MS = Number(process.env.RECORD_MS || 30000);
 // alone matches several unrelated panes). We target the unique
 // `.overflow-y-auto.overscroll-contain` scroller, falling back to the log's
 // parent for safety.
-const SCROLLER_SELECTOR = '.overflow-y-auto.overscroll-contain';
+const SCROLLER_SELECTOR = ".overflow-y-auto.overscroll-contain";
 
 const browser = await chromium.launch({
   headless: true,
@@ -54,7 +54,7 @@ const browser = await chromium.launch({
 const page = await browser.newPage();
 
 try {
-  await page.goto(url, { waitUntil: 'load' });
+  await page.goto(url, { waitUntil: "load" });
   await page.waitForTimeout(WAIT_MS);
 
   // Record every animation frame for RECORD_MS. The trace is written to
@@ -63,7 +63,7 @@ try {
     async ({ selector, durationMs }) => {
       const scroller =
         document.querySelector(selector) ??
-        document.querySelector('[data-transcript-content]')?.parentElement;
+        document.querySelector("[data-transcript-content]")?.parentElement;
 
       window.__jerkTrace = [];
       if (!scroller) {
@@ -78,14 +78,17 @@ try {
             scrollTop: scroller.scrollTop,
             scrollHeight: scroller.scrollHeight,
           });
-          if (performance.now() - start >= durationMs) resolve();
-          else requestAnimationFrame(step);
+          if (performance.now() - start >= durationMs) {
+            resolve();
+          } else {
+            requestAnimationFrame(step);
+          }
         };
         requestAnimationFrame(step);
       });
       return window.__jerkTrace;
     },
-    { selector: SCROLLER_SELECTOR, durationMs: RECORD_MS },
+    { selector: SCROLLER_SELECTOR, durationMs: RECORD_MS }
   );
 
   if (trace?.error) {
@@ -103,7 +106,9 @@ try {
     const a = trace[i - 1].scrollTop;
     const b = trace[i].scrollTop;
     const delta = Math.abs(b - a);
-    if (delta > maxSingleFrameDelta) maxSingleFrameDelta = delta;
+    if (delta > maxSingleFrameDelta) {
+      maxSingleFrameDelta = delta;
+    }
 
     if (i >= 2) {
       const dPrev = trace[i - 1].scrollTop - trace[i - 2].scrollTop;
@@ -115,11 +120,7 @@ try {
   }
 
   console.log(
-    JSON.stringify(
-      { totalFrames, reversals, maxSingleFrameDelta },
-      null,
-      2,
-    ),
+    JSON.stringify({ totalFrames, reversals, maxSingleFrameDelta }, null, 2)
   );
 } finally {
   await browser.close();

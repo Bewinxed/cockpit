@@ -10,8 +10,10 @@ async function said(response: Response): Promise<string> {
   const body = await response.text();
   try {
     const parsed: unknown = JSON.parse(body);
-    if (typeof parsed === 'string') return parsed;
-    if (parsed && typeof parsed === 'object' && 'message' in parsed) {
+    if (typeof parsed === "string") {
+      return parsed;
+    }
+    if (parsed && typeof parsed === "object" && "message" in parsed) {
       return String((parsed as { message: unknown }).message);
     }
   } catch {
@@ -20,14 +22,20 @@ async function said(response: Response): Promise<string> {
   return body || `the hub answered ${response.status}`;
 }
 
-async function send<T>(url: string, init: RequestInit, attempt: string): Promise<T> {
+async function send<T>(
+  url: string,
+  init: RequestInit,
+  attempt: string
+): Promise<T> {
   const response = await fetch(url, init);
-  if (!response.ok) throw new Error(`Could not ${attempt} — ${await said(response)}.`);
+  if (!response.ok) {
+    throw new Error(`Could not ${attempt} — ${await said(response)}.`);
+  }
   return (await response.json()) as T;
 }
 
 const json = (body: unknown): RequestInit => ({
-  headers: { 'Content-Type': 'application/json' },
+  headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),
 });
 
@@ -44,6 +52,6 @@ export const setAutopilot = (
 ): Promise<{ ok: true }> =>
   send<{ ok: true }>(
     `/api/autopilot/${encodeURIComponent(instanceId)}`,
-    { method: 'PUT', ...json(payload) },
-    'update autopilot'
+    { method: "PUT", ...json(payload) },
+    "update autopilot"
   );

@@ -1,3 +1,4 @@
+import Root from "./item.svelte";
 import Actions from "./item-actions.svelte";
 import Content from "./item-content.svelte";
 import Description from "./item-description.svelte";
@@ -7,28 +8,27 @@ import Header from "./item-header.svelte";
 import Media from "./item-media.svelte";
 import Separator from "./item-separator.svelte";
 import Title from "./item-title.svelte";
-import Root from "./item.svelte";
 
 export {
-	Root,
-	Group,
-	Separator,
-	Header,
-	Footer,
-	Content,
-	Title,
-	Description,
-	Actions,
-	Media,
-	//
-	Root as Item,
-	Group as ItemGroup,
-	Separator as ItemSeparator,
-	Header as ItemHeader,
-	Footer as ItemFooter,
-	Content as ItemContent,
-	Title as ItemTitle,
-	Description as ItemDescription,
-	Actions as ItemActions,
-	Media as ItemMedia,
+  Actions,
+  Actions as ItemActions,
+  Content,
+  Content as ItemContent,
+  Description,
+  Description as ItemDescription,
+  Footer,
+  Footer as ItemFooter,
+  Group,
+  Group as ItemGroup,
+  Header,
+  Header as ItemHeader,
+  Media,
+  Media as ItemMedia,
+  Root,
+  //
+  Root as Item,
+  Separator,
+  Separator as ItemSeparator,
+  Title,
+  Title as ItemTitle,
 };

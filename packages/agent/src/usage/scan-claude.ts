@@ -1,9 +1,9 @@
-import { cacheCreationCount, costForUsage } from '@whiffle/core';
-import type { RawClaudeUsage, UsageTokens } from '@whiffle/core';
-import { readdir } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-import type { ScannedRecord } from './types';
+import { readdir } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import type { RawClaudeUsage, UsageTokens } from "@whiffle/core";
+import { cacheCreationCount, costForUsage } from "@whiffle/core";
+import type { ScannedRecord } from "./types";
 
 /**
  * Claude Code transcript scanner (USAGE-SPEC.md §2.3, §5.2). Walks
@@ -17,14 +17,16 @@ export const claudeConfigDirs = (): string[] => {
   const env = process.env.CLAUDE_CONFIG_DIR;
   if (env) {
     return env
-      .split(',')
+      .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
   }
   const dirs: string[] = [];
   const xdg = process.env.XDG_CONFIG_HOME;
-  if (xdg) dirs.push(join(xdg, 'claude'));
-  dirs.push(join(homedir(), '.claude'));
+  if (xdg) {
+    dirs.push(join(xdg, "claude"));
+  }
+  dirs.push(join(homedir(), ".claude"));
   return dirs;
 };
 
@@ -36,19 +38,23 @@ export interface ClaudeFile {
 
 /** A transcript line, as written by Claude Code. */
 interface TranscriptLine {
-  type?: string;
-  timestamp?: string;
-  sessionId?: string;
-  requestId?: string;
   isSidechain?: boolean;
   message?: {
     id?: string;
     model?: string;
     usage?: RawClaudeUsage;
   };
+  requestId?: string;
+  sessionId?: string;
+  timestamp?: string;
+  type?: string;
 }
 
-async function walk(root: string, project: string | null, out: ClaudeFile[]): Promise<void> {
+async function walk(
+  root: string,
+  project: string | null,
+  out: ClaudeFile[]
+): Promise<void> {
   let entries;
   try {
     entries = await readdir(root, { withFileTypes: true });
@@ -59,8 +65,8 @@ async function walk(root: string, project: string | null, out: ClaudeFile[]): Pr
     const full = join(root, entry.name);
     if (entry.isDirectory()) {
       await walk(full, project ?? entry.name, out);
-    } else if (entry.name.endsWith('.jsonl')) {
-      out.push({ path: full, project: project ?? 'unknown' });
+    } else if (entry.name.endsWith(".jsonl")) {
+      out.push({ path: full, project: project ?? "unknown" });
     }
   }
 }
@@ -69,13 +75,15 @@ async function walk(root: string, project: string | null, out: ClaudeFile[]): Pr
 export const listClaudeFiles = async (): Promise<ClaudeFile[]> => {
   const files: ClaudeFile[] = [];
   for (const dir of claudeConfigDirs()) {
-    await walk(join(dir, 'projects'), null, files);
+    await walk(join(dir, "projects"), null, files);
   }
   return files;
 };
 
 const parseTs = (raw: string | undefined): number => {
-  if (!raw) return Number.NaN;
+  if (!raw) {
+    return Number.NaN;
+  }
   const ts = Date.parse(raw);
   return ts;
 };
@@ -85,17 +93,28 @@ const parseTs = (raw: string | undefined): number => {
  * should be skipped: empty sessionId/requestId/message.id/message.model, no
  * `message.usage`, or an unparseable timestamp (USAGE-SPEC.md §5.2).
  */
-const parseClaudeRecord = (raw: unknown, project: string): ScannedRecord | null => {
+const parseClaudeRecord = (
+  raw: unknown,
+  project: string
+): ScannedRecord | null => {
   const line = raw as TranscriptLine;
   const sessionId = line.sessionId;
   const requestId = line.requestId;
   const message = line.message;
-  if (!sessionId || !requestId) return null;
-  if (!message || !message.id || !message.model) return null;
-  if (!message.usage) return null;
+  if (!(sessionId && requestId)) {
+    return null;
+  }
+  if (!(message && message.id && message.model)) {
+    return null;
+  }
+  if (!message.usage) {
+    return null;
+  }
 
   const ts = parseTs(line.timestamp);
-  if (Number.isNaN(ts)) return null;
+  if (Number.isNaN(ts)) {
+    return null;
+  }
 
   const tokens: UsageTokens = {
     input: message.usage.input_tokens ?? 0,
@@ -106,7 +125,7 @@ const parseClaudeRecord = (raw: unknown, project: string): ScannedRecord | null 
   };
 
   return {
-    harness: 'claude',
+    harness: "claude",
     ts,
     sessionId,
     project,
@@ -122,10 +141,15 @@ const parseClaudeRecord = (raw: unknown, project: string): ScannedRecord | null 
 };
 
 /** Parses a chunk of transcript text (lines joined by `\n`) into records. */
-export const parseClaudeRecords = (text: string, project: string): ScannedRecord[] => {
+export const parseClaudeRecords = (
+  text: string,
+  project: string
+): ScannedRecord[] => {
   const records: ScannedRecord[] = [];
-  for (const line of text.split('\n')) {
-    if (!line.includes('"usage":{')) continue;
+  for (const line of text.split("\n")) {
+    if (!line.includes('"usage":{')) {
+      continue;
+    }
     let obj: unknown;
     try {
       obj = JSON.parse(line);
@@ -133,7 +157,9 @@ export const parseClaudeRecords = (text: string, project: string): ScannedRecord
       continue;
     }
     const rec = parseClaudeRecord(obj, project);
-    if (rec) records.push(rec);
+    if (rec) {
+      records.push(rec);
+    }
   }
   return records;
 };

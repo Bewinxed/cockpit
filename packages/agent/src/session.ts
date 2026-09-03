@@ -6,6 +6,8 @@
  * `./harnesses`. Nothing here interprets a harness's own event — frames go out
  * as neutral messages, with the harness's `raw` event riding along.
  */
+
+import { stat } from "node:fs/promises";
 import type {
   ControlPayload,
   Envelope,
@@ -26,26 +28,25 @@ import type {
   SessionPulse,
   SpawnPayload,
   StopPayload,
-} from '@whiffle/core';
+} from "@whiffle/core";
 import {
   AGENT_BUSY,
   alreadyIngested,
-  WHIFFLE_SCRATCH_TAG,
   FLEET_STATUS,
   FLEET_SYNC,
+  RESOLVE_PERMISSION,
   readIngested,
   repoPath,
   resumeCursor,
-  RESOLVE_PERMISSION,
   UPDATE_WHIFFLE,
-} from '@whiffle/core';
-import type { Harness, HarnessContext, HarnessSession } from './harness';
-import { harness as harnessOf, harnesses } from './harnesses';
-import { installTool, probeTools } from './tools';
-import { expandHome, runFs } from './fs';
-import { updateCheckout, type UpdateOptions } from './update';
-import { Effect } from 'effect';
-import { stat } from 'node:fs/promises';
+  WHIFFLE_SCRATCH_TAG,
+} from "@whiffle/core";
+import { Effect } from "effect";
+import { expandHome, runFs } from "./fs";
+import type { Harness, HarnessContext, HarnessSession } from "./harness";
+import { harnesses, harness as harnessOf } from "./harnesses";
+import { installTool, probeTools } from "./tools";
+import { type UpdateOptions, updateCheckout } from "./update";
 
 /**
  * What {@link SessionSupervisor.reattach} needs of the claude adapter, named
@@ -54,12 +55,6 @@ import { stat } from 'node:fs/promises';
  * satisfy this shape (design §4.2, §4.3 — opencode and pi deliberately do not).
  */
 interface ClaudeAdoption {
-  custodyCandidates(): Promise<{
-    /** sessiond's per-boot epoch — what makes a stored ingest mark readable or dead (design §7). */
-    epoch?: string;
-    /** `cwd` is what lets a survivor the hub never named be adopted at all. */
-    procs: { procId: string; alive: boolean; cwd?: string; head?: number }[];
-  }>;
   adopt(
     instanceId: string,
     ctx: HarnessContext,
@@ -71,10 +66,19 @@ interface ClaudeAdoption {
       onHandoff: (handoff: {
         instanceId: string;
         sessionId: string | null;
-        held: { message: NeutralUserMessage; extras: Pick<SendPayload, 'attachments' | 'images' | 'urgent'> }[];
+        held: {
+          message: NeutralUserMessage;
+          extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
+        }[];
       }) => void;
     }
   ): Promise<HarnessSession>;
+  custodyCandidates(): Promise<{
+    /** sessiond's per-boot epoch — what makes a stored ingest mark readable or dead (design §7). */
+    epoch?: string;
+    /** `cwd` is what lets a survivor the hub never named be adopted at all. */
+    procs: { procId: string; alive: boolean; cwd?: string; head?: number }[];
+  }>;
 }
 
 /**
@@ -115,7 +119,7 @@ export interface SessiondAwareContext extends HarnessContext {
  * way to tell a replayed line it already has from one it does not.
  */
 export type FrameSink = (
-  frame: Exclude<FramePayload, { kind: 'instances' }> & Partial<FrameProvenance>
+  frame: Exclude<FramePayload, { kind: "instances" }> & Partial<FrameProvenance>
 ) => void;
 
 const warn = (message: string): void => {
@@ -134,7 +138,7 @@ interface Worktree {
 }
 
 /** Where a side quest's worktrees live, relative to the repo they branch off. */
-const WORKTREE_DIR = '.whiffle-worktrees';
+const WORKTREE_DIR = ".whiffle-worktrees";
 
 /**
  * A side quest's transcript, kept out of the catalogs the rails read. The tag
@@ -158,24 +162,36 @@ const REPO_LIST_LIMIT = 100;
 const TAIL_LINES = 4;
 
 const tail = (output: string): string =>
-  output.trim().split('\n').slice(-TAIL_LINES).join('\n');
+  output.trim().split("\n").slice(-TAIL_LINES).join("\n");
 
 /** At most one pulse per instance per this long, unless busy/blocked moves. */
-const PULSE_THROTTLE_MS = 1_000;
+const PULSE_THROTTLE_MS = 1000;
 
 /** The one readable field of a tool call, for the rail's glance line. */
 const glanceOf = (input: Record<string, unknown> | undefined): string => {
-  if (!input) return '';
-  if (input.file_path) return String(input.file_path).split('/').slice(-2).join('/');
-  if (input.path) return String(input.path).split('/').slice(-2).join('/');
+  if (!input) {
+    return "";
+  }
+  if (input.file_path) {
+    return String(input.file_path).split("/").slice(-2).join("/");
+  }
+  if (input.path) {
+    return String(input.path).split("/").slice(-2).join("/");
+  }
   if (input.command) {
     const cmd = String(input.command);
     return cmd.length > 40 ? `${cmd.slice(0, 40)}...` : cmd;
   }
-  if (input.pattern) return `/${input.pattern}/`;
-  if (input.glob) return String(input.glob);
-  if (input.description) return String(input.description);
-  return '';
+  if (input.pattern) {
+    return `/${input.pattern}/`;
+  }
+  if (input.glob) {
+    return String(input.glob);
+  }
+  if (input.description) {
+    return String(input.description);
+  }
+  return "";
 };
 
 /** Whether the GitHub CLI is here at all — its absence is an answer, not a failure. */
@@ -188,9 +204,13 @@ const ghAvailable = async (): Promise<boolean> =>
  * asking the machine rather than GitHub.
  */
 const listRepos = async (): Promise<ReposResult> => {
-  if (!(await ghAvailable())) return { error: 'gh-missing' };
+  if (!(await ghAvailable())) {
+    return { error: "gh-missing" };
+  }
   const auth = await Bun.$`gh auth status`.quiet().nothrow();
-  if (auth.exitCode !== 0) return { error: 'gh-unauthenticated' };
+  if (auth.exitCode !== 0) {
+    return { error: "gh-unauthenticated" };
+  }
 
   const listed =
     await Bun.$`gh repo list --json nameWithOwner,visibility,updatedAt,description --limit ${REPO_LIST_LIMIT}`
@@ -206,20 +226,22 @@ const listRepos = async (): Promise<ReposResult> => {
 const repoIdentity = (repo: string): string => repoPath(repo).toLowerCase();
 
 /** What a clone of it is called on disk — git's own default. */
-const repoLeaf = (repo: string): string => repoPath(repo).split('/').pop() ?? '';
+const repoLeaf = (repo: string): string =>
+  repoPath(repo).split("/").pop() ?? "";
 
 /** A reference git can clone on its own, without `gh` resolving it first. */
 const isRepoUrl = (repo: string): boolean =>
-  /^[a-z][a-z0-9+.-]*:\/\//i.test(repo.trim()) || /^[^/]+@[^:]+:/.test(repo.trim());
+  /^[a-z][a-z0-9+.-]*:\/\//i.test(repo.trim()) ||
+  /^[^/]+@[^:]+:/.test(repo.trim());
 
 /** The machine-scoped session-catalog controls, routed to a harness. */
 const CATALOG_METHODS = new Set([
-  'listSessions',
-  'getSessionInfo',
-  'getSessionMessages',
-  'renameSession',
-  'tagSession',
-  'deleteSession',
+  "listSessions",
+  "getSessionInfo",
+  "getSessionMessages",
+  "renameSession",
+  "tagSession",
+  "deleteSession",
 ]);
 
 /**
@@ -229,10 +251,14 @@ const CATALOG_METHODS = new Set([
  * are heard; anything else means no directory was named.
  */
 const dirOf = (arg: unknown): string | undefined => {
-  if (typeof arg === 'string') return arg;
-  if (typeof arg === 'object' && arg !== null) {
+  if (typeof arg === "string") {
+    return arg;
+  }
+  if (typeof arg === "object" && arg !== null) {
     const dir = (arg as { dir?: unknown }).dir;
-    if (typeof dir === 'string') return dir;
+    if (typeof dir === "string") {
+      return dir;
+    }
   }
   return undefined;
 };
@@ -242,7 +268,9 @@ export const resumableSessions = async (): Promise<string[] | undefined> => {
   let sawAny = false;
   for (const adapter of harnesses()) {
     try {
-      for (const info of await adapter.listSessions()) ids.push(info.sessionId);
+      for (const info of await adapter.listSessions()) {
+        ids.push(info.sessionId);
+      }
       sawAny = true;
     } catch (error) {
       warn(`could not read ${adapter.kind}'s session catalog: ${error}`);
@@ -266,11 +294,17 @@ export const resumableSessions = async (): Promise<string[] | undefined> => {
  * harnesses do not report what they hold: it is then sent everything, exactly
  * as it was before any of them could say.
  */
-export const agreedHashes = (claims: Record<string, string>[]): Record<string, string> => {
+export const agreedHashes = (
+  claims: Record<string, string>[]
+): Record<string, string> => {
   const [first, ...rest] = claims;
-  if (!first) return {};
+  if (!first) {
+    return {};
+  }
   return Object.fromEntries(
-    Object.entries(first).filter(([name, hash]) => rest.every((claim) => claim[name] === hash))
+    Object.entries(first).filter(([name, hash]) =>
+      rest.every((claim) => claim[name] === hash)
+    )
   );
 };
 
@@ -344,11 +378,13 @@ export class SessionSupervisor {
 
   /** Re-sinks every unresolved ask — called by the daemon after register. */
   replayOpenAsks(): void {
-    for (const body of this.#openAsks.values()) this.sink(body);
+    for (const body of this.#openAsks.values()) {
+      this.sink(body);
+    }
   }
 
   dispatch(envelope: Envelope): void {
-    const key = envelope.instanceId ?? '';
+    const key = envelope.instanceId ?? "";
     const queue = (this.#queues.get(key) ?? Promise.resolve())
       .then(() => this.#route(envelope))
       .catch((error: unknown) => {
@@ -356,7 +392,9 @@ export class SessionSupervisor {
       });
     this.#queues.set(key, queue);
     void queue.then(() => {
-      if (this.#queues.get(key) === queue) this.#queues.delete(key);
+      if (this.#queues.get(key) === queue) {
+        this.#queues.delete(key);
+      }
     });
   }
 
@@ -373,7 +411,7 @@ export class SessionSupervisor {
     return {
       instanceId,
       busy,
-      activity: blocked ? 'blocked' : busy || running > 0 ? 'working' : 'idle',
+      activity: blocked ? "blocked" : busy || running > 0 ? "working" : "idle",
       currentTool: this.#pulseTool.get(instanceId) ?? null,
       runningSubagents: running,
       at: Date.now(),
@@ -386,27 +424,44 @@ export class SessionSupervisor {
    * else waits for the trailing edge of the window.
    */
   #emitPulse(instanceId: string, important: boolean): void {
-    if (!this.#sessions.has(instanceId)) return;
+    if (!this.#sessions.has(instanceId)) {
+      return;
+    }
     const now = Date.now();
     const last = this.#pulseAt.get(instanceId) ?? 0;
     const sendNow = () => {
       const timer = this.#pulseTimers.get(instanceId);
-      if (timer) clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+      }
       this.#pulseTimers.delete(instanceId);
       this.#pulseAt.set(instanceId, Date.now());
-      this.sink({ kind: 'pulse', instanceId, pulse: this.#buildPulse(instanceId) });
+      this.sink({
+        kind: "pulse",
+        instanceId,
+        pulse: this.#buildPulse(instanceId),
+      });
     };
     if (important || now - last >= PULSE_THROTTLE_MS) {
       sendNow();
     } else if (!this.#pulseTimers.has(instanceId)) {
       this.#pulseTimers.set(
         instanceId,
-        setTimeout(() => {
-          this.#pulseTimers.delete(instanceId);
-          if (!this.#sessions.has(instanceId)) return;
-          this.#pulseAt.set(instanceId, Date.now());
-          this.sink({ kind: 'pulse', instanceId, pulse: this.#buildPulse(instanceId) });
-        }, PULSE_THROTTLE_MS - (now - last))
+        setTimeout(
+          () => {
+            this.#pulseTimers.delete(instanceId);
+            if (!this.#sessions.has(instanceId)) {
+              return;
+            }
+            this.#pulseAt.set(instanceId, Date.now());
+            this.sink({
+              kind: "pulse",
+              instanceId,
+              pulse: this.#buildPulse(instanceId),
+            });
+          },
+          PULSE_THROTTLE_MS - (now - last)
+        )
       );
     }
   }
@@ -422,7 +477,9 @@ export class SessionSupervisor {
     this.#pulseSubagents.delete(instanceId);
     this.#pulseAt.delete(instanceId);
     const timer = this.#pulseTimers.get(instanceId);
-    if (timer) clearTimeout(timer);
+    if (timer) {
+      clearTimeout(timer);
+    }
     this.#pulseTimers.delete(instanceId);
   }
 
@@ -432,10 +489,14 @@ export class SessionSupervisor {
    * the subagent count, not the rail's tool line.
    */
   #foldPulse(instanceId: string, message: NeutralMessage): void {
-    const main = !('parent_tool_use_id' in message) || !message.parent_tool_use_id;
-    if (message.type === 'assistant' && main) {
+    const main = !(
+      "parent_tool_use_id" in message && message.parent_tool_use_id
+    );
+    if (message.type === "assistant" && main) {
       for (const block of message.message.content) {
-        if (block.type !== 'tool_use') continue;
+        if (block.type !== "tool_use") {
+          continue;
+        }
         this.#pulseTool.set(instanceId, {
           name: block.name,
           glance: glanceOf(block.input as Record<string, unknown>),
@@ -445,41 +506,52 @@ export class SessionSupervisor {
       }
       return;
     }
-    if (message.type === 'user' && main) {
+    if (message.type === "user" && main) {
       const content = message.message.content;
-      if (!Array.isArray(content)) return;
+      if (!Array.isArray(content)) {
+        return;
+      }
       for (const block of content) {
-        if (block.type !== 'tool_result') continue;
+        if (block.type !== "tool_result") {
+          continue;
+        }
         this.#pulseTool.delete(instanceId);
         this.#emitPulse(instanceId, false);
         return;
       }
       return;
     }
-    if (message.type === 'result') {
+    if (message.type === "result") {
       this.#pulseTool.delete(instanceId);
       this.#emitPulse(instanceId, false);
       return;
     }
-    if (message.type === 'system') {
+    if (message.type === "system") {
       const taskId = message.task_id;
       const running = this.#pulseSubagents.get(instanceId);
-      if (message.subtype === 'task_started' || message.subtype === 'task_progress') {
+      if (
+        message.subtype === "task_started" ||
+        message.subtype === "task_progress"
+      ) {
         // `subagent_type` is what separates a real Task/Agent subagent from a
         // plain Bash task — only the former counts in the rail's subagent badge.
         if (message.subagent_type && taskId) {
-          if (!running) this.#pulseSubagents.set(instanceId, new Set([taskId]));
-          else running.add(taskId);
+          if (running) {
+            running.add(taskId);
+          } else {
+            this.#pulseSubagents.set(instanceId, new Set([taskId]));
+          }
           this.#emitPulse(instanceId, false);
         }
-      } else if (message.subtype === 'task_notification') {
+      } else if (message.subtype === "task_notification") {
         if (taskId && running?.has(taskId)) {
           running.delete(taskId);
           this.#emitPulse(instanceId, false);
         }
-      } else if (message.subtype === 'task_updated') {
+      } else if (message.subtype === "task_updated") {
         const status = message.patch?.status;
-        const terminal = status === 'completed' || status === 'failed' || status === 'killed';
+        const terminal =
+          status === "completed" || status === "failed" || status === "killed";
         if (taskId && terminal && running?.has(taskId)) {
           running.delete(taskId);
           this.#emitPulse(instanceId, false);
@@ -513,15 +585,15 @@ export class SessionSupervisor {
 
   #route(envelope: Envelope): Promise<void> {
     switch (envelope.verb) {
-      case 'spawn':
+      case "spawn":
         return this.#spawn(envelope.payload as SpawnPayload);
-      case 'send':
+      case "send":
         return this.#send(envelope.payload as SendPayload);
-      case 'stop':
+      case "stop":
         return this.#stop(envelope.payload as StopPayload);
-      case 'control':
+      case "control":
         return this.#control(envelope.payload as ControlPayload);
-      case 'fs':
+      case "fs":
         return this.#fs(envelope.payload as FsPayload);
       default:
         return Promise.resolve();
@@ -529,13 +601,22 @@ export class SessionSupervisor {
   }
 
   #adapter(kind: HarnessKind | undefined): Harness {
-    const adapter = harnessOf(kind ?? 'claude');
-    if (!adapter) throw new Error(`no harness adapter for ${kind ?? 'claude'}`);
+    const adapter = harnessOf(kind ?? "claude");
+    if (!adapter) {
+      throw new Error(`no harness adapter for ${kind ?? "claude"}`);
+    }
     return adapter;
   }
 
   async #spawn(payload: SpawnPayload): Promise<void> {
-    const { instanceId, cwd, harness: kind, scratch, bootstrap, requestId: ack } = payload;
+    const {
+      instanceId,
+      cwd,
+      harness: kind,
+      scratch,
+      bootstrap,
+      requestId: ack,
+    } = payload;
     const adapter = this.#adapter(kind);
     try {
       let workdir = bootstrap ? await this.#clone(bootstrap) : expandHome(cwd);
@@ -544,9 +625,13 @@ export class SessionSupervisor {
       }
       // A relaunch stays in the checkout the side quest has been working in.
       const cut = this.#worktrees.get(instanceId);
-      if (cut) workdir = cut.path;
-      else if (scratch?.worktree) {
-        workdir = await this.#addWorktree(instanceId, expandHome(scratch.baseCwd ?? cwd));
+      if (cut) {
+        workdir = cut.path;
+      } else if (scratch?.worktree) {
+        workdir = await this.#addWorktree(
+          instanceId,
+          expandHome(scratch.baseCwd ?? cwd)
+        );
       }
 
       // Each spawn says for itself whether this is a side quest, so a relaunch
@@ -557,7 +642,9 @@ export class SessionSupervisor {
           dir: workdir,
           harness: adapter.kind,
         });
-      } else this.#quests.delete(instanceId);
+      } else {
+        this.#quests.delete(instanceId);
+      }
 
       // A spawn for an instance already running is a relaunch: replace the
       // process under the same id, settling the old one first.
@@ -576,10 +663,25 @@ export class SessionSupervisor {
       this.#sessions.set(instanceId, session);
       // The session is in place. Worth saying out loud for a relaunch, whose
       // caller has nothing else to wait on.
-      if (ack) this.sink({ kind: 'control_result', instanceId, requestId: ack, ok: true });
+      if (ack) {
+        this.sink({
+          kind: "control_result",
+          instanceId,
+          requestId: ack,
+          ok: true,
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (ack) this.sink({ kind: 'control_result', instanceId, requestId: ack, ok: false, error: message });
+      if (ack) {
+        this.sink({
+          kind: "control_result",
+          instanceId,
+          requestId: ack,
+          ok: false,
+          error: message,
+        });
+      }
       this.#fail(instanceId, error);
     }
   }
@@ -611,7 +713,9 @@ export class SessionSupervisor {
       frame: (message) => {
         const src = this.#line.get(instanceId);
         this.#line.delete(instanceId);
-        if (message.type === 'result') this.#tagQuest(instanceId, adapter);
+        if (message.type === "result") {
+          this.#tagQuest(instanceId, adapter);
+        }
         // Folded before the forward decision: the pulse is local state being
         // rebuilt from a replay, and a line the hub already has still tells
         // this agent what its own session is doing.
@@ -620,9 +724,11 @@ export class SessionSupervisor {
         // it has already become a frame there — replaying it would double what
         // a dashboard shows. Above it, or under a different epoch, or with no
         // provenance at all: forwarded.
-        if (alreadyIngested(this.#ingested.get(instanceId), src)) return;
+        if (alreadyIngested(this.#ingested.get(instanceId), src)) {
+          return;
+        }
         this.sink({
-          kind: 'frame',
+          kind: "frame",
           instanceId,
           harness: adapter.kind,
           message,
@@ -630,25 +736,43 @@ export class SessionSupervisor {
         });
       },
       permission: (request) => {
-        this.#pulseBlocked.set(instanceId, (this.#pulseBlocked.get(instanceId) ?? 0) + 1);
+        this.#pulseBlocked.set(
+          instanceId,
+          (this.#pulseBlocked.get(instanceId) ?? 0) + 1
+        );
         this.#emitPulse(instanceId, true);
-        const body = { kind: 'permission_request' as const, instanceId, harness: adapter.kind, ...request };
+        const body = {
+          kind: "permission_request" as const,
+          instanceId,
+          harness: adapter.kind,
+          ...request,
+        };
         this.#openAsks.set(request.requestId, body);
         this.sink(body);
       },
       busy: (active) => {
-        if (active) this.#busy.add(instanceId);
-        else this.#busy.delete(instanceId);
+        if (active) {
+          this.#busy.add(instanceId);
+        } else {
+          this.#busy.delete(instanceId);
+        }
         this.#emitPulse(instanceId, true);
       },
-      session: (sessionId) => this.#noteQuestSession(instanceId, sessionId, adapter.kind),
+      session: (sessionId) =>
+        this.#noteQuestSession(instanceId, sessionId, adapter.kind),
       failed: (error) => this.#fail(instanceId, error),
       emit: (envelope) => this.emit(envelope),
       closed: () => {
         // A dead process is never going to answer anything it asked.
-        for (const [requestId, body] of this.#openAsks)
-          if ('instanceId' in body && body.instanceId === instanceId) this.#openAsks.delete(requestId);
-        if (holder.session && this.#sessions.get(instanceId) === holder.session) {
+        for (const [requestId, body] of this.#openAsks) {
+          if ("instanceId" in body && body.instanceId === instanceId) {
+            this.#openAsks.delete(requestId);
+          }
+        }
+        if (
+          holder.session &&
+          this.#sessions.get(instanceId) === holder.session
+        ) {
           this.#sessions.delete(instanceId);
           this.#busy.delete(instanceId);
           this.#forgetPulse(instanceId);
@@ -687,17 +811,36 @@ export class SessionSupervisor {
    * cannot be adopted — a reattach needs a directory — and is left alone
    * rather than adopted into the wrong place.
    */
-  async survivors(): Promise<{ instanceId: string; cwd: string; sessionId: null }[]> {
-    const adapter = this.#adapter('claude') as Harness & Partial<ClaudeAdoption>;
-    if (typeof adapter.custodyCandidates !== 'function') return [];
+  async survivors(): Promise<
+    { instanceId: string; cwd: string; sessionId: null }[]
+  > {
+    const adapter = this.#adapter("claude") as Harness &
+      Partial<ClaudeAdoption>;
+    if (typeof adapter.custodyCandidates !== "function") {
+      return [];
+    }
     const welcome = await adapter.custodyCandidates();
     return welcome.procs
-      .filter((proc) => proc.alive && proc.cwd !== undefined && !this.#sessions.has(proc.procId))
-      .map((proc) => ({ instanceId: proc.procId, cwd: proc.cwd ?? '', sessionId: null }));
+      .filter(
+        (proc) =>
+          proc.alive &&
+          proc.cwd !== undefined &&
+          !this.#sessions.has(proc.procId)
+      )
+      .map((proc) => ({
+        instanceId: proc.procId,
+        cwd: proc.cwd ?? "",
+        sessionId: null,
+      }));
   }
 
   async reattach(
-    rows: { instanceId: string; cwd: string; sessionId?: string | null; afterSeq?: number }[],
+    rows: {
+      instanceId: string;
+      cwd: string;
+      sessionId?: string | null;
+      afterSeq?: number;
+    }[],
     /**
      * The hub's ingest ledger off the register ack. Absent — an old-shape ack,
      * or a hub that has nothing of this machine — means every row follows from
@@ -705,20 +848,29 @@ export class SessionSupervisor {
      */
     ingested?: Record<string, IngestMark>
   ): Promise<string[]> {
-    const adapter = this.#adapter('claude');
+    const adapter = this.#adapter("claude");
     // `adopt` is claude's alone: opencode reattaches through its own server
     // (design §4.2) and pi has no subprocess to keep (§4.3).
     const claude = adapter as Harness & Partial<ClaudeAdoption>;
-    if (typeof claude.adopt !== 'function' || typeof claude.custodyCandidates !== 'function') {
+    if (
+      typeof claude.adopt !== "function" ||
+      typeof claude.custodyCandidates !== "function"
+    ) {
       return [];
     }
     const welcome = await claude.custodyCandidates();
-    const held = new Map(welcome.procs.filter((proc) => proc.alive).map((proc) => [proc.procId, proc]));
+    const held = new Map(
+      welcome.procs
+        .filter((proc) => proc.alive)
+        .map((proc) => [proc.procId, proc])
+    );
 
     const adopted: string[] = [];
     for (const row of rows) {
       const proc = held.get(row.instanceId);
-      if (!proc) continue;
+      if (!proc) {
+        continue;
+      }
       // THE HONEST-LOSS RULE (design §7). A mark under sessiond's CURRENT epoch
       // is a cursor: replay exactly the gap the hub named. Anything else — no
       // entry, or a mark minted under a sessiond that has since restarted — is
@@ -729,8 +881,11 @@ export class SessionSupervisor {
       // no longer exist. Disk transcripts cover the middle.
       const mark = ingested?.[row.instanceId];
       const cursor = resumeCursor(welcome.epoch, mark);
-      if (cursor !== undefined && mark) this.#ingested.set(row.instanceId, mark);
-      else this.#ingested.delete(row.instanceId);
+      if (cursor !== undefined && mark) {
+        this.#ingested.set(row.instanceId, mark);
+      } else {
+        this.#ingested.delete(row.instanceId);
+      }
       const afterSeq = cursor ?? row.afterSeq;
       const holder: { session: HarnessSession | null } = { session: null };
       const ctx = this.#context(row.instanceId, row.cwd, adapter, holder);
@@ -743,20 +898,24 @@ export class SessionSupervisor {
           // whatever else is in flight for this instance, exactly as an
           // operator-issued relaunch would.
           this.dispatch({
-            verb: 'spawn',
+            verb: "spawn",
             instanceId,
             payload: {
               instanceId,
               cwd: row.cwd,
-              harness: 'claude',
+              harness: "claude",
               ...(sessionId ? { resume: { sessionKey: sessionId } } : {}),
             } satisfies SpawnPayload,
           } as Envelope);
           for (const turn of heldTurns) {
             this.dispatch({
-              verb: 'send',
+              verb: "send",
               instanceId,
-              payload: { instanceId, message: turn.message, ...turn.extras } satisfies SendPayload,
+              payload: {
+                instanceId,
+                message: turn.message,
+                ...turn.extras,
+              } satisfies SendPayload,
             } as Envelope);
           }
         },
@@ -785,9 +944,15 @@ export class SessionSupervisor {
   }
 
   /** The harness session a side quest turned out to be writing, from its init frame. */
-  #noteQuestSession(instanceId: string, sessionId: string, harness: HarnessKind): void {
+  #noteQuestSession(
+    instanceId: string,
+    sessionId: string,
+    harness: HarnessKind
+  ): void {
     const quest = this.#quests.get(instanceId);
-    if (!quest || quest.sessionId === sessionId) return;
+    if (!quest || quest.sessionId === sessionId) {
+      return;
+    }
     quest.sessionId = sessionId;
     quest.harness = harness;
     quest.tagged = false;
@@ -801,33 +966,45 @@ export class SessionSupervisor {
    */
   #tagQuest(instanceId: string, adapter: Harness): void {
     const quest = this.#quests.get(instanceId);
-    if (!quest?.sessionId || quest.tagged) return;
+    if (!quest?.sessionId || quest.tagged) {
+      return;
+    }
     const { sessionId, dir } = quest;
     quest.tagged = true;
-    void adapter.tagSession(sessionId, WHIFFLE_SCRATCH_TAG, dir).catch((error: unknown) => {
-      quest.tagged = false;
-      warn(`could not tag side quest ${sessionId}: ${error}`);
-    });
+    void adapter
+      .tagSession(sessionId, WHIFFLE_SCRATCH_TAG, dir)
+      .catch((error: unknown) => {
+        quest.tagged = false;
+        warn(`could not tag side quest ${sessionId}: ${error}`);
+      });
   }
 
   /** A session whose tag someone has just set by hand is no longer ours to set. */
   #closeTagging(sessionId: unknown): void {
     for (const quest of this.#quests.values()) {
-      if (quest.sessionId === sessionId) quest.tagged = true;
+      if (quest.sessionId === sessionId) {
+        quest.tagged = true;
+      }
     }
   }
 
   /** A session that never started, or stopped without being asked to. */
   #fail(instanceId: string, error: unknown): void {
     this.sink({
-      kind: 'error',
+      kind: "error",
       instanceId,
-      verb: 'spawn',
+      verb: "spawn",
       message: error instanceof Error ? error.message : String(error),
     });
   }
 
-  async #send({ instanceId, message, attachments, images, urgent }: SendPayload): Promise<void> {
+  async #send({
+    instanceId,
+    message,
+    attachments,
+    images,
+    urgent,
+  }: SendPayload): Promise<void> {
     this.#session(instanceId).send(message, { attachments, images, urgent });
   }
 
@@ -838,59 +1015,97 @@ export class SessionSupervisor {
       this.#forgetPulse(instanceId);
       await session.stop();
     }
-    if (!discard) return;
+    if (!discard) {
+      return;
+    }
 
     try {
       await this.#removeWorktree(instanceId);
       await this.#removeQuestSession(instanceId);
-      if (requestId) this.sink({ kind: 'control_result', instanceId, requestId, ok: true });
+      if (requestId) {
+        this.sink({ kind: "control_result", instanceId, requestId, ok: true });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (requestId)
-        this.sink({ kind: 'control_result', instanceId, requestId, ok: false, error: message });
-      else this.sink({ kind: 'error', instanceId, verb: 'stop', message });
+      if (requestId) {
+        this.sink({
+          kind: "control_result",
+          instanceId,
+          requestId,
+          ok: false,
+          error: message,
+        });
+      } else {
+        this.sink({ kind: "error", instanceId, verb: "stop", message });
+      }
     }
   }
 
-  async #clone({ repo, baseDir }: NonNullable<SpawnPayload['bootstrap']>): Promise<string> {
-    const parent = expandHome(baseDir).replace(/(?!^)\/+$/, '');
+  async #clone({
+    repo,
+    baseDir,
+  }: NonNullable<SpawnPayload["bootstrap"]>): Promise<string> {
+    const parent = expandHome(baseDir).replace(/(?!^)\/+$/, "");
     const target = `${parent}/${repoLeaf(repo)}`;
 
     if (await isDirectory(target)) {
-      const origin = await Bun.$`git -C ${target} remote get-url origin`.quiet().nothrow();
-      if (origin.exitCode !== 0 || repoIdentity(origin.text()) !== repoIdentity(repo)) {
-        throw new Error(`bootstrap target exists and is not the requested repo: ${target}`);
+      const origin = await Bun.$`git -C ${target} remote get-url origin`
+        .quiet()
+        .nothrow();
+      if (
+        origin.exitCode !== 0 ||
+        repoIdentity(origin.text()) !== repoIdentity(repo)
+      ) {
+        throw new Error(
+          `bootstrap target exists and is not the requested repo: ${target}`
+        );
       }
       return target;
     }
 
     const gh = await ghAvailable();
-    if (!gh && !isRepoUrl(repo)) {
-      throw new Error(`cloning ${repo} needs the GitHub CLI, and gh is not installed on this machine`);
+    if (!(gh || isRepoUrl(repo))) {
+      throw new Error(
+        `cloning ${repo} needs the GitHub CLI, and gh is not installed on this machine`
+      );
     }
 
     await Bun.$`mkdir -p ${parent}`.quiet();
     const cloned = gh
-      ? await Bun.$`gh repo clone ${repo} ${target} -- --single-branch`.quiet().nothrow()
-      : await Bun.$`git clone --single-branch ${repo} ${target}`.quiet().nothrow();
+      ? await Bun.$`gh repo clone ${repo} ${target} -- --single-branch`
+          .quiet()
+          .nothrow()
+      : await Bun.$`git clone --single-branch ${repo} ${target}`
+          .quiet()
+          .nothrow();
     if (cloned.exitCode !== 0) {
-      throw new Error(`could not clone ${repo}: ${tail(cloned.stderr.toString())}`);
+      throw new Error(
+        `could not clone ${repo}: ${tail(cloned.stderr.toString())}`
+      );
     }
     return target;
   }
 
   async #addWorktree(instanceId: string, baseCwd: string): Promise<string> {
-    const repository = await Bun.$`git -C ${baseCwd} rev-parse --show-toplevel`.quiet().nothrow();
+    const repository = await Bun.$`git -C ${baseCwd} rev-parse --show-toplevel`
+      .quiet()
+      .nothrow();
     if (repository.exitCode !== 0) {
-      throw new Error(`a worktree side quest needs a git repository, and ${baseCwd} is not one`);
+      throw new Error(
+        `a worktree side quest needs a git repository, and ${baseCwd} is not one`
+      );
     }
 
     const root = repository.text().trim();
     const path = `${root}/${WORKTREE_DIR}/${instanceId.slice(0, 8)}`;
     await Bun.$`mkdir -p ${`${root}/${WORKTREE_DIR}`}`.quiet();
-    const added = await Bun.$`git -C ${root} worktree add ${path} --detach`.quiet().nothrow();
+    const added = await Bun.$`git -C ${root} worktree add ${path} --detach`
+      .quiet()
+      .nothrow();
     if (added.exitCode !== 0) {
-      throw new Error(`git worktree add failed: ${added.stderr.toString().trim()}`);
+      throw new Error(
+        `git worktree add failed: ${added.stderr.toString().trim()}`
+      );
     }
 
     this.#worktrees.set(instanceId, { path, root });
@@ -899,13 +1114,19 @@ export class SessionSupervisor {
 
   async #removeWorktree(instanceId: string): Promise<void> {
     const worktree = this.#worktrees.get(instanceId);
-    if (!worktree) return;
+    if (!worktree) {
+      return;
+    }
     this.#worktrees.delete(instanceId);
 
     const removed =
-      await Bun.$`git -C ${worktree.root} worktree remove --force ${worktree.path}`.quiet().nothrow();
+      await Bun.$`git -C ${worktree.root} worktree remove --force ${worktree.path}`
+        .quiet()
+        .nothrow();
     if (removed.exitCode !== 0) {
-      throw new Error(`git worktree remove failed: ${removed.stderr.toString().trim()}`);
+      throw new Error(
+        `git worktree remove failed: ${removed.stderr.toString().trim()}`
+      );
     }
     await Bun.$`git -C ${worktree.root} worktree prune`.quiet().nothrow();
   }
@@ -914,17 +1135,24 @@ export class SessionSupervisor {
   async #removeQuestSession(instanceId: string): Promise<void> {
     const quest = this.#quests.get(instanceId);
     this.#quests.delete(instanceId);
-    if (!quest?.sessionId) return;
+    if (!quest?.sessionId) {
+      return;
+    }
     await harnessOf(quest.harness)?.deleteSession(quest.sessionId, quest.dir);
   }
 
   async #fs(payload: FsPayload): Promise<void> {
     const { requestId } = payload;
     try {
-      this.sink({ kind: 'control_result', requestId, ok: true, result: await runFs(payload) });
+      this.sink({
+        kind: "control_result",
+        requestId,
+        ok: true,
+        result: await runFs(payload),
+      });
     } catch (error) {
       this.sink({
-        kind: 'control_result',
+        kind: "control_result",
         requestId,
         ok: false,
         error: error instanceof Error ? error.message : String(error),
@@ -932,13 +1160,25 @@ export class SessionSupervisor {
     }
   }
 
-  async #control({ instanceId, harness: kind, requestId, method, args = [] }: ControlPayload): Promise<void> {
+  async #control({
+    instanceId,
+    harness: kind,
+    requestId,
+    method,
+    args = [],
+  }: ControlPayload): Promise<void> {
     try {
       const result = await this.#call(instanceId, kind, method, args);
-      this.sink({ kind: 'control_result', instanceId, requestId, ok: true, result });
+      this.sink({
+        kind: "control_result",
+        instanceId,
+        requestId,
+        ok: true,
+        result,
+      });
     } catch (error) {
       this.sink({
-        kind: 'control_result',
+        kind: "control_result",
         instanceId,
         requestId,
         ok: false,
@@ -948,7 +1188,8 @@ export class SessionSupervisor {
   }
 
   /** The stored sessions of every harness, merged and newest-first. */
-  async #listSessions(args: unknown[]): Promise<NeutralSessionInfo[]> {    const options = (args[0] ?? {}) as { limit?: number; dir?: string };
+  async #listSessions(args: unknown[]): Promise<NeutralSessionInfo[]> {
+    const options = (args[0] ?? {}) as { limit?: number; dir?: string };
     const all: NeutralSessionInfo[] = [];
     for (const adapter of harnesses()) {
       try {
@@ -964,12 +1205,12 @@ export class SessionSupervisor {
   /** Converges the fleet across every harness that has a profile, merged into one report. */
   async #syncFleet(
     config: FleetConfig | undefined,
-    which: 'syncFleet' | 'fleetStatus'
+    which: "syncFleet" | "fleetStatus"
   ): Promise<FleetSyncReport> {
-    type State = import('@whiffle/core').FleetItemState;
-    const mcp: FleetSyncReport['mcp'] = {};
-    const marketplaces: FleetSyncReport['marketplaces'] = {};
-    const plugins: FleetSyncReport['plugins'] = {};
+    type State = import("@whiffle/core").FleetItemState;
+    const mcp: FleetSyncReport["mcp"] = {};
+    const marketplaces: FleetSyncReport["marketplaces"] = {};
+    const plugins: FleetSyncReport["plugins"] = {};
     const skills: Record<string, State> = {};
     // Merged rather than dropped. This rebuilds the machine's one word from
     // each harness's, and every field it does not name is a field the hub never
@@ -988,28 +1229,44 @@ export class SessionSupervisor {
     // skill on the machine.
     const skillClaims: Record<string, string>[] = [];
     const pluginClaims: Record<string, string>[] = [];
-    let memory: FleetSyncReport['memory'];
-    let memoryHook: FleetSyncReport['memoryHook'];
+    let memory: FleetSyncReport["memory"];
+    let memoryHook: FleetSyncReport["memoryHook"];
     // Merged the same way, and it has to be: the toolchain is what attributes a
     // CLI failure to a binary, and a field this rebuild does not name is a field
     // the hub never hears about.
-    let toolchain: FleetSyncReport['toolchain'];
+    let toolchain: FleetSyncReport["toolchain"];
     for (const adapter of harnesses()) {
-      const apply = which === 'syncFleet' ? adapter.syncFleet : adapter.fleetStatus;
-      if (!apply) continue;
+      const apply =
+        which === "syncFleet" ? adapter.syncFleet : adapter.fleetStatus;
+      if (!apply) {
+        continue;
+      }
       try {
-        const report = which === 'syncFleet' ? await adapter.syncFleet!(config as FleetConfig) : await adapter.fleetStatus!();
+        const report =
+          which === "syncFleet"
+            ? await adapter.syncFleet!(config as FleetConfig)
+            : await adapter.fleetStatus!();
         Object.assign(mcp, report.mcp);
         Object.assign(marketplaces, report.marketplaces);
         Object.assign(plugins, report.plugins);
         Object.assign(skills, report.skills ?? {});
         Object.assign(memoryDocs, report.memoryDocs ?? {});
         Object.assign(hooks, report.hooks ?? {});
-        if (report.have?.skills) skillClaims.push(report.have.skills);
-        if (report.have?.plugins) pluginClaims.push(report.have.plugins);
-        if (report.memory) memory = report.memory;
-        if (report.memoryHook) memoryHook = report.memoryHook;
-        if (report.toolchain) toolchain = { ...toolchain, ...report.toolchain };
+        if (report.have?.skills) {
+          skillClaims.push(report.have.skills);
+        }
+        if (report.have?.plugins) {
+          pluginClaims.push(report.have.plugins);
+        }
+        if (report.memory) {
+          memory = report.memory;
+        }
+        if (report.memoryHook) {
+          memoryHook = report.memoryHook;
+        }
+        if (report.toolchain) {
+          toolchain = { ...toolchain, ...report.toolchain };
+        }
       } catch (error) {
         warn(`${which} on ${adapter.kind} failed: ${error}`);
       }
@@ -1024,7 +1281,10 @@ export class SessionSupervisor {
       ...(memory ? { memory } : {}),
       ...(memoryHook ? { memoryHook } : {}),
       ...(toolchain ? { toolchain } : {}),
-      have: { skills: agreedHashes(skillClaims), plugins: agreedHashes(pluginClaims) },
+      have: {
+        skills: agreedHashes(skillClaims),
+        plugins: agreedHashes(pluginClaims),
+      },
       at: Date.now(),
     };
   }
@@ -1037,38 +1297,68 @@ export class SessionSupervisor {
   ): Promise<unknown> {
     if (instanceId === undefined) {
       const daemonFn = this.#daemonFunctions[method];
-      if (daemonFn) return await daemonFn(...args);
+      if (daemonFn) {
+        return await daemonFn(...args);
+      }
 
-      if (method === 'listRepos') return await listRepos();
-      if (method === 'listTools') return await probeTools();
-      if (method === 'installTool') return await installTool(args[0] as string, args[1] as string | undefined);
+      if (method === "listRepos") {
+        return await listRepos();
+      }
+      if (method === "listTools") {
+        return await probeTools();
+      }
+      if (method === "installTool") {
+        return await installTool(
+          args[0] as string,
+          args[1] as string | undefined
+        );
+      }
 
       // Fleet sync applies to every harness that has a machine profile: the hub
       // sends one desired state, and each harness converges the parts it
       // understands onto its own files. Reports merge into one machine word.
       if (method === FLEET_SYNC) {
-        return await this.#syncFleet(args[0] as FleetConfig, 'syncFleet');
+        return await this.#syncFleet(args[0] as FleetConfig, "syncFleet");
       }
       if (method === FLEET_STATUS) {
-        return await this.#syncFleet(undefined, 'fleetStatus');
+        return await this.#syncFleet(undefined, "fleetStatus");
       }
 
-      if (method === 'listSessions') return await this.#listSessions(args);
+      if (method === "listSessions") {
+        return await this.#listSessions(args);
+      }
       if (CATALOG_METHODS.has(method)) {
         const adapter = this.#adapter(kind);
         switch (method) {
-          case 'getSessionInfo':
-            return await adapter.getSessionInfo(args[0] as string, dirOf(args[1]));
-          case 'getSessionMessages':
-            return await adapter.getSessionMessages(args[0] as string, dirOf(args[1]));
-          case 'renameSession':
-            return await adapter.renameSession(args[0] as string, args[1] as string, dirOf(args[2]));
-          case 'tagSession':
-            await adapter.tagSession(args[0] as string, (args[1] as string) ?? null, dirOf(args[2]));
+          case "getSessionInfo":
+            return await adapter.getSessionInfo(
+              args[0] as string,
+              dirOf(args[1])
+            );
+          case "getSessionMessages":
+            return await adapter.getSessionMessages(
+              args[0] as string,
+              dirOf(args[1])
+            );
+          case "renameSession":
+            return await adapter.renameSession(
+              args[0] as string,
+              args[1] as string,
+              dirOf(args[2])
+            );
+          case "tagSession":
+            await adapter.tagSession(
+              args[0] as string,
+              (args[1] as string) ?? null,
+              dirOf(args[2])
+            );
             this.#closeTagging(args[0]);
             return undefined;
-          case 'deleteSession':
-            return await adapter.deleteSession(args[0] as string, dirOf(args[1]));
+          case "deleteSession":
+            return await adapter.deleteSession(
+              args[0] as string,
+              dirOf(args[1])
+            );
         }
       }
 
@@ -1078,24 +1368,34 @@ export class SessionSupervisor {
         const adapter = this.#adapter(kind);
         if (adapter.machine) {
           const answer = await adapter.machine(method, args);
-          if (answer !== undefined) return answer;
+          if (answer !== undefined) {
+            return answer;
+          }
         }
       }
       for (const adapter of harnesses()) {
         if (adapter.machine) {
           const answer = await adapter.machine(method, args);
-          if (answer !== undefined) return answer;
+          if (answer !== undefined) {
+            return answer;
+          }
         }
       }
       throw new Error(`unknown session function: ${method}`);
     }
 
     if (method === RESOLVE_PERMISSION) {
-      this.#session(instanceId).resolvePermission(args[0] as string, args[1] as PermissionResult);
+      this.#session(instanceId).resolvePermission(
+        args[0] as string,
+        args[1] as PermissionResult
+      );
       this.#openAsks.delete(args[0] as string);
       const left = (this.#pulseBlocked.get(instanceId) ?? 1) - 1;
-      if (left <= 0) this.#pulseBlocked.delete(instanceId);
-      else this.#pulseBlocked.set(instanceId, left);
+      if (left <= 0) {
+        this.#pulseBlocked.delete(instanceId);
+      } else {
+        this.#pulseBlocked.set(instanceId, left);
+      }
       this.#emitPulse(instanceId, true);
       return undefined;
     }
@@ -1104,7 +1404,9 @@ export class SessionSupervisor {
 
   #session(instanceId: string): HarnessSession {
     const session = this.#sessions.get(instanceId);
-    if (!session) throw new Error(`no session ${instanceId}`);
+    if (!session) {
+      throw new Error(`no session ${instanceId}`);
+    }
     return session;
   }
 }

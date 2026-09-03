@@ -1,17 +1,21 @@
 <script lang="ts">
-  import { IconClose, IconColumns, IconAlignLeft } from '$lib/icons';
-  import { onDestroy } from 'svelte';
-  import { fade, scale } from 'svelte/transition';
-  import { quintOut } from 'svelte/easing';
-  import { Dialog } from 'bits-ui';
-  import { FileDiff, parseDiffFromFile, type FileContents } from '@pierre/diffs';
-  import { Button } from '$lib/components/ui/button';
-  import { CopyButton } from '$lib/components/ui/copy-button';
+  import {
+    type FileContents,
+    FileDiff,
+    parseDiffFromFile,
+  } from "@pierre/diffs";
+  import { Dialog } from "bits-ui";
+  import { onDestroy } from "svelte";
+  import { quintOut } from "svelte/easing";
+  import { fade, scale } from "svelte/transition";
+  import { Button } from "$lib/components/ui/button";
+  import { CopyButton } from "$lib/components/ui/copy-button";
+  import { IconAlignLeft, IconClose, IconColumns } from "$lib/icons";
 
   interface Props {
     filePath: string;
-    oldContent: string;
     newContent: string;
+    oldContent: string;
     onClose: () => void;
   }
 
@@ -21,56 +25,58 @@
   let open = $state(true);
   let container = $state<HTMLDivElement | null>(null);
   let diffInstance: FileDiff | null = null;
-  let diffStyle = $state<'unified' | 'split'>('unified');
+  let diffStyle = $state<"unified" | "split">("unified");
 
   // Get file extension for syntax highlighting
   function getLanguageFromPath(path: string): string | undefined {
-    const ext = path.split('.').pop()?.toLowerCase();
+    const ext = path.split(".").pop()?.toLowerCase();
     const langMap: Record<string, string> = {
-      'ts': 'typescript',
-      'tsx': 'tsx',
-      'js': 'javascript',
-      'jsx': 'jsx',
-      'svelte': 'svelte',
-      'vue': 'vue',
-      'py': 'python',
-      'rb': 'ruby',
-      'go': 'go',
-      'rs': 'rust',
-      'java': 'java',
-      'kt': 'kotlin',
-      'swift': 'swift',
-      'c': 'c',
-      'cpp': 'cpp',
-      'h': 'c',
-      'hpp': 'cpp',
-      'cs': 'csharp',
-      'php': 'php',
-      'html': 'html',
-      'css': 'css',
-      'scss': 'scss',
-      'less': 'less',
-      'json': 'json',
-      'yaml': 'yaml',
-      'yml': 'yaml',
-      'xml': 'xml',
-      'md': 'markdown',
-      'sql': 'sql',
-      'sh': 'bash',
-      'bash': 'bash',
-      'zsh': 'bash',
-      'dockerfile': 'dockerfile',
-      'toml': 'toml',
+      ts: "typescript",
+      tsx: "tsx",
+      js: "javascript",
+      jsx: "jsx",
+      svelte: "svelte",
+      vue: "vue",
+      py: "python",
+      rb: "ruby",
+      go: "go",
+      rs: "rust",
+      java: "java",
+      kt: "kotlin",
+      swift: "swift",
+      c: "c",
+      cpp: "cpp",
+      h: "c",
+      hpp: "cpp",
+      cs: "csharp",
+      php: "php",
+      html: "html",
+      css: "css",
+      scss: "scss",
+      less: "less",
+      json: "json",
+      yaml: "yaml",
+      yml: "yaml",
+      xml: "xml",
+      md: "markdown",
+      sql: "sql",
+      sh: "bash",
+      bash: "bash",
+      zsh: "bash",
+      dockerfile: "dockerfile",
+      toml: "toml",
     };
     return ext ? langMap[ext] : undefined;
   }
 
   function getFileName(path: string): string {
-    return path.split('/').pop() || path;
+    return path.split("/").pop() || path;
   }
 
   function renderDiff() {
-    if (!container) return;
+    if (!container) {
+      return;
+    }
 
     // Clean up existing instance (though {#key} handles container recreation)
     if (diffInstance) {
@@ -84,20 +90,20 @@
     const oldFile: FileContents = {
       name: fileName,
       contents: oldContent,
-      lang: lang as FileContents['lang'],
+      lang: lang as FileContents["lang"],
     };
 
     const newFile: FileContents = {
       name: fileName,
       contents: newContent,
-      lang: lang as FileContents['lang'],
+      lang: lang as FileContents["lang"],
     };
 
     diffInstance = new FileDiff({
       disableFileHeader: true,
-      diffStyle: diffStyle,
+      diffStyle,
       expandUnchanged: true,
-      hunkSeparators: 'line-info',
+      hunkSeparators: "line-info",
     });
 
     // Pass container as containerWrapper, not fileContainer
@@ -142,7 +148,7 @@
   });
 </script>
 
-<Dialog.Root bind:open onOpenChangeComplete={(isOpen) => !isOpen && onClose()}>
+<Dialog.Root onOpenChangeComplete={(isOpen) => !isOpen && onClose()} bind:open>
   <Dialog.Portal>
     <Dialog.Overlay forceMount>
       {#snippet child({ props, open: isOpen })}
@@ -157,7 +163,7 @@
       {/snippet}
     </Dialog.Overlay>
 
-    <Dialog.Content forceMount aria-label={`Diff: ${filePath}`}>
+    <Dialog.Content aria-label={`Diff: ${filePath}`} forceMount>
       {#snippet child({ props, open: isOpen })}
         {#if isOpen}
           <div
@@ -167,15 +173,19 @@
             out:scale={{ duration: 150, start: 0.96, easing: quintOut }}
           >
             <!-- Header -->
-            <div class="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
+            <div
+              class="flex items-center justify-between px-4 py-3 border-b border-border bg-card"
+            >
               <div class="flex items-center gap-3 min-w-0">
                 <div class="flex items-center gap-2 min-w-0">
-                  <span class="font-mono text-sm text-foreground truncate">{filePath}</span>
+                  <span class="font-mono text-sm text-foreground truncate"
+                    >{filePath}</span
+                  >
                   <CopyButton
+                    class="h-6 w-6"
+                    size="icon-sm"
                     text={filePath}
                     variant="ghost"
-                    size="icon-sm"
-                    class="h-6 w-6"
                   />
                 </div>
                 <div class="flex items-center gap-2 text-xs">
@@ -187,32 +197,32 @@
               <div class="flex items-center gap-2">
                 <!-- Diff style toggle -->
                 <div
+                  aria-label="Diff layout"
                   class="flex items-center bg-muted rounded-[var(--radius-control)] p-0.5 border border-border"
                   role="group"
-                  aria-label="Diff layout"
                 >
                   <Button
-                    variant={diffStyle === 'unified' ? 'outline' : 'ghost'}
-                    size="sm"
-                    onclick={() => diffStyle = 'unified'}
+                    aria-pressed={diffStyle === 'unified'}
                     class="h-7 rounded-[14px] text-xs {diffStyle === 'unified'
                       ? 'bg-background border-border shadow-sm'
                       : ''}"
-                    aria-pressed={diffStyle === 'unified'}
+                    onclick={() => diffStyle = 'unified'}
+                    size="sm"
                     title="Unified view"
+                    variant={diffStyle === 'unified' ? 'outline' : 'ghost'}
                   >
                     <IconAlignLeft class="w-3.5 h-3.5" />
                     <span>Unified</span>
                   </Button>
                   <Button
-                    variant={diffStyle === 'split' ? 'outline' : 'ghost'}
-                    size="sm"
-                    onclick={() => diffStyle = 'split'}
+                    aria-pressed={diffStyle === 'split'}
                     class="h-7 rounded-[14px] text-xs {diffStyle === 'split'
                       ? 'bg-background border-border shadow-sm'
                       : ''}"
-                    aria-pressed={diffStyle === 'split'}
+                    onclick={() => diffStyle = 'split'}
+                    size="sm"
                     title="Split view"
+                    variant={diffStyle === 'split' ? 'outline' : 'ghost'}
                   >
                     <IconColumns class="w-3.5 h-3.5" />
                     <span>Split</span>
@@ -221,11 +231,11 @@
 
                 <!-- Close button -->
                 <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onclick={() => (open = false)}
-                  title="Close (Esc)"
                   aria-label="Close diff modal"
+                  onclick={() => (open = false)}
+                  size="icon-sm"
+                  title="Close (Esc)"
+                  variant="ghost"
                 >
                   <IconClose class="size-5" />
                 </Button>
@@ -235,7 +245,7 @@
             <!-- Diff content -->
             <div class="flex-1 overflow-auto">
               {#key diffStyle}
-                <div bind:this={container} class="diff-modal-content"></div>
+                <div class="diff-modal-content" bind:this={container}></div>
               {/key}
             </div>
           </div>
@@ -252,8 +262,16 @@
     min-height: 100%;
     --diffs-font-size: 0.8125rem;
     --diffs-line-height: 1.6;
-    --diffs-bg-addition-override: color-mix(in srgb, var(--color-success) 15%, transparent);
-    --diffs-bg-deletion-override: color-mix(in srgb, var(--color-error) 15%, transparent);
+    --diffs-bg-addition-override: color-mix(
+      in srgb,
+      var(--color-success) 15%,
+      transparent
+    );
+    --diffs-bg-deletion-override: color-mix(
+      in srgb,
+      var(--color-error) 15%,
+      transparent
+    );
     --diffs-bg-separator-override: var(--muted);
   }
 </style>

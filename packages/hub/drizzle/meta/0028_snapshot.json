@@ -719,12 +719,8 @@
           "name": "instances_machine_id_agents_machine_id_fk",
           "tableFrom": "instances",
           "tableTo": "agents",
-          "columnsFrom": [
-            "machine_id"
-          ],
-          "columnsTo": [
-            "machine_id"
-          ],
+          "columnsFrom": ["machine_id"],
+          "columnsTo": ["machine_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -732,12 +728,8 @@
           "name": "instances_project_id_projects_id_fk",
           "tableFrom": "instances",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -921,12 +913,8 @@
           "name": "projects_machine_id_agents_machine_id_fk",
           "tableFrom": "projects",
           "tableTo": "agents",
-          "columnsFrom": [
-            "machine_id"
-          ],
-          "columnsTo": [
-            "machine_id"
-          ],
+          "columnsFrom": ["machine_id"],
+          "columnsTo": ["machine_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1008,16 +996,12 @@
       "indexes": {
         "rule_state_rule_idx": {
           "name": "rule_state_rule_idx",
-          "columns": [
-            "rule_id"
-          ],
+          "columns": ["rule_id"],
           "isUnique": false
         },
         "rule_state_instance_idx": {
           "name": "rule_state_instance_idx",
-          "columns": [
-            "instance_id"
-          ],
+          "columns": ["instance_id"],
           "isUnique": false
         }
       },
@@ -1403,25 +1387,17 @@
       "indexes": {
         "usage_buckets_hour_start_idx": {
           "name": "usage_buckets_hour_start_idx",
-          "columns": [
-            "hour_start"
-          ],
+          "columns": ["hour_start"],
           "isUnique": false
         },
         "usage_buckets_machine_harness_hour_idx": {
           "name": "usage_buckets_machine_harness_hour_idx",
-          "columns": [
-            "machine_id",
-            "harness",
-            "hour_start"
-          ],
+          "columns": ["machine_id", "harness", "hour_start"],
           "isUnique": false
         },
         "usage_buckets_session_idx": {
           "name": "usage_buckets_session_idx",
-          "columns": [
-            "session_id"
-          ],
+          "columns": ["session_id"],
           "isUnique": false
         }
       },

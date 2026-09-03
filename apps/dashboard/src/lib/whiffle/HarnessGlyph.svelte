@@ -7,7 +7,7 @@
    * apart. Paths come from `harnessGlyphPath`, sized by the `.mark`/`.tm` slot it
    * sits in, exactly as the sprites it replaces were.
    */
-  import { harnessGlyphPath } from './mark';
+  import { harnessGlyphPath } from "./mark";
 
   let { harness }: { harness?: string | null } = $props();
 
@@ -15,13 +15,13 @@
 </script>
 
 <svg
-  viewBox="0 0 24 24"
+  aria-hidden="true"
   fill="none"
   stroke="currentColor"
-  stroke-width="2"
   stroke-linecap="round"
   stroke-linejoin="round"
-  aria-hidden="true"
+  stroke-width="2"
+  viewBox="0 0 24 24"
 >
-  <path d={d} />
+  <path {d} />
 </svg>

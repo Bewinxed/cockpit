@@ -1,28 +1,28 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
-  import { goto } from '$app/navigation';
-  import { toast } from 'svelte-sonner';
-  import type { RuleRow } from '@whiffle/core';
-  import { ruleSentence } from '@whiffle/core';
-  import { IconAlert, IconPlus, IconTrash } from '$lib/icons';
-  import { Button } from '$lib/components/ui/button';
-  import * as Card from '$lib/components/ui/card';
-  import * as Alert from '$lib/components/ui/alert';
-  import { confirm } from '$lib/whiffle/confirm.svelte';
-  import { Badge } from '$lib/components/ui/badge';
-  import { Toggle } from '$lib/components/ui/toggle';
-  import * as Tooltip from '$lib/components/ui/tooltip';
+  import type { RuleRow } from "@whiffle/core";
+  import { ruleSentence } from "@whiffle/core";
+  import { untrack } from "svelte";
+  import { toast } from "svelte-sonner";
+  import { goto } from "$app/navigation";
+  import * as Alert from "$lib/components/ui/alert";
+  import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
+  import * as Card from "$lib/components/ui/card";
+  import { Toggle } from "$lib/components/ui/toggle";
+  import * as Tooltip from "$lib/components/ui/tooltip";
+  import { IconAlert, IconPlus, IconTrash } from "$lib/icons";
+  import { confirm } from "$lib/whiffle/confirm.svelte";
   import {
     createRule,
     draftOf,
     message,
-    removeRule,
     RULE_TEMPLATES,
+    removeRule,
     saveRule,
     since,
     times,
-  } from '$lib/whiffle/rules';
-  import type { PageData } from './$types';
+  } from "$lib/whiffle/rules";
+  import type { PageData } from "./$types";
 
   /**
    * The rule library. Each row reads as the sentence the rule actually is,
@@ -43,10 +43,12 @@
     const ok = await confirm({
       title: `Delete ${row.name}?`,
       body: "This rule stops applying to every session and is removed for good. You can always write it again, but there's no undo.",
-      confirmLabel: 'Delete rule',
+      confirmLabel: "Delete rule",
       destructive: true,
     });
-    if (ok) await remove(row);
+    if (ok) {
+      await remove(row);
+    }
   }
   let seeding = $state<string | null>(null);
 
@@ -54,14 +56,20 @@
   // editor), without clobbering the optimistic edits made since.
   let latch = $state.raw(untrack(() => data));
   $effect(() => {
-    if (latch === data) return;
+    if (latch === data) {
+      return;
+    }
     latch = data;
     rules = data.rules;
   });
 
-  const pendingTotal = $derived(rules.reduce((sum, rule) => sum + rule.stats.pending, 0));
+  const pendingTotal = $derived(
+    rules.reduce((sum, rule) => sum + rule.stats.pending, 0)
+  );
   const enabledTotal = $derived(rules.filter((rule) => rule.enabled).length);
-  const firesTotal = $derived(rules.reduce((sum, rule) => sum + rule.stats.totalFires, 0));
+  const firesTotal = $derived(
+    rules.reduce((sum, rule) => sum + rule.stats.totalFires, 0)
+  );
 
   async function toggle(row: RuleRow, enabled: boolean) {
     busy[row.id] = true;
@@ -91,26 +99,34 @@
      radius / bg-primary / bg-card defaults these override, so nothing reads
      as unmodified shadcn. */
   const panelClass =
-    'gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--space-5)] shadow-[var(--shadow-lifted)] ring-0';
+    "gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--space-5)] shadow-[var(--shadow-lifted)] ring-0";
   const tileClass =
-    'h-full gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--c-card-pad)] shadow-[var(--shadow-lifted)] ring-0';
+    "h-full gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--c-card-pad)] shadow-[var(--shadow-lifted)] ring-0";
   // The never-flat primary action: graphite brand fill + top-light gradient + inset edge.
   const btnPrimary =
-    'h-[var(--c-btn-h)] gap-[var(--c-btn-gap)] rounded-[var(--radius-control)] border-transparent bg-[var(--brand-solid)] bg-[image:var(--gradient-action)] px-[var(--c-btn-pad)] text-[length:var(--c-btn-fs)] font-medium !text-[color:var(--on-brand)] shadow-[var(--shadow-action)] hover:brightness-110';
+    "h-[var(--c-btn-h)] gap-[var(--c-btn-gap)] rounded-[var(--radius-control)] border-transparent bg-[var(--brand-solid)] bg-[image:var(--gradient-action)] px-[var(--c-btn-pad)] text-[length:var(--c-btn-fs)] font-medium !text-[color:var(--on-brand)] shadow-[var(--shadow-action)] hover:brightness-110";
   // The quiet secondary action: raised surface + control border.
   const btnQuiet =
-    'h-[var(--c-btn-h)] gap-[var(--c-btn-gap)] rounded-[var(--radius-control)] border border-[var(--border-control)] bg-[var(--surface-raised)] px-[var(--c-btn-pad)] text-[length:var(--c-btn-fs)] font-medium !text-[color:var(--ink-strong)] shadow-none hover:bg-[var(--surface-hover)]';
+    "h-[var(--c-btn-h)] gap-[var(--c-btn-gap)] rounded-[var(--radius-control)] border border-[var(--border-control)] bg-[var(--surface-raised)] px-[var(--c-btn-pad)] text-[length:var(--c-btn-fs)] font-medium !text-[color:var(--ink-strong)] shadow-none hover:bg-[var(--surface-hover)]";
   const alertWarn =
-    'rounded-[var(--radius-control)] border-[var(--warning-9)] bg-[var(--warning-3)] !text-[color:var(--warning-11)]';
+    "rounded-[var(--radius-control)] border-[var(--warning-9)] bg-[var(--warning-3)] !text-[color:var(--warning-11)]";
   const alertDanger =
-    'rounded-[var(--radius-control)] border-[var(--error-9)] bg-[var(--error-3)] !text-[color:var(--error-11)]';
+    "rounded-[var(--radius-control)] border-[var(--error-9)] bg-[var(--error-3)] !text-[color:var(--error-11)]";
 
   async function useTemplate(template: (typeof RULE_TEMPLATES)[number]) {
     seeding = template.title;
     try {
       const saved = await createRule(template.draft);
       rules = [
-        { ...saved, stats: { ruleId: saved.id, pending: 0, totalFires: 0, lastFiredAt: null } },
+        {
+          ...saved,
+          stats: {
+            ruleId: saved.id,
+            pending: 0,
+            totalFires: 0,
+            lastFiredAt: null,
+          },
+        },
         ...rules,
       ];
       toast.success(`${template.title} is live on every session.`);
@@ -131,7 +147,9 @@
     <div class="well">
       <span class="k">{label}</span>
       <span class="v">{value}</span>
-      {#if unit}<span class="u">{unit}</span>{/if}
+      {#if unit}
+        <span class="u">{unit}</span>
+      {/if}
     </div>
   </Card.Root>
 {/snippet}
@@ -139,9 +157,9 @@
   <div class="col">
     <header class="head">
       <p class="sub">
-        Standing instructions the hub enforces on every session it watches. When a session says
-        something a rule is looking for, Whiffle answers it — and keeps answering until the
-        session acknowledges what it was told.
+        Standing instructions the hub enforces on every session it watches. When
+        a session says something a rule is looking for, Whiffle answers it — and
+        keeps answering until the session acknowledges what it was told.
       </p>
       <Button class={btnPrimary} onclick={() => goto('/rules/new')}>
         <IconPlus class="shrink-0" />
@@ -149,7 +167,7 @@
       </Button>
     </header>
 
-    <section class="stats" aria-label="Rule library at a glance">
+    <section aria-label="Rule library at a glance" class="stats">
       {@render stat('Rules', rules.length)}
       {@render stat('Enabled', enabledTotal, `of ${rules.length}`)}
       {@render stat('Waiting on an answer', pendingTotal, 'sessions')}
@@ -162,8 +180,8 @@
           class="text-[length:var(--text-sm)] leading-[var(--leading-body)] text-[color:var(--warning-11)]"
         >
           {pendingTotal}
-          {pendingTotal === 1 ? 'session has' : 'sessions have'} been told something and not answered
-          for it yet.
+          {pendingTotal === 1 ? 'session has' : 'sessions have'}
+          been told something and not answered for it yet.
         </Alert.Description>
       </Alert.Root>
     {/if}
@@ -181,8 +199,8 @@
         <header class="phead">
           <h2>Nothing is watching yet</h2>
           <span class="psub">
-            Start from one of these — they are ordinary rules once added, and you can change every
-            part of them.
+            Start from one of these — they are ordinary rules once added, and
+            you can change every part of them.
           </span>
         </header>
         <div class="pbody">
@@ -217,7 +235,9 @@
       <Card.Root class={panelClass}>
         <header class="phead">
           <h2>Rule library</h2>
-          <span class="psub">Every rule the hub is enforcing, and what it has caught</span>
+          <span class="psub"
+            >Every rule the hub is enforcing, and what it has caught</span
+          >
         </header>
         <div class="pbody">
           <ul class="rows">
@@ -234,7 +254,8 @@
                         class="gap-[var(--space-1)] rounded-[var(--radius-pill)] border-transparent bg-[var(--status-attn-bg)] px-[var(--space-2)] text-[length:var(--text-sm)] font-medium text-[color:var(--status-attn-ink)]"
                       >
                         <IconAlert class="size-3 shrink-0" />
-                        {row.stats.pending} waiting
+                        {row.stats.pending}
+                        waiting
                       </Badge>
                     {/if}
                   </span>
@@ -247,11 +268,11 @@
                 </div>
                 <div class="rowactions">
                   <Toggle
-                    variant="outline"
-                    size="sm"
-                    pressed={row.enabled}
                     disabled={busy[row.id] === true}
                     onPressedChange={(next) => toggle(row, next)}
+                    pressed={row.enabled}
+                    size="sm"
+                    variant="outline"
                   >
                     {row.enabled ? 'Enabled' : 'Disabled'}
                   </Toggle>
@@ -261,12 +282,12 @@
                         {#snippet child({ props })}
                           <Button
                             {...props}
-                            variant="ghost"
-                            size="icon"
+                            aria-label="Delete {row.name}"
                             class="text-muted-foreground hover:text-destructive"
                             disabled={busy[row.id] === true}
-                            aria-label="Delete {row.name}"
                             onclick={() => askRemove(row)}
+                            size="icon"
+                            variant="ghost"
                           >
                             <IconTrash class="size-4" />
                           </Button>
@@ -411,7 +432,7 @@
     text-decoration: none;
   }
   .name a::after {
-    content: '';
+    content: "";
     position: absolute;
     inset: 0;
   }

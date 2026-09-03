@@ -1,8 +1,12 @@
-import { expect, test } from 'bun:test';
-import type { Envelope, PermissionResult, UserQuestion } from '@whiffle/core';
-import { WHIFFLE_ENV, QUESTION_DISMISSED, settledQuestionResult } from '@whiffle/core';
-import type { HandoffActions } from './handoff-shared';
-import { handoffActions } from './handoff-shared';
+import { expect, test } from "bun:test";
+import type { Envelope, PermissionResult, UserQuestion } from "@whiffle/core";
+import {
+  QUESTION_DISMISSED,
+  settledQuestionResult,
+  WHIFFLE_ENV,
+} from "@whiffle/core";
+import type { HandoffActions } from "./handoff-shared";
+import { handoffActions } from "./handoff-shared";
 
 /**
  * The answer path for a question a delegate parked and its parent answered.
@@ -17,20 +21,20 @@ import { handoffActions } from './handoff-shared';
  */
 const questions: UserQuestion[] = [
   {
-    question: 'Which database?',
-    header: 'Database',
+    question: "Which database?",
+    header: "Database",
     options: [
-      { label: 'Postgres', description: 'relational' },
-      { label: 'SQLite', description: 'embedded' },
+      { label: "Postgres", description: "relational" },
+      { label: "SQLite", description: "embedded" },
     ],
     multiSelect: false,
   },
   {
-    question: 'Which extras?',
-    header: 'Extras',
+    question: "Which extras?",
+    header: "Extras",
     options: [
-      { label: 'pgvector', description: 'vectors' },
-      { label: 'PostGIS', description: 'geo' },
+      { label: "pgvector", description: "vectors" },
+      { label: "PostGIS", description: "geo" },
     ],
     multiSelect: true,
   },
@@ -41,59 +45,64 @@ const parked = { input: { questions }, questions };
 const inputOf = (result: PermissionResult): Record<string, unknown> =>
   (result as { updatedInput: Record<string, unknown> }).updatedInput;
 
-test('answers that arrive alone are folded back into the parked tool call', () => {
+test("answers that arrive alone are folded back into the parked tool call", () => {
   const settled = settledQuestionResult(parked, {
-    behavior: 'allow',
-    updatedInput: { answers: { 'Which database?': 'Postgres' } },
+    behavior: "allow",
+    updatedInput: { answers: { "Which database?": "Postgres" } },
   });
   const input = inputOf(settled);
   expect(input.questions).toEqual(questions);
-  expect(input.answers).toEqual({ 'Which database?': 'Postgres' });
+  expect(input.answers).toEqual({ "Which database?": "Postgres" });
 });
 
 test("a multi-select answer is a list, whichever way it was picked", () => {
   const settled = settledQuestionResult(parked, {
-    behavior: 'allow',
-    updatedInput: { answers: { 'Which extras?': 'pgvector' } },
+    behavior: "allow",
+    updatedInput: { answers: { "Which extras?": "pgvector" } },
   });
-  expect(inputOf(settled).answers).toEqual({ 'Which extras?': ['pgvector'] });
+  expect(inputOf(settled).answers).toEqual({ "Which extras?": ["pgvector"] });
 });
 
-test('the dashboard\'s own shape passes through unchanged', () => {
-  const answers = { 'Which database?': 'SQLite', 'Which extras?': ['PostGIS'] };
+test("the dashboard's own shape passes through unchanged", () => {
+  const answers = { "Which database?": "SQLite", "Which extras?": ["PostGIS"] };
   const settled = settledQuestionResult(parked, {
-    behavior: 'allow',
+    behavior: "allow",
     updatedInput: { questions, answers },
   });
   expect(inputOf(settled)).toEqual({ questions, answers });
 });
 
-test('allowing without an input of its own is left alone', () => {
-  expect(settledQuestionResult(parked, { behavior: 'allow' })).toEqual({ behavior: 'allow' });
+test("allowing without an input of its own is left alone", () => {
+  expect(settledQuestionResult(parked, { behavior: "allow" })).toEqual({
+    behavior: "allow",
+  });
 });
 
-test('a denial with nothing said is the dismissal the CLI writes for its own', () => {
+test("a denial with nothing said is the dismissal the CLI writes for its own", () => {
   const settled = settledQuestionResult(parked, {
-    behavior: 'deny',
+    behavior: "deny",
   } as unknown as PermissionResult);
-  expect(settled).toEqual({ behavior: 'deny', message: QUESTION_DISMISSED });
+  expect(settled).toEqual({ behavior: "deny", message: QUESTION_DISMISSED });
 });
 
 test("a denial that says why keeps its words", () => {
-  const settled = settledQuestionResult(parked, { behavior: 'deny', message: 'not that one' });
-  expect(settled).toEqual({ behavior: 'deny', message: 'not that one' });
+  const settled = settledQuestionResult(parked, {
+    behavior: "deny",
+    message: "not that one",
+  });
+  expect(settled).toEqual({ behavior: "deny", message: "not that one" });
 });
 
 // ---- what `answer_delegate` actually puts on the wire ----
 
 const rows = [
-  { id: 'self', machineId: 'm1', cwd: '/home/o/center.ai', status: 'running' },
+  { id: "self", machineId: "m1", cwd: "/home/o/center.ai", status: "running" },
   {
-    id: 'kid',
-    machineId: 'm2',
-    cwd: '/home/o/keeboard',
-    status: 'running',
-    parentInstanceId: 'self',
+    id: "kid",
+    machineId: "m2",
+    cwd: "/home/o/keeboard",
+    status: "running",
+    parentInstanceId: "self",
   },
 ];
 
@@ -102,7 +111,9 @@ const rows = [
  * variable every suite in this process shares, so it is claimed at the moment
  * it is read rather than once for the file.
  */
-const withHub = async (run: (actions: HandoffActions, sent: Envelope[]) => Promise<void>) => {
+const withHub = async (
+  run: (actions: HandoffActions, sent: Envelope[]) => Promise<void>
+) => {
   const hub = Bun.serve({ port: 0, fetch: () => Response.json(rows) });
   const was = process.env[WHIFFLE_ENV.hubUrl];
   process.env[WHIFFLE_ENV.hubUrl] = `ws://localhost:${hub.port}/ws`;
@@ -114,15 +125,18 @@ const withHub = async (run: (actions: HandoffActions, sent: Envelope[]) => Promi
   try {
     await run(
       handoffActions({
-        instanceId: 'self',
-        cwd: '/home/o/center.ai',
+        instanceId: "self",
+        cwd: "/home/o/center.ai",
         emit: (envelope) => sent.push(envelope),
       }),
       sent
     );
   } finally {
-    if (was === undefined) delete process.env[WHIFFLE_ENV.hubUrl];
-    else process.env[WHIFFLE_ENV.hubUrl] = was;
+    if (was === undefined) {
+      delete process.env[WHIFFLE_ENV.hubUrl];
+    } else {
+      process.env[WHIFFLE_ENV.hubUrl] = was;
+    }
     globalThis.fetch = wasFetch;
     hub.stop(true);
   }
@@ -131,22 +145,29 @@ const withHub = async (run: (actions: HandoffActions, sent: Envelope[]) => Promi
 const resultOf = (envelope: Envelope): PermissionResult =>
   (envelope.payload as { args: [string, PermissionResult] }).args[1];
 
-test('answering a delegate sends the chosen labels for the harness to fold in', async () => {
+test("answering a delegate sends the chosen labels for the harness to fold in", async () => {
   await withHub(async (actions, sent) => {
-    await actions.answerDelegate('keeboard', 'req-1', { 'Which database?': 'Postgres' });
+    await actions.answerDelegate("keeboard", "req-1", {
+      "Which database?": "Postgres",
+    });
     const result = resultOf(sent[0]);
     expect(result).toEqual({
-      behavior: 'allow',
-      updatedInput: { answers: { 'Which database?': 'Postgres' } },
+      behavior: "allow",
+      updatedInput: { answers: { "Which database?": "Postgres" } },
     });
     // …and the harness makes that whole again, which is the pair that has to hold.
-    expect(inputOf(settledQuestionResult(parked, result)).questions).toEqual(questions);
+    expect(inputOf(settledQuestionResult(parked, result)).questions).toEqual(
+      questions
+    );
   });
 });
 
-test('denying a delegate says so in words, which a permission result requires', async () => {
+test("denying a delegate says so in words, which a permission result requires", async () => {
   await withHub(async (actions, sent) => {
-    await actions.answerDelegate('keeboard', 'req-2', undefined, true);
-    expect(resultOf(sent[0])).toEqual({ behavior: 'deny', message: QUESTION_DISMISSED });
+    await actions.answerDelegate("keeboard", "req-2", undefined, true);
+    expect(resultOf(sent[0])).toEqual({
+      behavior: "deny",
+      message: QUESTION_DISMISSED,
+    });
   });
 });

@@ -6,12 +6,13 @@
  * the machine really has. Unlike the tool catalog (tools.ts), none of this is
  * a code catalog — the entries are the user's own rows.
  */
-import type { FleetHook } from './hooks';
+
 import type {
   McpHttpServerConfig,
   McpSSEServerConfig,
   McpStdioServerConfig,
-} from './harness';
+} from "./harness";
+import type { FleetHook } from "./hooks";
 
 /**
  * Where a fleet row applies, in Claude Code's own vocabulary:
@@ -30,22 +31,22 @@ import type {
  * Skills have no `local` in Claude Code, so a project-bound skill lands in
  * `<cwd>/.claude/skills/` under either scope.
  */
-export type FleetScope = 'user' | 'project' | 'local';
+export type FleetScope = "user" | "project" | "local";
 
 /**
  * What binds a row to a place. An absent `scope` reads as `user`, so every
  * row written before scopes existed still means what it meant.
  */
 export interface FleetPlacement {
-  scope?: FleetScope;
-  /** The hub `projects` row this is bound to. Required unless `user`. */
-  projectId?: string;
   /**
    * The checkout to write into. The hub fills this in as it sends a sync —
    * a daemon never resolves a project id, and a machine only ever receives
    * the project rows that live on it.
    */
   cwd?: string;
+  /** The hub `projects` row this is bound to. Required unless `user`. */
+  projectId?: string;
+  scope?: FleetScope;
 }
 
 /**
@@ -54,14 +55,17 @@ export interface FleetPlacement {
  * hub and written verbatim into `~/.claude.json`; `${VAR}` expansion inside
  * is the CLI's own affair.
  */
-export type FleetMcpConfig = McpStdioServerConfig | McpSSEServerConfig | McpHttpServerConfig;
+export type FleetMcpConfig =
+  | McpStdioServerConfig
+  | McpSSEServerConfig
+  | McpHttpServerConfig;
 
 /** One MCP server the fleet should have, keyed by the name sessions see. */
 export interface FleetMcpServer extends FleetPlacement {
-  name: string;
   config: FleetMcpConfig;
   /** Disabled rows stay in the hub but are removed from the machines. */
   enabled: boolean;
+  name: string;
 }
 
 /**
@@ -85,22 +89,22 @@ export interface FleetMarketplace extends FleetPlacement {
  * were never fetched, the other says a machine would not take them.
  */
 export interface FleetPlugin extends FleetPlacement {
-  id: string;
-  /** Disabled rows are uninstalled from the machines, not merely disabled. */
-  enabled: boolean;
-  /** Content hash of the resolved files; absent until a resolve succeeds. */
-  hash?: string;
   /** Decoded size of the resolved files, for the dashboard to show. */
   bytes?: number;
+  /** Disabled rows are uninstalled from the machines, not merely disabled. */
+  enabled: boolean;
   /** Why the last resolve at the hub failed, when it did. */
   error?: string;
+  /** Content hash of the resolved files; absent until a resolve succeeds. */
+  hash?: string;
+  id: string;
 }
 
 /** One file of a resolved skill; `path` is relative to the skill's directory. */
 export interface SkillFile {
-  path: string;
   /** Base64 so a skill's scripts and images survive the JSON hop unharmed. */
   contentBase64: string;
+  path: string;
 }
 
 /**
@@ -123,15 +127,15 @@ export interface SkillFile {
  * - a plain URL to a `SKILL.md` (single-file skill).
  */
 export interface FleetSkillMeta extends FleetPlacement {
-  name: string;
-  source: string;
-  enabled: boolean;
-  /** Content hash of the resolved files; absent until a resolve succeeds. */
-  hash?: string;
   /** Decoded size of the resolved files, for the dashboard to show. */
   bytes?: number;
+  enabled: boolean;
   /** Why the last resolve failed, when it did. */
   error?: string;
+  /** Content hash of the resolved files; absent until a resolve succeeds. */
+  hash?: string;
+  name: string;
+  source: string;
 }
 
 /**
@@ -144,9 +148,9 @@ export interface FleetSkillMeta extends FleetPlacement {
  * payload the fleet stopped carrying is not in the list at all.
  */
 export interface FleetSkillPayload extends FleetPlacement {
-  name: string;
-  hash: string;
   files?: SkillFile[];
+  hash: string;
+  name: string;
 }
 
 /**
@@ -160,15 +164,15 @@ export interface FleetSkillPayload extends FleetPlacement {
  * every other machine installed, from a directory sync wrote.
  */
 export interface FleetPluginPayload {
-  /** The plugin's own name, as its marketplace's manifest lists it. */
-  name: string;
-  /** Which fleet marketplace it came from — the key `FleetPlugin.id` names. */
-  marketplace: string;
-  hash: string;
   /** Decoded size of the resolved files, for the dashboard to show. */
   bytes: number;
   /** Absent when the machine already holds this hash — see {@link FleetSkillPayload}. */
   files?: SkillFile[];
+  hash: string;
+  /** Which fleet marketplace it came from — the key `FleetPlugin.id` names. */
+  marketplace: string;
+  /** The plugin's own name, as its marketplace's manifest lists it. */
+  name: string;
 }
 
 /**
@@ -178,12 +182,12 @@ export interface FleetPluginPayload {
  * whiffle stores the file verbatim and re-models none of it.
  */
 export interface FleetAgentMeta {
-  name: string;
-  /** sha256 hex of `content` — what tells a machine's copy apart from the fleet's. */
-  hash: string;
-  bytes: number;
   /** When the hub last stored it, ms epoch. */
   at: number;
+  bytes: number;
+  /** sha256 hex of `content` — what tells a machine's copy apart from the fleet's. */
+  hash: string;
+  name: string;
 }
 
 /**
@@ -205,13 +209,13 @@ export interface FleetAgent extends FleetAgentMeta {
  * whiffle is not a second schema for it.
  */
 export interface AgentFrontMatter {
-  name?: string;
   description?: string;
-  /** `sonnet`/`opus`/`haiku`/`fable`, a full id, or `inherit` — the default. */
-  model?: string;
-  tools?: string[];
   /** `low` … `max`. */
   effort?: string;
+  /** `sonnet`/`opus`/`haiku`/`fable`, a full id, or `inherit` — the default. */
+  model?: string;
+  name?: string;
+  tools?: string[];
 }
 
 /**
@@ -232,8 +236,8 @@ const unquote = (value: string): string => {
 /** A comma-separated list, an inline `[a, b]`, or a sequence already joined. */
 const splitList = (value: string): string[] =>
   value
-    .replace(/^\[|\]$/g, '')
-    .split(',')
+    .replace(/^\[|\]$/g, "")
+    .split(",")
     .map(unquote)
     .filter(Boolean);
 
@@ -246,27 +250,35 @@ const splitList = (value: string): string[] =>
  */
 export const parseAgentFrontMatter = (content: string): AgentFrontMatter => {
   const block = FRONT_MATTER.exec(content);
-  if (!block) return {};
+  if (!block) {
+    return {};
+  }
 
   const lines = block[1].split(/\r?\n/);
   const fields: Record<string, string> = {};
   for (let at = 0; at < lines.length; at += 1) {
     // Top-level keys only: an indented line belongs to whatever opened above it.
     const pair = /^([A-Za-z][A-Za-z0-9_-]*):(.*)$/.exec(lines[at]);
-    if (!pair) continue;
+    if (!pair) {
+      continue;
+    }
     const [, key, rest] = pair;
     const value = rest.trim();
 
-    if (value.startsWith('|') || value.startsWith('>')) {
+    if (value.startsWith("|") || value.startsWith(">")) {
       const folded: string[] = [];
-      while (at + 1 < lines.length && /^\s+\S/.test(lines[at + 1])) folded.push(lines[++at].trim());
-      fields[key] = folded.join(' ');
-    } else if (value === '') {
+      while (at + 1 < lines.length && /^\s+\S/.test(lines[at + 1])) {
+        folded.push(lines[++at].trim());
+      }
+      fields[key] = folded.join(" ");
+    } else if (value === "") {
       const items: string[] = [];
       while (at + 1 < lines.length && /^\s*-\s+/.test(lines[at + 1])) {
-        items.push(unquote(lines[++at].replace(/^\s*-\s+/, '')));
+        items.push(unquote(lines[++at].replace(/^\s*-\s+/, "")));
       }
-      if (items.length > 0) fields[key] = items.join(', ');
+      if (items.length > 0) {
+        fields[key] = items.join(", ");
+      }
     } else {
       fields[key] = unquote(value);
     }
@@ -290,8 +302,13 @@ export const parseAgentFrontMatter = (content: string): AgentFrontMatter => {
  * in place would leave the old row and the old file behind, so it is refused
  * rather than silently made into two subagents.
  */
-export const agentProblem = (front: AgentFrontMatter, expected?: string): string | undefined => {
-  if (!front.name) return 'the front matter needs a name — that, not the filename, is what a delegation asks for';
+export const agentProblem = (
+  front: AgentFrontMatter,
+  expected?: string
+): string | undefined => {
+  if (!front.name) {
+    return "the front matter needs a name — that, not the filename, is what a delegation asks for";
+  }
   if (!AGENT_NAME.test(front.name)) {
     return `“${front.name}” is not a usable subagent name: lowercase letters, digits and hyphens only`;
   }
@@ -299,7 +316,7 @@ export const agentProblem = (front: AgentFrontMatter, expected?: string): string
     return `this file names “${front.name}”, not “${expected}” — remove that one and add this one instead`;
   }
   if (!front.description?.trim()) {
-    return 'the front matter needs a description — it is the whole of how Claude Code decides to delegate';
+    return "the front matter needs a description — it is the whole of how Claude Code decides to delegate";
   }
   return undefined;
 };
@@ -311,18 +328,20 @@ export const agentProblem = (front: AgentFrontMatter, expected?: string): string
  * `~/.claude/memories/` is ever a write anywhere else.
  */
 export const memoryDocProblem = (path: string): string | undefined => {
-  if (!path.endsWith('.md')) return 'a linked document is markdown — its path has to end in .md';
-  if (path.startsWith('/') || /^[A-Za-z]:/.test(path)) {
+  if (!path.endsWith(".md")) {
+    return "a linked document is markdown — its path has to end in .md";
+  }
+  if (path.startsWith("/") || /^[A-Za-z]:/.test(path)) {
     return `“${path}” is absolute — a document's path is relative to ~/.claude/memories/`;
   }
-  if (path.includes('\\')) {
+  if (path.includes("\\")) {
     return `“${path}” uses backslashes — the path is the same string on every machine, so it is forward-slashed`;
   }
-  const parts = path.split('/');
-  if (parts.some((part) => part === '' || part === '.' || part === '..')) {
+  const parts = path.split("/");
+  if (parts.some((part) => part === "" || part === "." || part === "..")) {
     return `“${path}” is not a usable path — no empty, “.” or “..” segments`;
   }
-  if (parts.some((part) => part.startsWith('.'))) {
+  if (parts.some((part) => part.startsWith("."))) {
     return `“${path}” hides a segment behind a dot — the set is documents, not dotfiles`;
   }
   return undefined;
@@ -337,12 +356,12 @@ export const memoryDocProblem = (path: string): string | undefined => {
  * every machine, and it is what the hub's row is keyed by.
  */
 export interface FleetMemoryDoc {
-  path: string;
-  /** sha256 hex of `content` (UTF-8) — what a machine compares before writing. */
-  hash: string;
   content: string;
   /** Set on a targeted push only: overwrite a machine copy that drifted. */
   force?: boolean;
+  /** sha256 hex of `content` (UTF-8) — what a machine compares before writing. */
+  hash: string;
+  path: string;
 }
 
 /**
@@ -354,11 +373,7 @@ export interface FleetMemoryDoc {
  * that model, which is the only conditional loading Claude Code has.
  */
 export interface FleetMemory {
-  /** sha256 hex of `content` (UTF-8) — what a machine compares before writing. */
-  hash: string;
   content: string;
-  /** Set on a targeted push only: overwrite a machine copy that drifted. */
-  force?: boolean;
   /**
    * The linked documents. Absent from a hub that predates the set, which is a
    * fleet of exactly one document — and a daemon that predates it ignores the
@@ -366,32 +381,14 @@ export interface FleetMemory {
    * knew how to do.
    */
   docs?: FleetMemoryDoc[];
+  /** Set on a targeted push only: overwrite a machine copy that drifted. */
+  force?: boolean;
+  /** sha256 hex of `content` (UTF-8) — what a machine compares before writing. */
+  hash: string;
 }
 
 /** The whole desired state — what the hub sends a machine to converge on. */
 export interface FleetConfig {
-  mcp: FleetMcpServer[];
-  marketplaces: FleetMarketplace[];
-  plugins: FleetPlugin[];
-  /**
-   * Directly-fetched skills, files inline (NEW.md §11). A daemon writes a
-   * skill's directory under `~/.claude/skills/` only when the hash differs
-   * from what its sidecar recorded. Absent from a hub that predates them.
-   */
-  skills?: FleetSkillPayload[];
-  /**
-   * Vendored plugins, files inline. Present when the hub could resolve them;
-   * a daemon that gets them writes its own marketplace and installs from that
-   * directory, and reaches the network for nothing. Absent from a hub that
-   * predates this, which is what has a daemon fall back to asking the CLI to
-   * fetch — the old behaviour, kept only for that skew.
-   */
-  pluginPayloads?: FleetPluginPayload[];
-  /**
-   * The fleet's user-scope CLAUDE.md, or null when the fleet keeps none —
-   * which is what has a machine give back the copy whiffle wrote it.
-   */
-  memory?: FleetMemory | null;
   /**
    * Hooks the fleet keeps. Absent from a hub that predates them, and a daemon
    * that predates them ignores the field — which for hooks matters more than
@@ -401,6 +398,28 @@ export interface FleetConfig {
    * machine that runs only what it already ran.
    */
   hooks?: FleetHook[];
+  marketplaces: FleetMarketplace[];
+  mcp: FleetMcpServer[];
+  /**
+   * The fleet's user-scope CLAUDE.md, or null when the fleet keeps none —
+   * which is what has a machine give back the copy whiffle wrote it.
+   */
+  memory?: FleetMemory | null;
+  /**
+   * Vendored plugins, files inline. Present when the hub could resolve them;
+   * a daemon that gets them writes its own marketplace and installs from that
+   * directory, and reaches the network for nothing. Absent from a hub that
+   * predates this, which is what has a daemon fall back to asking the CLI to
+   * fetch — the old behaviour, kept only for that skew.
+   */
+  pluginPayloads?: FleetPluginPayload[];
+  plugins: FleetPlugin[];
+  /**
+   * Directly-fetched skills, files inline (NEW.md §11). A daemon writes a
+   * skill's directory under `~/.claude/skills/` only when the hash differs
+   * from what its sidecar recorded. Absent from a hub that predates them.
+   */
+  skills?: FleetSkillPayload[];
 }
 
 /**
@@ -409,9 +428,9 @@ export interface FleetConfig {
  * once so the dashboard can say so, gone from the next report.
  */
 export interface FleetItemState {
-  state: 'applied' | 'failed' | 'removed';
   /** `failed`: what the write or the CLI said — the tail of it. */
   detail?: string;
+  state: "applied" | "failed" | "removed";
 }
 
 /**
@@ -419,11 +438,29 @@ export interface FleetItemState {
  * every desired entry, by the same keys the config used.
  */
 export interface FleetSyncReport {
-  mcp: Record<string, FleetItemState>;
+  /** When the sync ran, ms epoch. */
+  at: number;
+  /**
+   * What this machine now holds, by hash — the content-carrying rows only.
+   *
+   * It is what lets the next config leave those bytes out. A machine that
+   * cannot answer (an older daemon) simply claims nothing, and is sent
+   * everything, which is exactly the behaviour it had before.
+   */
+  have?: {
+    skills?: Record<string, string>;
+    plugins?: Record<string, string>;
+  };
+  /**
+   * The fleet's hooks, by the same id the hub keeps them under. Absent from a
+   * daemon that predates them. `failed` covers three different machine-local
+   * facts — a hand-edited script, a validation the hub already passed but this
+   * row failed again, or a project hook with no checkout here — and `detail`
+   * is what tells them apart.
+   */
+  hooks?: Record<string, FleetItemState>;
   marketplaces: Record<string, FleetItemState>;
-  plugins: Record<string, FleetItemState>;
-  /** Absent from a daemon that predates directly-fetched skills. */
-  skills?: Record<string, FleetItemState>;
+  mcp: Record<string, FleetItemState>;
   /**
    * The user-scope memory (CLAUDE.md). Absent from a daemon that predates it;
    * `failed` is how a machine says its own copy was edited and was not
@@ -442,33 +479,15 @@ export interface FleetSyncReport {
    * gave nothing to register.
    */
   memoryHook?: FleetItemState;
-  /**
-   * The fleet's hooks, by the same id the hub keeps them under. Absent from a
-   * daemon that predates them. `failed` covers three different machine-local
-   * facts — a hand-edited script, a validation the hub already passed but this
-   * row failed again, or a project hook with no checkout here — and `detail`
-   * is what tells them apart.
-   */
-  hooks?: Record<string, FleetItemState>;
-  /**
-   * What this machine now holds, by hash — the content-carrying rows only.
-   *
-   * It is what lets the next config leave those bytes out. A machine that
-   * cannot answer (an older daemon) simply claims nothing, and is sent
-   * everything, which is exactly the behaviour it had before.
-   */
-  have?: {
-    skills?: Record<string, string>;
-    plugins?: Record<string, string>;
-  };
+  plugins: Record<string, FleetItemState>;
+  /** Absent from a daemon that predates directly-fetched skills. */
+  skills?: Record<string, FleetItemState>;
   /**
    * The CLIs this sync leaned on, so a failure can be attributed to a binary
    * rather than to the machine as a whole. Absent from a daemon that predates
    * it, and from one that found nothing to report.
    */
   toolchain?: FleetToolchain;
-  /** When the sync ran, ms epoch. */
-  at: number;
 }
 
 /**
@@ -483,10 +502,10 @@ export interface FleetSyncReport {
 export interface CliInstall {
   /** Absolute path of the executable, resolved through any symlink. */
   path: string;
-  /** What `--version` said, when it would say. */
-  version?: string;
   /** Set on the one the sync actually ran — the binary a failure came out of. */
   used?: boolean;
+  /** What `--version` said, when it would say. */
+  version?: string;
 }
 
 /** The CLIs a machine's sync leaned on, by the name they are known under. */
@@ -497,10 +516,10 @@ export interface FleetToolchain {
 
 /** One installable plugin, as a linked marketplace's `marketplace.json` lists it. */
 export interface MarketplacePluginInfo {
-  name: string;
-  description?: string;
-  version?: string;
   category?: string;
+  description?: string;
+  name: string;
+  version?: string;
 }
 
 /**
@@ -509,11 +528,11 @@ export interface MarketplacePluginInfo {
  * sees one list rather than two halves of one.
  */
 export interface DiscoveredMcp {
-  name: string;
-  scope: FleetScope;
   config: FleetMcpConfig;
   /** Whether whiffle wrote it — an unmanaged row is one worth adopting. */
   managed: boolean;
+  name: string;
+  scope: FleetScope;
   /**
    * Set when a nearer scope defines the same name and wins. Claude Code's own
    * precedence is local > project > user, and a fleet server quietly shadowed
@@ -524,13 +543,13 @@ export interface DiscoveredMcp {
 
 /** One skill a machine really has. `plugin` skills come from an installed plugin. */
 export interface DiscoveredSkill {
-  name: string;
-  scope: FleetScope | 'plugin';
-  /** Absolute path of the skill's directory, for the reader and for adoption. */
-  path: string;
-  managed: boolean;
   /** The SKILL.md front matter's `description`, when it has one. */
   description?: string;
+  managed: boolean;
+  name: string;
+  /** Absolute path of the skill's directory, for the reader and for adoption. */
+  path: string;
+  scope: FleetScope | "plugin";
 }
 
 /**
@@ -540,14 +559,12 @@ export interface DiscoveredSkill {
  * "what will this folder give me?" — asked the moment a folder is chosen.
  */
 export interface ConfigInspection {
+  at: number;
   /** Absent for a machine-wide read. */
   cwd?: string;
-  mcp: DiscoveredMcp[];
-  skills: DiscoveredSkill[];
-  /** Enabled plugin ids, as `plugin@marketplace`. */
-  plugins: string[];
   /** Linked marketplaces, by name. */
   marketplaces: string[];
+  mcp: DiscoveredMcp[];
   /**
    * The machine's own user CLAUDE.md, or null when it has none. `managed` says
    * whiffle wrote what is there — an unmanaged one is worth adopting. `docs`
@@ -560,14 +577,16 @@ export interface ConfigInspection {
     managed: boolean;
     docs?: { path: string; hash: string; bytes: number; managed: boolean }[];
   } | null;
-  at: number;
+  /** Enabled plugin ids, as `plugin@marketplace`. */
+  plugins: string[];
+  skills: DiscoveredSkill[];
 }
 
 /** One linked document as a machine really has it, whoever wrote it. */
 export interface MachineMemoryDoc {
-  path: string;
-  hash: string;
   content: string;
+  hash: string;
+  path: string;
 }
 
 /**
@@ -578,8 +597,8 @@ export interface MachineMemoryDoc {
  */
 export interface MachineMemorySet {
   content: string;
-  hash: string;
   docs?: MachineMemoryDoc[];
+  hash: string;
 }
 
 /**
@@ -599,22 +618,22 @@ export interface MachineMemorySet {
  * - `readMemoryFile() => MachineMemorySet | null` — the machine's current user
  *   CLAUDE.md and the documents beside it, for adoption.
  */
-export const FLEET_SYNC = 'syncFleetConfig';
-export const FLEET_STATUS = 'fleetStatus';
-export const MARKETPLACE_CATALOG = 'marketplaceCatalog';
-export const INSPECT_CONFIG = 'inspectConfig';
-export const READ_SKILL_FILES = 'readSkillFiles';
-export const READ_MEMORY_FILE = 'readMemoryFile';
+export const FLEET_SYNC = "syncFleetConfig";
+export const FLEET_STATUS = "fleetStatus";
+export const MARKETPLACE_CATALOG = "marketplaceCatalog";
+export const INSPECT_CONFIG = "inspectConfig";
+export const READ_SKILL_FILES = "readSkillFiles";
+export const READ_MEMORY_FILE = "readMemoryFile";
 
 /** What the composer's `/` menu renders. Derived from the SDK's `SlashCommand`. */
 export interface AvailableCommand {
+  argumentHint?: string;
+  description?: string;
   /** Without the leading slash. */
   name: string;
-  description?: string;
-  argumentHint?: string;
-  type: 'builtin' | 'custom' | 'skill' | 'mcp';
   /** Where it came from, when known — a plugin name, a marketplace. */
   source?: string;
+  type: "builtin" | "custom" | "skill" | "mcp";
 }
 
 /**
@@ -626,9 +645,15 @@ export interface AvailableCommand {
 export const classifyCommand = (
   name: string,
   skills: readonly string[]
-): AvailableCommand['type'] => {
-  if (name.startsWith('mcp__')) return 'mcp';
-  if (skills.includes(name)) return 'skill';
-  if (name.includes(':')) return 'custom';
-  return 'builtin';
+): AvailableCommand["type"] => {
+  if (name.startsWith("mcp__")) {
+    return "mcp";
+  }
+  if (skills.includes(name)) {
+    return "skill";
+  }
+  if (name.includes(":")) {
+    return "custom";
+  }
+  return "builtin";
 };

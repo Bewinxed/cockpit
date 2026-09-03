@@ -1,6 +1,6 @@
-import { error } from '@sveltejs/kit';
-import type { RuleRow, RulesPayload } from '$lib/whiffle/rules';
-import type { PageLoad } from './$types';
+import { error } from "@sveltejs/kit";
+import type { RuleRow, RulesPayload } from "$lib/whiffle/rules";
+import type { PageLoad } from "./$types";
 
 /**
  * One rule, or the blank one. `new` is the id of a rule that does not exist
@@ -12,9 +12,11 @@ import type { PageLoad } from './$types';
  * rows, and the list of names is needed anyway to refuse a duplicate.
  */
 export const load: PageLoad = async ({ fetch, params }) => {
-  const payload = await fetch('/api/rules')
+  const payload = await fetch("/api/rules")
     .then(async (response) => {
-      if (!response.ok) throw new Error(`the hub answered ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`the hub answered ${response.status}`);
+      }
       return (await response.json()) as RulesPayload;
     })
     .catch((caught: unknown) => caught as Error);
@@ -23,20 +25,26 @@ export const load: PageLoad = async ({ fetch, params }) => {
     return {
       rule: null as RuleRow | null,
       taken: [] as string[],
-      composing: params.id === 'new',
+      composing: params.id === "new",
       error: `Could not read the rules — ${payload.message}.`,
     };
   }
 
-  const rule = payload.rules.find((candidate) => candidate.id === params.id) ?? null;
-  if (params.id !== 'new' && !rule) {
-    error(404, 'That rule is gone — it was deleted, or the link is from another hub.');
+  const rule =
+    payload.rules.find((candidate) => candidate.id === params.id) ?? null;
+  if (params.id !== "new" && !rule) {
+    error(
+      404,
+      "That rule is gone — it was deleted, or the link is from another hub."
+    );
   }
 
   return {
     rule,
-    taken: payload.rules.filter((other) => other.id !== params.id).map((other) => other.name),
-    composing: params.id === 'new',
+    taken: payload.rules
+      .filter((other) => other.id !== params.id)
+      .map((other) => other.name),
+    composing: params.id === "new",
     error: null as string | null,
   };
 };

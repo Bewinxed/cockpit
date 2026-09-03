@@ -3,19 +3,19 @@
  * Uses PKCE flow for secure authentication
  */
 
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes } from "crypto";
 
 // OAuth Configuration for Claude MAX
 // Uses the same client ID as OpenCode/Claude Code for PKCE flow
 export const OAUTH_CONFIG = {
-  clientId: '9d1c250a-e61b-44d9-88ed-5944d1962f5e',
-  authorizeUrl: 'https://claude.ai/oauth/authorize',
+  clientId: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+  authorizeUrl: "https://claude.ai/oauth/authorize",
   // Use /v1/oauth/token with JSON body (like OpenCode does)
-  tokenUrl: 'https://console.anthropic.com/v1/oauth/token',
-  scopes: ['org:create_api_key', 'user:profile', 'user:inference'],
+  tokenUrl: "https://console.anthropic.com/v1/oauth/token",
+  scopes: ["org:create_api_key", "user:profile", "user:inference"],
   // For 3rd party apps, we use a special redirect URI that shows the code
   // The user copies and pastes the code back to the CLI
-  redirectUri: 'https://console.anthropic.com/oauth/code/callback',
+  redirectUri: "https://console.anthropic.com/oauth/code/callback",
 } as const;
 
 /**
@@ -23,13 +23,13 @@ export const OAUTH_CONFIG = {
  */
 export interface OAuthTokens {
   accessToken: string;
-  refreshToken: string;
   expiresAt: number; // Unix timestamp in milliseconds
-  tokenType: string;
+  rateLimitTier?: string;
+  refreshToken: string;
   // Additional fields that may come from token exchange or profile endpoint
   scopes?: string[];
   subscriptionType?: string;
-  rateLimitTier?: string;
+  tokenType: string;
 }
 
 /**
@@ -51,32 +51,31 @@ export interface StoredCredentials {
  */
 export function generateCodeVerifier(): string {
   // Generate 96 random bytes and encode as base64url (128 chars)
-  return randomBytes(96)
-    .toString('base64url')
-    .slice(0, 128);
+  return randomBytes(96).toString("base64url").slice(0, 128);
 }
 
 /**
  * Generate code challenge from verifier using S256 method
  */
 export function generateCodeChallenge(verifier: string): string {
-  return createHash('sha256')
-    .update(verifier)
-    .digest('base64url');
+  return createHash("sha256").update(verifier).digest("base64url");
 }
 
 /**
  * Build the authorization URL with PKCE parameters
  */
-export function buildAuthorizationUrl(codeChallenge: string, state: string): string {
+export function buildAuthorizationUrl(
+  codeChallenge: string,
+  state: string
+): string {
   const params = new URLSearchParams({
-    code: 'true', // Required for code-based flow
+    code: "true", // Required for code-based flow
     client_id: OAUTH_CONFIG.clientId,
-    response_type: 'code',
+    response_type: "code",
     redirect_uri: OAUTH_CONFIG.redirectUri,
-    scope: OAUTH_CONFIG.scopes.join(' '),
+    scope: OAUTH_CONFIG.scopes.join(" "),
     code_challenge: codeChallenge,
-    code_challenge_method: 'S256',
+    code_challenge_method: "S256",
     state,
   });
 
@@ -95,8 +94,8 @@ export async function exchangeCodeForTokens(
   // Parse code#state format if code contains #
   let actualCode = code;
   let actualState = state;
-  if (code.includes('#')) {
-    const parts = code.split('#');
+  if (code.includes("#")) {
+    const parts = code.split("#");
     actualCode = parts[0];
     actualState = parts[1] || state;
   }
@@ -104,23 +103,23 @@ export async function exchangeCodeForTokens(
   const body = {
     code: actualCode,
     state: actualState,
-    grant_type: 'authorization_code',
+    grant_type: "authorization_code",
     client_id: OAUTH_CONFIG.clientId,
     redirect_uri: OAUTH_CONFIG.redirectUri,
     code_verifier: codeVerifier,
   };
 
-  console.log('[OAuth] Token exchange request:', {
+  console.log("[OAuth] Token exchange request:", {
     ...body,
-    code: actualCode.slice(0, 10) + '...',
-    code_verifier: codeVerifier.slice(0, 10) + '...',
+    code: actualCode.slice(0, 10) + "...",
+    code_verifier: codeVerifier.slice(0, 10) + "...",
   });
 
   // Use JSON body format (like OpenCode does)
   const response = await fetch(OAUTH_CONFIG.tokenUrl, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
   });
@@ -130,7 +129,7 @@ export async function exchangeCodeForTokens(
     throw new Error(`Token exchange failed: ${response.status} - ${error}`);
   }
 
-  const data = await response.json() as {
+  const data = (await response.json()) as {
     access_token: string;
     refresh_token: string;
     expires_in: number;
@@ -142,15 +141,15 @@ export async function exchangeCodeForTokens(
     rate_limit_tier?: string;
   };
 
-  console.log('[OAuth] Token exchange response fields:', Object.keys(data));
+  console.log("[OAuth] Token exchange response fields:", Object.keys(data));
 
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
-    expiresAt: Date.now() + (data.expires_in * 1000),
+    expiresAt: Date.now() + data.expires_in * 1000,
     tokenType: data.token_type,
     // Additional fields if present
-    scopes: data.scopes || (data.scope ? data.scope.split(' ') : undefined),
+    scopes: data.scopes || (data.scope ? data.scope.split(" ") : undefined),
     subscriptionType: data.subscription_type,
     rateLimitTier: data.rate_limit_tier,
   };
@@ -160,14 +159,16 @@ export async function exchangeCodeForTokens(
  * Refresh an expired access token
  * Uses JSON body format like OpenCode
  */
-export async function refreshAccessToken(refreshToken: string): Promise<OAuthTokens> {
+export async function refreshAccessToken(
+  refreshToken: string
+): Promise<OAuthTokens> {
   const response = await fetch(OAUTH_CONFIG.tokenUrl, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      grant_type: 'refresh_token',
+      grant_type: "refresh_token",
       client_id: OAUTH_CONFIG.clientId,
       refresh_token: refreshToken,
     }),
@@ -178,7 +179,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
     throw new Error(`Token refresh failed: ${response.status} - ${error}`);
   }
 
-  const data = await response.json() as {
+  const data = (await response.json()) as {
     access_token: string;
     refresh_token: string;
     expires_in: number;
@@ -188,7 +189,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
-    expiresAt: Date.now() + (data.expires_in * 1000),
+    expiresAt: Date.now() + data.expires_in * 1000,
     tokenType: data.token_type,
   };
 }
@@ -198,7 +199,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<OAuthTok
  */
 export function isTokenExpired(expiresAt: number): boolean {
   const bufferMs = 5 * 60 * 1000; // 5 minutes
-  return Date.now() >= (expiresAt - bufferMs);
+  return Date.now() >= expiresAt - bufferMs;
 }
 
 /**
@@ -206,8 +207,8 @@ export function isTokenExpired(expiresAt: number): boolean {
  */
 export function getAuthHeaders(accessToken: string): Record<string, string> {
   return {
-    'Authorization': `Bearer ${accessToken}`,
-    'anthropic-beta': 'oauth-2025-04-20',
-    'anthropic-version': '2023-06-01',
+    Authorization: `Bearer ${accessToken}`,
+    "anthropic-beta": "oauth-2025-04-20",
+    "anthropic-version": "2023-06-01",
   };
 }

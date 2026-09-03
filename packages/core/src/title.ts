@@ -18,9 +18,12 @@ export const TITLE_LIMIT = 80;
  * markup stripped and is folded onto one line.
  */
 export function deriveTitleFromFirstMessage(raw: string): string {
-  const command = /<command-(?:message|name)>([\s\S]*?)<\/command-(?:message|name)>/
-    .exec(raw)?.[1]
-    ?.trim();
-  const cleaned = (command ?? raw.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+  const command =
+    /<command-(?:message|name)>([\s\S]*?)<\/command-(?:message|name)>/
+      .exec(raw)?.[1]
+      ?.trim();
+  const cleaned = (command ?? raw.replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
   return cleaned.slice(0, TITLE_LIMIT);
 }

@@ -1,17 +1,36 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<!-- DW-8.4 row 9 — status bar colour, declared per colour scheme (two theme-color).
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+      name="viewport"
+    >
+    <!-- DW-8.4 row 9 — status bar colour, declared per colour scheme (two theme-color).
      These are platform metadata bound to the ramp's --neutral-1 (light #fcfdfd,
      dark #121313); the production bridge maps them to the same tokens. -->
-<meta name="theme-color" content="#fcfdfd" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#121313" media="(prefers-color-scheme: dark)">
-<title>Whiffle — Workspace surface (v5, Phase 8)</title>
-<link rel="preload" href="./fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="./fonts/geist.css">
-<link rel="stylesheet" href="./tokens.css">
-<style>
-/* =============================================================================
+    <meta
+      content="#fcfdfd"
+      media="(prefers-color-scheme: light)"
+      name="theme-color"
+    >
+    <meta
+      content="#121313"
+      media="(prefers-color-scheme: dark)"
+      name="theme-color"
+    >
+    <title>Whiffle — Workspace surface (v5, Phase 8)</title>
+    <link
+      as="font"
+      crossorigin
+      href="./fonts/geist-latin-wght-normal.woff2"
+      rel="preload"
+      type="font/woff2"
+    >
+    <link href="./fonts/geist.css" rel="stylesheet">
+    <link href="./tokens.css" rel="stylesheet">
+    <style>
+      /* =============================================================================
    WHIFFLE — PHASE 8 "WORKSPACE SURFACE" (tab strip · split view · gestures ·
    mobile shell)
 
@@ -76,339 +95,1125 @@
 
    ========================================================================== */
 
-:root{
-  /* ---- component dimension ramp — COMPACT (fine-pointer, Phase 5) --------- */
-  --w-tab-h:38px;          /* tab strip item height */
-  --w-pane-h:auto;
-  --w-row:26px;            /* transcript tool / step row pitch (compact) */
-  --w-card-pad:13px;       /* hitl card padding */
-  --w-btn-h:34px;          /* approve/deny / composer control height */
-  --w-input-h:34px;
-  --w-input-fs:16px;       /* >=16px so iOS never zooms (DW-8.4 row 4) */
-  --w-transcript-b:96px;   /* bottom clearance for the floating composer */
-  --w-toolbar-h:42px;
-  --w-grip:20px;
-}
+      :root {
+        /* ---- component dimension ramp — COMPACT (fine-pointer, Phase 5) --------- */
+        --w-tab-h: 38px; /* tab strip item height */
+        --w-pane-h: auto;
+        --w-row: 26px; /* transcript tool / step row pitch (compact) */
+        --w-card-pad: 13px; /* hitl card padding */
+        --w-btn-h: 34px; /* approve/deny / composer control height */
+        --w-input-h: 34px;
+        --w-input-fs: 16px; /* >=16px so iOS never zooms (DW-8.4 row 4) */
+        --w-transcript-b: 96px; /* bottom clearance for the floating composer */
+        --w-toolbar-h: 42px;
+        --w-grip: 20px;
+      }
 
-*{box-sizing:border-box;margin:0;padding:0}
-/* DW-8.4 row 3 — layout height: the APP SHELL is 100dvh (not bare vh). A
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      /* DW-8.4 row 3 — layout height: the APP SHELL is 100dvh (not bare vh). A
    full-bleed block that must fill the visible viewport despite mobile browser
    chrome takes 100svh. NO bare `vh` anywhere in this file — see the gate. */
-html{height:100%}
-body{
-  font-family:var(--font-body);
-  font-size:var(--text-base);
-  line-height:var(--leading-body);
-  color:var(--ink-strong);
-  background:var(--surface-field);
-  -webkit-font-smoothing:antialiased;
-  /* DW-8.4 row 2 — neutralise the grey/blue tap flash */
-  -webkit-tap-highlight-color:transparent;
-  display:grid;
-  grid-template-columns:228px minmax(0,1fr);
-  min-height:100dvh;
-  width:100%;
-}
-.mono{font-family:var(--font-mono);font-size:var(--text-sm)}
+      html {
+        height: 100%;
+      }
+      body {
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        color: var(--ink-strong);
+        background: var(--surface-field);
+        -webkit-font-smoothing: antialiased;
+        /* DW-8.4 row 2 — neutralise the grey/blue tap flash */
+        -webkit-tap-highlight-color: transparent;
+        display: grid;
+        grid-template-columns: 228px minmax(0, 1fr);
+        min-height: 100dvh;
+        width: 100%;
+      }
+      .mono {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+      }
 
-/* ============================== SIDEBAR ==================================
+      /* ============================== SIDEBAR ==================================
    The management chrome, shared across the whole surface (not duplicated per
    pane — DW-8.2). */
-aside{background:var(--surface-raised);border-right:1px solid var(--border-hairline);
-  display:flex;flex-direction:column;overflow:hidden}
-/* DW-8.4 row 6 — pull-to-refresh hijack: overscroll-behavior none on html AND
+      aside {
+        background: var(--surface-raised);
+        border-right: 1px solid var(--border-hairline);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      /* DW-8.4 row 6 — pull-to-refresh hijack: overscroll-behavior none on html AND
    body (declared on each selector explicitly so the gate counts both). */
-html{overscroll-behavior:none}
-body{overscroll-behavior:none}
-.brand{height:57px;display:flex;align-items:center;gap:9px;padding:0 14px;flex-shrink:0}
-.logo{width:26px;height:26px;border-radius:var(--radius-tile);background:var(--brand-solid);
-  background-image:var(--gradient-action);box-shadow:var(--shadow-action);color:var(--on-brand);
-  display:grid;place-items:center;font-size:var(--text-base);font-weight:var(--weight-strong)}
-.logo svg{width:15px;height:15px;display:block}
-.brand b{font-size:var(--text-md);font-weight:var(--weight-strong);letter-spacing:var(--track-display)}
-.brand .home{margin-left:auto;width:44px;height:44px;border:1px solid var(--border-control);
-  border-radius:var(--radius-control);background:var(--surface-raised);color:var(--ink-muted);
-  display:grid;place-items:center;cursor:pointer;flex:0 0 auto;user-select:none}
-.brand .home svg{width:18px;height:18px}
-@media (hover:hover) and (pointer:fine){.brand .home:hover{background:var(--surface-hover);color:var(--ink-body)}}
-.brand .home:active{background:var(--surface-active)}
-.brand .home:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      html {
+        overscroll-behavior: none;
+      }
+      body {
+        overscroll-behavior: none;
+      }
+      .brand {
+        height: 57px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 14px;
+        flex-shrink: 0;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: var(--radius-tile);
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        display: grid;
+        place-items: center;
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+      }
+      .logo svg {
+        width: 15px;
+        height: 15px;
+        display: block;
+      }
+      .brand b {
+        font-size: var(--text-md);
+        font-weight: var(--weight-strong);
+        letter-spacing: var(--track-display);
+      }
+      .brand .home {
+        margin-left: auto;
+        width: 44px;
+        height: 44px;
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-control);
+        background: var(--surface-raised);
+        color: var(--ink-muted);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        flex: 0 0 auto;
+        user-select: none;
+      }
+      .brand .home svg {
+        width: 18px;
+        height: 18px;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .brand .home:hover {
+          background: var(--surface-hover);
+          color: var(--ink-body);
+        }
+      }
+      .brand .home:active {
+        background: var(--surface-active);
+      }
+      .brand .home:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-.sec{font-size:var(--text-xs);color:var(--ink-muted);font-weight:var(--weight-strong);
-  text-transform:uppercase;letter-spacing:var(--track-caps);padding:0 20px;margin:16px 0 7px}
-nav{padding:0 10px;display:flex;flex-direction:column;gap:1px}
-.nav-i{height:30px;border-radius:var(--radius-control);display:flex;align-items:center;gap:10px;
-  padding:0 10px;font-size:var(--text-md);color:var(--ink-body);font-weight:var(--weight-medium);
-  user-select:none}
-.nav-i .ic{width:17px;text-align:center;color:var(--ink-muted);flex:0 0 auto}
-.nav-i .ic svg{width:16px;height:16px;display:block}
-.nav-i .cnt{margin-left:auto;font-size:var(--text-sm);font-weight:var(--weight-strong);line-height:1;
-  padding:3px 7px;border-radius:var(--radius-pill);background:var(--status-attn-bg);color:var(--status-attn-ink)}
-.nav-i.on{background:var(--surface-raised);color:var(--ink-strong);box-shadow:var(--shadow-tile);
-  font-weight:var(--weight-strong)}
-.nav-i.on .ic{color:var(--ink-body)}
-@media (hover:hover) and (pointer:fine){.nav-i:hover{background:var(--surface-hover)}}
-.nav-i:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:var(--radius-control)}
+      .sec {
+        font-size: var(--text-xs);
+        color: var(--ink-muted);
+        font-weight: var(--weight-strong);
+        text-transform: uppercase;
+        letter-spacing: var(--track-caps);
+        padding: 0 20px;
+        margin: 16px 0 7px;
+      }
+      nav {
+        padding: 0 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .nav-i {
+        height: 30px;
+        border-radius: var(--radius-control);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 10px;
+        font-size: var(--text-md);
+        color: var(--ink-body);
+        font-weight: var(--weight-medium);
+        user-select: none;
+      }
+      .nav-i .ic {
+        width: 17px;
+        text-align: center;
+        color: var(--ink-muted);
+        flex: 0 0 auto;
+      }
+      .nav-i .ic svg {
+        width: 16px;
+        height: 16px;
+        display: block;
+      }
+      .nav-i .cnt {
+        margin-left: auto;
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        line-height: 1;
+        padding: 3px 7px;
+        border-radius: var(--radius-pill);
+        background: var(--status-attn-bg);
+        color: var(--status-attn-ink);
+      }
+      .nav-i.on {
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        box-shadow: var(--shadow-tile);
+        font-weight: var(--weight-strong);
+      }
+      .nav-i.on .ic {
+        color: var(--ink-body);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .nav-i:hover {
+          background: var(--surface-hover);
+        }
+      }
+      .nav-i:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+        border-radius: var(--radius-control);
+      }
 
-.runs{padding:0 10px;display:flex;flex-direction:column;gap:1px}
-.run-i{height:26px;border-radius:var(--radius-tile);display:flex;align-items:center;gap:9px;
-  padding:0 10px;font-size:var(--text-base);color:var(--ink-body);font-weight:var(--weight-medium);
-  text-decoration:none;user-select:none}
-.run-i .mark{width:17px;height:17px;border-radius:var(--radius-mark);flex-shrink:0;display:grid;place-items:center;
-  background-image:var(--mark-overlay);background-color:var(--mark-1)}
-.run-i .mark svg{width:10px;height:10px;display:block;stroke:var(--mark-glyph);stroke-width:1.8}
-.run-i.on{background:var(--surface-raised);color:var(--ink-strong);font-weight:var(--weight-strong);box-shadow:var(--shadow-tile)}
-.run-i .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 auto}
-.run-i .st{font-size:var(--text-sm);color:var(--ink-muted);flex:0 0 auto}
-@media (hover:hover) and (pointer:fine){.run-i:hover{background:var(--surface-hover)}}
-.run-i:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      .runs {
+        padding: 0 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .run-i {
+        height: 26px;
+        border-radius: var(--radius-tile);
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 10px;
+        font-size: var(--text-base);
+        color: var(--ink-body);
+        font-weight: var(--weight-medium);
+        text-decoration: none;
+        user-select: none;
+      }
+      .run-i .mark {
+        width: 17px;
+        height: 17px;
+        border-radius: var(--radius-mark);
+        flex-shrink: 0;
+        display: grid;
+        place-items: center;
+        background-image: var(--mark-overlay);
+        background-color: var(--mark-1);
+      }
+      .run-i .mark svg {
+        width: 10px;
+        height: 10px;
+        display: block;
+        stroke: var(--mark-glyph);
+        stroke-width: 1.8;
+      }
+      .run-i.on {
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        font-weight: var(--weight-strong);
+        box-shadow: var(--shadow-tile);
+      }
+      .run-i .nm {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .run-i .st {
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        flex: 0 0 auto;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .run-i:hover {
+          background: var(--surface-hover);
+        }
+      }
+      .run-i:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-/* ============================== MAIN / WORKSPACE ========================= */
-main{display:flex;flex-direction:column;overflow:hidden;min-width:0;position:relative;height:100dvh}
+      /* ============================== MAIN / WORKSPACE ========================= */
+      main {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        min-width: 0;
+        position: relative;
+        height: 100dvh;
+      }
 
-/* session header — SHARED chrome (Home anchor lives here); rendered once for
+      /* session header — SHARED chrome (Home anchor lives here); rendered once for
    the whole workspace, never duplicated per pane (DW-8.2) */
-.shead{height:57px;border-bottom:1px solid var(--border-hairline);background:var(--surface-raised);
-  display:flex;align-items:center;gap:10px;padding:0 21px 0 25px;flex-shrink:0}
-.shead .back{width:44px;height:44px;border:1px solid var(--border-control);background:var(--surface-raised);
-  border-radius:var(--radius-control);display:grid;place-items:center;color:var(--ink-body);flex:0 0 auto;
-  cursor:pointer;user-select:none}
-.shead .back svg{width:18px;height:18px}
-@media (hover:hover) and (pointer:fine){.shead .back:hover{background:var(--surface-hover)}}
-.shead .back:active{background:var(--surface-active)}
-.shead .back:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-/* the nav burger is a mobile-only affordance; on desktop the sidebar is fixed
+      .shead {
+        height: 57px;
+        border-bottom: 1px solid var(--border-hairline);
+        background: var(--surface-raised);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 21px 0 25px;
+        flex-shrink: 0;
+      }
+      .shead .back {
+        width: 44px;
+        height: 44px;
+        border: 1px solid var(--border-control);
+        background: var(--surface-raised);
+        border-radius: var(--radius-control);
+        display: grid;
+        place-items: center;
+        color: var(--ink-body);
+        flex: 0 0 auto;
+        cursor: pointer;
+        user-select: none;
+      }
+      .shead .back svg {
+        width: 18px;
+        height: 18px;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .shead .back:hover {
+          background: var(--surface-hover);
+        }
+      }
+      .shead .back:active {
+        background: var(--surface-active);
+      }
+      .shead .back:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      /* the nav burger is a mobile-only affordance; on desktop the sidebar is fixed
    and visible, so the burger is hidden (not a stray 4px sliver in the header) */
-.burger{display:none}
-.shead .mark{width:17px;height:17px;border-radius:var(--radius-mark);flex:0 0 auto;display:grid;place-items:center;
-  background-image:var(--mark-overlay);background-color:var(--mark-1)}
-.shead .mark svg{width:10px;height:10px;display:block;stroke:var(--mark-glyph);stroke-width:1.8}
-.shead h1{font-size:var(--text-md);font-weight:var(--weight-strong);letter-spacing:var(--track-display);
-  white-space:nowrap}
-.shead .path{font-family:var(--font-mono);font-size:var(--text-sm);color:var(--ink-muted);white-space:nowrap}
-.shead .meta{margin-left:auto;display:flex;align-items:center;gap:14px;font-size:var(--text-sm);
-  color:var(--ink-muted);flex:0 0 auto}
-.shead .meta b{font-weight:var(--weight-strong);color:var(--ink-body);font-variant-numeric:tabular-nums}
+      .burger {
+        display: none;
+      }
+      .shead .mark {
+        width: 17px;
+        height: 17px;
+        border-radius: var(--radius-mark);
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        background-image: var(--mark-overlay);
+        background-color: var(--mark-1);
+      }
+      .shead .mark svg {
+        width: 10px;
+        height: 10px;
+        display: block;
+        stroke: var(--mark-glyph);
+        stroke-width: 1.8;
+      }
+      .shead h1 {
+        font-size: var(--text-md);
+        font-weight: var(--weight-strong);
+        letter-spacing: var(--track-display);
+        white-space: nowrap;
+      }
+      .shead .path {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        white-space: nowrap;
+      }
+      .shead .meta {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        flex: 0 0 auto;
+      }
+      .shead .meta b {
+        font-weight: var(--weight-strong);
+        color: var(--ink-body);
+        font-variant-numeric: tabular-nums;
+      }
 
-/* status pill — glyph-led, four functional hues + hueless idle */
-.pill{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 9px;border-radius:var(--radius-pill);
-  font-size:var(--text-sm);font-weight:var(--weight-strong);white-space:nowrap}
-.pill svg{width:9px;height:9px;flex:0 0 auto;display:block}
-.pill.live{background:var(--status-live-bg);color:var(--status-live-ink)}
-.pill.attn{background:var(--status-attn-bg);color:var(--status-attn-ink)}
-.pill.done{background:var(--status-done-bg);color:var(--status-done-ink)}
-.pill.fail{background:var(--status-fail-bg);color:var(--status-fail-ink)}
-.pill.idle{background:var(--status-idle-bg);color:var(--status-idle-ink);padding:0;font-weight:var(--weight-medium)}
+      /* status pill — glyph-led, four functional hues + hueless idle */
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 20px;
+        padding: 0 9px;
+        border-radius: var(--radius-pill);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        white-space: nowrap;
+      }
+      .pill svg {
+        width: 9px;
+        height: 9px;
+        flex: 0 0 auto;
+        display: block;
+      }
+      .pill.live {
+        background: var(--status-live-bg);
+        color: var(--status-live-ink);
+      }
+      .pill.attn {
+        background: var(--status-attn-bg);
+        color: var(--status-attn-ink);
+      }
+      .pill.done {
+        background: var(--status-done-bg);
+        color: var(--status-done-ink);
+      }
+      .pill.fail {
+        background: var(--status-fail-bg);
+        color: var(--status-fail-ink);
+      }
+      .pill.idle {
+        background: var(--status-idle-bg);
+        color: var(--status-idle-ink);
+        padding: 0;
+        font-weight: var(--weight-medium);
+      }
 
-/* ============================== TAB STRIP =================================
+      /* ============================== TAB STRIP =================================
    DW-8.1 / 8.9 — a single shared strip of OPEN tabs. DOM order is FIXED (the
    order the sessions opened); VISUAL order = `order: var(--tab-order)`, remapped
    by the data-order state entirely in CSS. The pane's scroll offset survives a
    reorder because no element is moved in the DOM. */
-.tabstrip{display:flex;align-items:stretch;gap:2px;padding:6px 21px 6px 25px;flex-shrink:0;
-  border-bottom:1px solid var(--border-hairline);background:var(--surface-raised);overflow-x:auto;
-  scrollbar-width:thin}
-.tab{position:relative;display:flex;align-items:center;gap:8px;flex:0 0 auto;
-  padding:0 10px;height:var(--w-tab-h);border:1px solid transparent;border-radius:var(--radius-control);
-  background:var(--surface-field);color:var(--ink-body);font-size:var(--text-base);
-  font-weight:var(--weight-medium);white-space:nowrap;order:var(--tab-order,0);cursor:pointer;
-  user-select:none;max-width:200px}
-/* default visual order = arrival order = DOM order, expressed as nth-child
+      .tabstrip {
+        display: flex;
+        align-items: stretch;
+        gap: 2px;
+        padding: 6px 21px 6px 25px;
+        flex-shrink: 0;
+        border-bottom: 1px solid var(--border-hairline);
+        background: var(--surface-raised);
+        overflow-x: auto;
+        scrollbar-width: thin;
+      }
+      .tab {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 auto;
+        padding: 0 10px;
+        height: var(--w-tab-h);
+        border: 1px solid transparent;
+        border-radius: var(--radius-control);
+        background: var(--surface-field);
+        color: var(--ink-body);
+        font-size: var(--text-base);
+        font-weight: var(--weight-medium);
+        white-space: nowrap;
+        order: var(--tab-order, 0);
+        cursor: pointer;
+        user-select: none;
+        max-width: 200px;
+      }
+      /* default visual order = arrival order = DOM order, expressed as nth-child
    custom properties. The reordered state above remaps these values entirely in
    CSS, so visual order changes while DOM order never does (DW-8.1). The inline
    style is deliberately NOT used: an inline custom property would outrank the
    [data-order] remap selector in the cascade and freeze the strip. */
-.tabstrip .tab:nth-child(1){--tab-order:1}
-.tabstrip .tab:nth-child(2){--tab-order:2}
-.tabstrip .tab:nth-child(3){--tab-order:3}
-.tabstrip .tab:nth-child(4){--tab-order:4}
-.tab .tm{width:14px;height:14px;border-radius:var(--radius-mark);flex:0 0 auto;display:grid;place-items:center;
-  background-image:var(--mark-overlay);background-color:var(--mark-1)}
-.tab .tm svg{width:8px;height:8px;display:block;stroke:var(--mark-glyph);stroke-width:1.8}
-.tab .tl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.tab .tclose{width:18px;height:18px;border:0;background:none;color:var(--ink-muted);border-radius:var(--radius-mark);
-  display:grid;place-items:center;cursor:pointer;flex:0 0 auto;padding:0;user-select:none}
-.tab .tclose svg{width:11px;height:11px;display:block}
-@media (hover:hover) and (pointer:fine){.tab .tclose:hover{background:var(--surface-active);color:var(--ink-strong)}}
-.tab .tclose:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-@media (hover:hover) and (pointer:fine){.tab:hover:not(.on){background:var(--surface-hover)}}
-.tab:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-/* ACTIVE tab — non-colour cues: raised surface + inset selection + weight.
+      .tabstrip .tab:nth-child(1) {
+        --tab-order: 1;
+      }
+      .tabstrip .tab:nth-child(2) {
+        --tab-order: 2;
+      }
+      .tabstrip .tab:nth-child(3) {
+        --tab-order: 3;
+      }
+      .tabstrip .tab:nth-child(4) {
+        --tab-order: 4;
+      }
+      .tab .tm {
+        width: 14px;
+        height: 14px;
+        border-radius: var(--radius-mark);
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        background-image: var(--mark-overlay);
+        background-color: var(--mark-1);
+      }
+      .tab .tm svg {
+        width: 8px;
+        height: 8px;
+        display: block;
+        stroke: var(--mark-glyph);
+        stroke-width: 1.8;
+      }
+      .tab .tl {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .tab .tclose {
+        width: 18px;
+        height: 18px;
+        border: 0;
+        background: none;
+        color: var(--ink-muted);
+        border-radius: var(--radius-mark);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        flex: 0 0 auto;
+        padding: 0;
+        user-select: none;
+      }
+      .tab .tclose svg {
+        width: 11px;
+        height: 11px;
+        display: block;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .tab .tclose:hover {
+          background: var(--surface-active);
+          color: var(--ink-strong);
+        }
+      }
+      .tab .tclose:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .tab:hover:not(.on) {
+          background: var(--surface-hover);
+        }
+      }
+      .tab:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      /* ACTIVE tab — non-colour cues: raised surface + inset selection + weight.
    Colour is not the sole channel (DW-8.2 / DESIGN.md Never #2). */
-.tab.on{background:var(--surface-raised);color:var(--ink-strong);font-weight:var(--weight-strong);
-  border-color:var(--border-hairline);box-shadow:var(--shadow-tile);border-bottom-color:transparent}
-/* DW-8.7 — reorder has a non-gesture equivalent: a visual grip is a hint; the
+      .tab.on {
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        font-weight: var(--weight-strong);
+        border-color: var(--border-hairline);
+        box-shadow: var(--shadow-tile);
+        border-bottom-color: transparent;
+      }
+      /* DW-8.7 — reorder has a non-gesture equivalent: a visual grip is a hint; the
    reorder is effected by an explicit affordance (the drag grip), and the pager
    plus every tab is a tappable control — nothing is gesture-only. */
-.tab .grip{width:14px;height:14px;flex:0 0 auto;color:var(--ink-muted);display:grid;place-items:center}
-.tab .grip svg{width:10px;height:10px;display:block}
-/* DW-8.7 non-gesture equivalents: the pager renders explicit prev/next buttons
+      .tab .grip {
+        width: 14px;
+        height: 14px;
+        flex: 0 0 auto;
+        color: var(--ink-muted);
+        display: grid;
+        place-items: center;
+      }
+      .tab .grip svg {
+        width: 10px;
+        height: 10px;
+        display: block;
+      }
+      /* DW-8.7 non-gesture equivalents: the pager renders explicit prev/next buttons
    so tab switching is never a swipe-only action. `order` places it AFTER the
    tabs (tabs carry --tab-order 1..4 from the reorder remap, so without an
    explicit order the pager would sort to 0 and render on the LEFT). */
-.pager{display:inline-flex;align-items:center;gap:2px;margin-left:auto;flex:0 0 auto;order:20}
-.pager button{width:var(--w-tab-h);height:var(--w-tab-h);border:1px solid var(--border-control);
-  border-radius:var(--radius-control);background:var(--surface-raised);color:var(--ink-body);
-  display:grid;place-items:center;cursor:pointer;user-select:none}
-.pager button svg{width:15px;height:15px;display:block}
-@media (hover:hover) and (pointer:fine){.pager button:hover{background:var(--surface-hover)}}
-.pager button:active{background:var(--surface-active)}
-.pager button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      .pager {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        margin-left: auto;
+        flex: 0 0 auto;
+        order: 20;
+      }
+      .pager button {
+        width: var(--w-tab-h);
+        height: var(--w-tab-h);
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-control);
+        background: var(--surface-raised);
+        color: var(--ink-body);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        user-select: none;
+      }
+      .pager button svg {
+        width: 15px;
+        height: 15px;
+        display: block;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .pager button:hover {
+          background: var(--surface-hover);
+        }
+      }
+      .pager button:active {
+        background: var(--surface-active);
+      }
+      .pager button:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-/* ---- data-order state remaps VISUAL order, not DOM order (DW-8.1) ---- */
-body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(1){--tab-order:3}
-body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(2){--tab-order:1}
-body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(3){--tab-order:4}
-body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(4){--tab-order:2}
+      /* ---- data-order state remaps VISUAL order, not DOM order (DW-8.1) ---- */
+      body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(1) {
+        --tab-order: 3;
+      }
+      body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(2) {
+        --tab-order: 1;
+      }
+      body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(3) {
+        --tab-order: 4;
+      }
+      body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(4) {
+        --tab-order: 2;
+      }
 
-/* ============================== SPLIT VIEW ===============================
+      /* ============================== SPLIT VIEW ===============================
    DW-8.2 — a paneforge-style two-pane layout, NOT canvas. Shared chrome is not
    duplicated: header, tab strip, composer each appear once. The ACTIVE pane is
    identified WITHOUT colour alone: a 2px graphite left rail (--brand-solid IS
    graphite, the non-status accent — not a hue), an "Active" word, aria-selected,
    and full ink weight; the inactive pane is dimmed. */
-.split{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:1fr 1fr;position:relative}
-/* the paneforge-style separator (drag to resize) — a grip gutter, not canvas */
-.pgutter{position:absolute;top:0;bottom:0;left:50%;width:6px;transform:translateX(-50%);z-index:5;
-  cursor:col-resize;display:grid;place-items:center}
-.pgutter .pgrip{width:2px;height:44px;border-radius:var(--radius-pill);background:var(--border-control)}
-/* DW-8.4 row 5 — the drag handle takes touch-action:none so iOS scrolls the
+      .split {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        position: relative;
+      }
+      /* the paneforge-style separator (drag to resize) — a grip gutter, not canvas */
+      .pgutter {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 50%;
+        width: 6px;
+        transform: translateX(-50%);
+        z-index: 5;
+        cursor: col-resize;
+        display: grid;
+        place-items: center;
+      }
+      .pgutter .pgrip {
+        width: 2px;
+        height: 44px;
+        border-radius: var(--radius-pill);
+        background: var(--border-control);
+      }
+      /* DW-8.4 row 5 — the drag handle takes touch-action:none so iOS scrolls the
    handle instead of dragging; and visual feedback on pointer-down. */
-.pgutter .pgrip:active{background:var(--ink-muted)}
-.ws-pane{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;position:relative}
-.ws-pane + .ws-pane{border-left:1px solid var(--border-hairline)}
-.pane-head{flex:0 0 auto;height:32px;display:flex;align-items:center;gap:8px;padding:0 14px;
-  font-size:var(--text-sm);color:var(--ink-muted);border-bottom:1px solid var(--border-hairline);
-  background:var(--surface-raised)}
-.pane-head .tm{width:14px;height:14px;border-radius:var(--radius-mark);flex:0 0 auto;display:grid;
-  place-items:center;background-image:var(--mark-overlay);background-color:var(--mark-1)}
-.pane-head .tm svg{width:8px;height:8px;display:block;stroke:var(--mark-glyph);stroke-width:1.8}
-.pane-head .pn{font-weight:var(--weight-medium);color:var(--ink-body);overflow:hidden;
-  text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.pane-head .ps{margin-left:auto;font-size:var(--text-xs);color:var(--ink-muted);flex:0 0 auto}
-/* THE ACTIVE-PANE NON-COLOUR CUE (DW-8.2) — a graphite left rail carried by an
+      .pgutter .pgrip:active {
+        background: var(--ink-muted);
+      }
+      .ws-pane {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        position: relative;
+      }
+      .ws-pane + .ws-pane {
+        border-left: 1px solid var(--border-hairline);
+      }
+      .pane-head {
+        flex: 0 0 auto;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 14px;
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        border-bottom: 1px solid var(--border-hairline);
+        background: var(--surface-raised);
+      }
+      .pane-head .tm {
+        width: 14px;
+        height: 14px;
+        border-radius: var(--radius-mark);
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        background-image: var(--mark-overlay);
+        background-color: var(--mark-1);
+      }
+      .pane-head .tm svg {
+        width: 8px;
+        height: 8px;
+        display: block;
+        stroke: var(--mark-glyph);
+        stroke-width: 1.8;
+      }
+      .pane-head .pn {
+        font-weight: var(--weight-medium);
+        color: var(--ink-body);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .pane-head .ps {
+        margin-left: auto;
+        font-size: var(--text-xs);
+        color: var(--ink-muted);
+        flex: 0 0 auto;
+      }
+      /* THE ACTIVE-PANE NON-COLOUR CUE (DW-8.2) — a graphite left rail carried by an
    element + the "Active" word + full ink weight + aria-selected. This specific
    cue is NOT colour-dependent: it is a positional rail + label + state. The
    INACTIVE pane recedes — its whole surface (header + transcript) is dimmed so
    the active pane reads clearly without hunting, in BOTH schemes. */
-.ws-pane .pane-rail{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--brand-solid);
-  opacity:0;transition:opacity var(--c-300) var(--e-toggle)}
-.ws-pane.active .pane-rail{opacity:1}
-.ws-pane.active .pane-head{color:var(--ink-strong)}
-.ws-pane.active .pane-head .pn{font-weight:var(--weight-strong);color:var(--ink-strong)}
-.ws-pane.active .pane-head .ps{color:var(--ink-body);font-weight:var(--weight-medium)}
-/* the visible "Active" word — a non-colour cue that a reader (and a screen
+      .ws-pane .pane-rail {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        background: var(--brand-solid);
+        opacity: 0;
+        transition: opacity var(--c-300) var(--e-toggle);
+      }
+      .ws-pane.active .pane-rail {
+        opacity: 1;
+      }
+      .ws-pane.active .pane-head {
+        color: var(--ink-strong);
+      }
+      .ws-pane.active .pane-head .pn {
+        font-weight: var(--weight-strong);
+        color: var(--ink-strong);
+      }
+      .ws-pane.active .pane-head .ps {
+        color: var(--ink-body);
+        font-weight: var(--weight-medium);
+      }
+      /* the visible "Active" word — a non-colour cue that a reader (and a screen
    reader) can identify the active pane without relying on hue (DW-8.2) */
-.ws-pane .pact{display:none;font-size:var(--text-xs);color:var(--ink-body);
-  font-weight:var(--weight-strong);text-transform:uppercase;letter-spacing:var(--track-caps);flex:0 0 auto}
-.ws-pane.active .pact{display:inline-flex}
-/* the inactive pane recedes: its whole surface (head + transcript) is dimmed */
-.ws-pane:not(.active) .pane-head{opacity:.78}
-.ws-pane:not(.active) .tr-pane{opacity:.7}
+      .ws-pane .pact {
+        display: none;
+        font-size: var(--text-xs);
+        color: var(--ink-body);
+        font-weight: var(--weight-strong);
+        text-transform: uppercase;
+        letter-spacing: var(--track-caps);
+        flex: 0 0 auto;
+      }
+      .ws-pane.active .pact {
+        display: inline-flex;
+      }
+      /* the inactive pane recedes: its whole surface (head + transcript) is dimmed */
+      .ws-pane:not(.active) .pane-head {
+        opacity: 0.78;
+      }
+      .ws-pane:not(.active) .tr-pane {
+        opacity: 0.7;
+      }
 
-/* the transcript pane — NOT pan-y (DW-8.5 deliberate deviation). It holds
+      /* the transcript pane — NOT pan-y (DW-8.5 deliberate deviation). It holds
    horizontally-scrolling code blocks / tool output (DW-8.8), so pan-y would
    forbid scrolling them at all. touch-action here is auto/manipulation only. */
-.tr-pane{flex:1 1 auto;overflow-y:auto;padding:14px 21px var(--w-transcript-b) 21px;min-height:0;
-  position:relative;touch-action:manipulation}
-.tr-pane h2,.who h3{font-size:var(--text-sm);font-weight:var(--weight-strong)}
-.who{display:flex;align-items:center;gap:7px;font-size:var(--text-sm);color:var(--ink-muted);
-  font-weight:var(--weight-medium);margin-bottom:4px}
-.who .dot{width:14px;height:14px;border-radius:var(--radius-mark);display:grid;place-items:center;flex:0 0 auto}
-.who .dot.u{background:var(--surface-sunken);color:var(--ink-body)}
-.who .dot.a{background:var(--brand-lo);color:var(--on-brand)}
-.who .dot svg{width:9px;height:9px}
-.role{font-size:var(--text-sm);font-weight:var(--weight-strong);color:var(--ink-strong)}
-.turn{margin-bottom:14px}
-.msg{font-size:var(--text-base);line-height:var(--leading-body);color:var(--ink-strong);max-width:74ch}
-.msg code{font-family:var(--font-mono);font-size:var(--text-sm);background:var(--surface-sunken);
-  padding:1px 4px;border-radius:var(--radius-mark)}
-.msg .vars{color:var(--ink-muted)}
+      .tr-pane {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding: 14px 21px var(--w-transcript-b) 21px;
+        min-height: 0;
+        position: relative;
+        touch-action: manipulation;
+      }
+      .tr-pane h2,
+      .who h3 {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+      }
+      .who {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        font-weight: var(--weight-medium);
+        margin-bottom: 4px;
+      }
+      .who .dot {
+        width: 14px;
+        height: 14px;
+        border-radius: var(--radius-mark);
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+      }
+      .who .dot.u {
+        background: var(--surface-sunken);
+        color: var(--ink-body);
+      }
+      .who .dot.a {
+        background: var(--brand-lo);
+        color: var(--on-brand);
+      }
+      .who .dot svg {
+        width: 9px;
+        height: 9px;
+      }
+      .role {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        color: var(--ink-strong);
+      }
+      .turn {
+        margin-bottom: 14px;
+      }
+      .msg {
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        color: var(--ink-strong);
+        max-width: 74ch;
+      }
+      .msg code {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        background: var(--surface-sunken);
+        padding: 1px 4px;
+        border-radius: var(--radius-mark);
+      }
+      .msg .vars {
+        color: var(--ink-muted);
+      }
 
-/* tool group: indent + rail, never a nested card */
-.tools{margin:6px 0 0 7px;padding-left:12px;background:var(--rail) left top/2px 100% no-repeat}
-.trow{height:var(--w-row);display:flex;align-items:center;gap:8px;font-size:var(--text-sm);color:var(--ink-body)}
-.trow .ic{width:15px;height:15px;flex:0 0 auto;display:grid;place-items:center;color:var(--ink-muted)}
-.trow .ic svg{width:15px;height:15px;display:block}
-.trow .tk{font-weight:var(--weight-strong);color:var(--ink-strong);font-size:var(--text-sm);flex:0 0 40px}
-.trow .arg{font-family:var(--font-mono);color:var(--ink-muted);overflow:hidden;text-overflow:ellipsis;
-  white-space:nowrap;min-width:0;flex:1 1 auto}
-.trow .t{margin-left:auto;color:var(--ink-muted);font-variant-numeric:tabular-nums;flex:0 0 auto}
-.trow .d{color:var(--data-ok);font-variant-numeric:tabular-nums;flex:0 0 auto}
-.trow .d.bad{color:var(--data-bad)}
+      /* tool group: indent + rail, never a nested card */
+      .tools {
+        margin: 6px 0 0 7px;
+        padding-left: 12px;
+        background: var(--rail) left top / 2px 100% no-repeat;
+      }
+      .trow {
+        height: var(--w-row);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: var(--text-sm);
+        color: var(--ink-body);
+      }
+      .trow .ic {
+        width: 15px;
+        height: 15px;
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        color: var(--ink-muted);
+      }
+      .trow .ic svg {
+        width: 15px;
+        height: 15px;
+        display: block;
+      }
+      .trow .tk {
+        font-weight: var(--weight-strong);
+        color: var(--ink-strong);
+        font-size: var(--text-sm);
+        flex: 0 0 40px;
+      }
+      .trow .arg {
+        font-family: var(--font-mono);
+        color: var(--ink-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .trow .t {
+        margin-left: auto;
+        color: var(--ink-muted);
+        font-variant-numeric: tabular-nums;
+        flex: 0 0 auto;
+      }
+      .trow .d {
+        color: var(--data-ok);
+        font-variant-numeric: tabular-nums;
+        flex: 0 0 auto;
+      }
+      .trow .d.bad {
+        color: var(--data-bad);
+      }
 
-/* ---- DW-8.5 / 8.8: a SIDEWAYS-SCROLLING DESCENDANT inside the transcript.
+      /* ---- DW-8.5 / 8.8: a SIDEWAYS-SCROLLING DESCENDANT inside the transcript.
    A horizontal swipe begun here never changes the tab (DW-8.8) because the pane
    does not claim horizontal movement (touch-action is not pan-y) and the tab
    switch is an explicit control, never an implicit pan of the pane. */
-.code-scroll{overflow-x:auto;overflow-y:hidden;border:1px solid var(--border-hairline);
-  border-radius:var(--radius-well);background:var(--surface-sunken);margin:6px 0;
-  -webkit-overflow-scrolling:touch}
-.code-scroll pre{font-family:var(--font-mono);font-size:var(--text-sm);line-height:var(--leading-ui);
-  color:var(--ink-body);padding:10px 12px;white-space:pre;width:max-content;min-width:100%}
+      .code-scroll {
+        overflow-x: auto;
+        overflow-y: hidden;
+        border: 1px solid var(--border-hairline);
+        border-radius: var(--radius-well);
+        background: var(--surface-sunken);
+        margin: 6px 0;
+        -webkit-overflow-scrolling: touch;
+      }
+      .code-scroll pre {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        line-height: var(--leading-ui);
+        color: var(--ink-body);
+        padding: 10px 12px;
+        white-space: pre;
+        width: max-content;
+        min-width: 100%;
+      }
 
-/* ============================ HUMAN-IN-THE-LOOP =========================== */
-.hitl{border:1px solid var(--border-control);border-radius:var(--radius-panel);
-  background:var(--surface-raised);margin:10px 7px 0 7px;padding:var(--w-card-pad);box-shadow:var(--shadow-hairline)}
-.hitl h2{font-size:var(--text-base);font-weight:var(--weight-strong);display:flex;align-items:center;
-  gap:8px;margin-bottom:7px}
-.hitl .lede{font-size:var(--text-base);line-height:var(--leading-body);color:var(--ink-body);margin-bottom:9px;
-  max-width:72ch}
-.cmd{font-family:var(--font-mono);font-size:var(--text-sm);color:var(--ink-strong);
-  border-left:2px solid var(--border-divider);padding:3px 0 3px 10px;margin-bottom:8px}
-.cmd .eff{display:block;font-family:var(--font-body);font-size:var(--text-sm);color:var(--ink-muted);margin-top:3px}
-.scope{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:var(--text-sm);margin-bottom:4px}
-.scope dt{color:var(--ink-muted)}
-.scope dd{color:var(--ink-body);min-width:0;overflow-wrap:anywhere}
-.scope dd .mono{word-break:break-all;font-size:var(--text-xs)}
-.scope dd .no{color:var(--ink-muted)}
-.choice{display:flex;gap:9px;margin-top:9px}
-.choice button{flex:1 1 0;min-width:0;height:var(--w-btn-h);padding:0 12px;border-radius:var(--radius-control);
-  display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font-body);
-  font-size:var(--text-base);font-weight:var(--weight-strong);line-height:var(--leading-ui);cursor:pointer;
-  background:var(--surface-raised);color:var(--ink-strong);border:1px solid var(--border-control);
-  user-select:none}
-.choice button svg{width:12px;height:12px;flex:0 0 auto}
-.choice button.grant{color:var(--ink-strong)}
-.choice button.refuse{color:var(--ink-body)}
-@media (hover:hover) and (pointer:fine){
-  .choice button:hover{background-color:var(--surface-hover)}
-  .choice button:active{background-color:var(--surface-active)}
-}
-.choice button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      /* ============================ HUMAN-IN-THE-LOOP =========================== */
+      .hitl {
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-panel);
+        background: var(--surface-raised);
+        margin: 10px 7px 0 7px;
+        padding: var(--w-card-pad);
+        box-shadow: var(--shadow-hairline);
+      }
+      .hitl h2 {
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 7px;
+      }
+      .hitl .lede {
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        color: var(--ink-body);
+        margin-bottom: 9px;
+        max-width: 72ch;
+      }
+      .cmd {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        color: var(--ink-strong);
+        border-left: 2px solid var(--border-divider);
+        padding: 3px 0 3px 10px;
+        margin-bottom: 8px;
+      }
+      .cmd .eff {
+        display: block;
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        margin-top: 3px;
+      }
+      .scope {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 3px 14px;
+        font-size: var(--text-sm);
+        margin-bottom: 4px;
+      }
+      .scope dt {
+        color: var(--ink-muted);
+      }
+      .scope dd {
+        color: var(--ink-body);
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .scope dd .mono {
+        word-break: break-all;
+        font-size: var(--text-xs);
+      }
+      .scope dd .no {
+        color: var(--ink-muted);
+      }
+      .choice {
+        display: flex;
+        gap: 9px;
+        margin-top: 9px;
+      }
+      .choice button {
+        flex: 1 1 0;
+        min-width: 0;
+        height: var(--w-btn-h);
+        padding: 0 12px;
+        border-radius: var(--radius-control);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+        line-height: var(--leading-ui);
+        cursor: pointer;
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        border: 1px solid var(--border-control);
+        user-select: none;
+      }
+      .choice button svg {
+        width: 12px;
+        height: 12px;
+        flex: 0 0 auto;
+      }
+      .choice button.grant {
+        color: var(--ink-strong);
+      }
+      .choice button.refuse {
+        color: var(--ink-body);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .choice button:hover {
+          background-color: var(--surface-hover);
+        }
+        .choice button:active {
+          background-color: var(--surface-active);
+        }
+      }
+      .choice button:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-/* ============================== COMPOSER / STOP =========================== */
-/* The floating composer — the fixed anchors of DW-8.3 (Home, composer input,
+      /* ============================== COMPOSER / STOP =========================== */
+      /* The floating composer — the fixed anchors of DW-8.3 (Home, composer input,
    Stop) live in chrome that does not move between ws states. */
-.fade{position:absolute;left:0;right:0;bottom:0;height:96px;pointer-events:none;z-index:19;
-  background:linear-gradient(to top,var(--surface-field) 22%,oklch(from var(--surface-field) l c h / 0))}
-.composer{position:absolute;left:50%;transform:translateX(-50%);z-index:20;
-  bottom:calc(16px + env(safe-area-inset-bottom));width:min(720px,calc(100% - 50px));pointer-events:none}
-.composer > *{pointer-events:auto}
-.cin{border:1px solid var(--border-control);background:oklch(from var(--surface-raised) l c h / 0.82);
-  -webkit-backdrop-filter:blur(16px) saturate(1.6);backdrop-filter:blur(16px) saturate(1.6);
-  border-radius:var(--radius-shell);padding:5px 5px 5px 15px;display:flex;align-items:center;gap:10px;
-  box-shadow:var(--shadow-lifted)}
-.cin textarea{flex:1 1 auto;border:0;outline:0;background:transparent;resize:none;font-family:var(--font-body);
-  font-size:var(--w-input-fs);line-height:var(--leading-ui);color:var(--ink-strong);height:34px;
-  padding:7px 0 0;min-width:0}
-.cin textarea::placeholder{color:var(--ink-muted)}
-/* the STOP anchor — reaches its maximal target under coarse pointer and stays put */
-.stop{width:44px;height:44px;min-width:44px;min-height:44px;border:0;border-radius:var(--radius-pill);flex:0 0 auto;
-  background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);
-  color:var(--on-brand);display:grid;place-items:center;cursor:pointer;user-select:none}
-.stop svg{width:15px;height:15px}
-.stop:active{filter:brightness(0.94)}
-.stop:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-.aff-row{display:grid;grid-template-rows:0fr;opacity:0;transform:translateY(-4px);pointer-events:none;
-  flex:0 1 0%;min-width:0;overflow:hidden;   /* collapsed = takes no horizontal room */
-  transition:opacity var(--c-300) var(--e-in),transform var(--c-300) var(--e-in)}
-.composer:focus-within .aff-row{grid-template-rows:1fr;opacity:1;transform:none;pointer-events:auto}
-.aff-row > .inner{overflow:hidden;display:flex;align-items:center;gap:12px;font-size:var(--text-sm);
-  color:var(--ink-muted);padding-top:8px;flex-wrap:wrap;row-gap:6px}
-.aff-row .hint{margin-left:auto}
+      .fade {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 96px;
+        pointer-events: none;
+        z-index: 19;
+        background: linear-gradient(
+          to top,
+          var(--surface-field) 22%,
+          oklch(from var(--surface-field) l c h / 0)
+        );
+      }
+      .composer {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 20;
+        bottom: calc(16px + env(safe-area-inset-bottom));
+        width: min(720px, calc(100% - 50px));
+        pointer-events: none;
+      }
+      .composer > * {
+        pointer-events: auto;
+      }
+      .cin {
+        border: 1px solid var(--border-control);
+        background: oklch(from var(--surface-raised) l c h / 0.82);
+        -webkit-backdrop-filter: blur(16px) saturate(1.6);
+        backdrop-filter: blur(16px) saturate(1.6);
+        border-radius: var(--radius-shell);
+        padding: 5px 5px 5px 15px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        box-shadow: var(--shadow-lifted);
+      }
+      .cin textarea {
+        flex: 1 1 auto;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        resize: none;
+        font-family: var(--font-body);
+        font-size: var(--w-input-fs);
+        line-height: var(--leading-ui);
+        color: var(--ink-strong);
+        height: 34px;
+        padding: 7px 0 0;
+        min-width: 0;
+      }
+      .cin textarea::placeholder {
+        color: var(--ink-muted);
+      }
+      /* the STOP anchor — reaches its maximal target under coarse pointer and stays put */
+      .stop {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+        border: 0;
+        border-radius: var(--radius-pill);
+        flex: 0 0 auto;
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        user-select: none;
+      }
+      .stop svg {
+        width: 15px;
+        height: 15px;
+      }
+      .stop:active {
+        filter: brightness(0.94);
+      }
+      .stop:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      .aff-row {
+        display: grid;
+        grid-template-rows: 0fr;
+        opacity: 0;
+        transform: translateY(-4px);
+        pointer-events: none;
+        flex: 0 1 0%;
+        min-width: 0;
+        overflow: hidden; /* collapsed = takes no horizontal room */
+        transition:
+          opacity var(--c-300) var(--e-in),
+          transform var(--c-300) var(--e-in);
+      }
+      .composer:focus-within .aff-row {
+        grid-template-rows: 1fr;
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+      }
+      .aff-row > .inner {
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        padding-top: 8px;
+        flex-wrap: wrap;
+        row-gap: 6px;
+      }
+      .aff-row .hint {
+        margin-left: auto;
+      }
 
-/* ---- ws state switcher (screenshot / gate affordance, not the product) ----
+      /* ---- ws state switcher (screenshot / gate affordance, not the product) ----
    The three ws states — split (two panes) · tabbed (single pane, tab switch) ·
    reordered (tab reorder via CSS order) — only swap the transcript panes and the
    strip's active highlight. The fixed anchors (Home, composer, Stop) live in
@@ -416,15 +1221,26 @@ body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(4){--tab-order:2}
    Default (no data-ws) = SPLIT = the two-pane grid. The single-pane states hide
    the split grid and reveal the lone pane; the reorder state additionally
    remaps the tab strip's visual order (see the data-order rules above). */
-.ws-tabbed{flex:1 1 auto;min-height:0;overflow:hidden;display:none}
-.ws-tabbed .ws-pane{height:100%}
-body[data-ws="tabbed"] .split,
-body[data-ws="reordered"] .split{display:none}
-body[data-ws="tabbed"] .ws-tabbed,
-body[data-ws="reordered"] .ws-tabbed{display:block}
+      .ws-tabbed {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+        display: none;
+      }
+      .ws-tabbed .ws-pane {
+        height: 100%;
+      }
+      body[data-ws="tabbed"] .split,
+      body[data-ws="reordered"] .split {
+        display: none;
+      }
+      body[data-ws="tabbed"] .ws-tabbed,
+      body[data-ws="reordered"] .ws-tabbed {
+        display: block;
+      }
 
-/* ---- flux toolbar -------------------------------------------------------- */
-/* NOTE: this segmented control is a GATE / SCREENSHOT affordance (selecting
+      /* ---- flux toolbar -------------------------------------------------------- */
+      /* NOTE: this segmented control is a GATE / SCREENSHOT affordance (selecting
    the split / tabbed / reordered ws states), NOT product UI. It must never
    overlap a FIXED chrome band (the header or the composer):
    - wide: docks BOTTOM-right, clear of the bottom-centre composer (which is
@@ -433,32 +1249,66 @@ body[data-ws="reordered"] .ws-tabbed{display:block}
    - narrow: the composer docks full-width flush to the bottom, so the toggle
      floats bottom-centre JUST ABOVE it (clear of both header and composer).
    On both it floats over scrollable content only, like a floating control. */
-.wsbar{position:fixed;bottom:14px;right:12px;z-index:110;display:flex;gap:4px;
-  align-items:center;padding:4px;border:1px solid var(--border-control);background:var(--surface-raised);
-  border-radius:var(--radius-control);box-shadow:var(--shadow-lifted)}
-.wsbar button{height:30px;padding:0 10px;border:1px solid transparent;border-radius:var(--radius-control);
-  background:none;color:var(--ink-muted);font-family:var(--font-body);font-size:var(--text-sm);cursor:pointer}
-.wsbar button.on{background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);
-  color:var(--on-brand);font-weight:var(--weight-strong)}
-@media (max-width:900px){
-  /* the header's title/status fill the top on a phone and the composer docks
+      .wsbar {
+        position: fixed;
+        bottom: 14px;
+        right: 12px;
+        z-index: 110;
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        padding: 4px;
+        border: 1px solid var(--border-control);
+        background: var(--surface-raised);
+        border-radius: var(--radius-control);
+        box-shadow: var(--shadow-lifted);
+      }
+      .wsbar button {
+        height: 30px;
+        padding: 0 10px;
+        border: 1px solid transparent;
+        border-radius: var(--radius-control);
+        background: none;
+        color: var(--ink-muted);
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        cursor: pointer;
+      }
+      .wsbar button.on {
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        font-weight: var(--weight-strong);
+      }
+      @media (max-width: 900px) {
+        /* the header's title/status fill the top on a phone and the composer docks
      full-width flush to the bottom, so float the toggle bottom-centre JUST
      ABOVE the composer (its top is ~66px up + safe-area; 78px clears it). */
-  .wsbar{bottom:calc(78px + env(safe-area-inset-bottom));left:50%;
-    right:auto;transform:translateX(-50%)}
-}
+        .wsbar {
+          bottom: calc(78px + env(safe-area-inset-bottom));
+          left: 50%;
+          right: auto;
+          transform: translateX(-50%);
+        }
+      }
 
-/* ============================== MOTION =================================== */
-/* Durations map to the 100 / 300 / 500ms tiers ONLY. Easings are limited to the
+      /* ============================== MOTION =================================== */
+      /* Durations map to the 100 / 300 / 500ms tiers ONLY. Easings are limited to the
    three canonical curves. ONLY transform and opacity animate (the paneforge-style
    continuous pane resize is a pointer-driven LAYOUT change, not an animation —
    DW-4.7 carve-out). Reduced-motion precedes. */
-@media (prefers-reduced-motion: reduce){
-  *,*::before,*::after{transition-duration:1ms !important;animation-duration:1ms !important;
-    animation-iteration-count:1 !important}
-}
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition-duration: 1ms !important;
+          animation-duration: 1ms !important;
+          animation-iteration-count: 1 !important;
+        }
+      }
 
-/* ================== COMPACT IS FINE-POINTER ONLY (DW-4.10) =================
+      /* ================== COMPACT IS FINE-POINTER ONLY (DW-4.10) =================
    Under a coarse pointer every control on this compact surface relaxes to
    >=44x44; text inputs stay >=16px. Targets are keyed to POINTER TYPE, not width,
    so a touch tablet at any width gets the full target.
@@ -474,60 +1324,168 @@ body[data-ws="reordered"] .ws-tabbed{display:block}
      8 long-press text ......... user-select: none on controls
      9 status bar colour ....... two theme-color metas (light + dark)
    ========================================================================== */
-@media (pointer:coarse){
-  body{grid-template-columns:1fr}
-  aside{position:fixed;inset:0 auto 0 0;width:284px;z-index:40;transform:translateX(-100%);
-    box-shadow:var(--shadow-drawer);transition:transform var(--c-300) var(--e-out)}
-  .nav-i,.run-i{min-height:44px}
-  .tab{height:44px;min-height:44px}
-  .pager button{width:44px;height:44px}
-  .trow{min-height:44px}
-  .choice button{min-height:44px}
-  .tab .tclose{width:44px;height:44px;min-width:44px;min-height:44px}
-  .shead .back,.brand .home{min-width:44px;min-height:44px}
-  .stop{min-width:44px;min-height:44px}
-  .cin textarea{font-size:16px}
-  .composer{width:calc(100% - 24px)}
-  .code-scroll pre{font-size:16px}
-  /* full tap feedback on every pointer-down (row 5) */
-  .tab:active,.pager button:active,.shead .back:active,.brand .home:active{background:var(--surface-active)}
-}
-@media (max-width:900px){
-  body{grid-template-columns:1fr}
-  aside{position:fixed;inset:0 auto 0 0;width:284px;z-index:40;transform:translateX(-100%);
-    box-shadow:var(--shadow-drawer);transition:transform var(--c-300) var(--e-out)}
-  .nav-open aside{transform:none}
-  .burger{display:grid;place-items:center;width:44px;height:44px;flex:0 0 auto;border-radius:var(--radius-control);
-    color:var(--ink-body);background:none;border:0;cursor:pointer;user-select:none}
-  .burger svg{width:19px;height:19px}
-  .shead{padding-left:16px;padding-right:16px}
-  .shead .meta{display:none}
-  .tabstrip{padding-left:16px;padding-right:16px}
-  /* the composer STAYS A FIXED ANCHOR on a phone: it docks flush to the bottom
+      @media (pointer: coarse) {
+        body {
+          grid-template-columns: 1fr;
+        }
+        aside {
+          position: fixed;
+          inset: 0 auto 0 0;
+          width: 284px;
+          z-index: 40;
+          transform: translateX(-100%);
+          box-shadow: var(--shadow-drawer);
+          transition: transform var(--c-300) var(--e-out);
+        }
+        .nav-i,
+        .run-i {
+          min-height: 44px;
+        }
+        .tab {
+          height: 44px;
+          min-height: 44px;
+        }
+        .pager button {
+          width: 44px;
+          height: 44px;
+        }
+        .trow {
+          min-height: 44px;
+        }
+        .choice button {
+          min-height: 44px;
+        }
+        .tab .tclose {
+          width: 44px;
+          height: 44px;
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .shead .back,
+        .brand .home {
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .stop {
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .cin textarea {
+          font-size: 16px;
+        }
+        .composer {
+          width: calc(100% - 24px);
+        }
+        .code-scroll pre {
+          font-size: 16px;
+        }
+        /* full tap feedback on every pointer-down (row 5) */
+        .tab:active,
+        .pager button:active,
+        .shead .back:active,
+        .brand .home:active {
+          background: var(--surface-active);
+        }
+      }
+      @media (max-width: 900px) {
+        body {
+          grid-template-columns: 1fr;
+        }
+        aside {
+          position: fixed;
+          inset: 0 auto 0 0;
+          width: 284px;
+          z-index: 40;
+          transform: translateX(-100%);
+          box-shadow: var(--shadow-drawer);
+          transition: transform var(--c-300) var(--e-out);
+        }
+        .nav-open aside {
+          transform: none;
+        }
+        .burger {
+          display: grid;
+          place-items: center;
+          width: 44px;
+          height: 44px;
+          flex: 0 0 auto;
+          border-radius: var(--radius-control);
+          color: var(--ink-body);
+          background: none;
+          border: 0;
+          cursor: pointer;
+          user-select: none;
+        }
+        .burger svg {
+          width: 19px;
+          height: 19px;
+        }
+        .shead {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+        .shead .meta {
+          display: none;
+        }
+        .tabstrip {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+        /* the composer STAYS A FIXED ANCHOR on a phone: it docks flush to the bottom
      of the viewport (above the safe-area), so Home / composer / Stop hold
      identical positions in every ws state (DW-8.3). */
-  .composer{position:fixed;left:12px;right:12px;width:auto;transform:none;
-    bottom:calc(10px + env(safe-area-inset-bottom));z-index:21}
-  .tr-pane{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
-  .scope{grid-template-columns:1fr;gap:1px 0}
-  .scope dt{margin-top:7px}
-  /* a phone renders ONE pane at a time (drill-down stack degrades the split,
+        .composer {
+          position: fixed;
+          left: 12px;
+          right: 12px;
+          width: auto;
+          transform: none;
+          bottom: calc(10px + env(safe-area-inset-bottom));
+          z-index: 21;
+        }
+        .tr-pane {
+          padding-bottom: calc(84px + env(safe-area-inset-bottom));
+        }
+        .scope {
+          grid-template-columns: 1fr;
+          gap: 1px 0;
+        }
+        .scope dt {
+          margin-top: 7px;
+        }
+        /* a phone renders ONE pane at a time (drill-down stack degrades the split,
      per surfaces.md — split-view multitasking is a tablet/desktop pattern) */
-  .split{grid-template-columns:1fr;display:flex;flex-direction:column}
-  .pgutter{display:none}
-  /* only the ACTIVE pane is shown on a phone; the background pane is reached by
+        .split {
+          grid-template-columns: 1fr;
+          display: flex;
+          flex-direction: column;
+        }
+        .pgutter {
+          display: none;
+        }
+        /* only the ACTIVE pane is shown on a phone; the background pane is reached by
      switching (pager / tap), never by peeking beside the active one */
-  .split .ws-pane:last-child{display:none}
-  body[data-ws="split"] .ws-pane:first-child{display:flex}
-  .split .ws-pane:first-child{display:flex}
-  /* DW-8.4 row 3 — a FULL-BLEED block fills the visible viewport despite the
+        .split .ws-pane:last-child {
+          display: none;
+        }
+        body[data-ws="split"] .ws-pane:first-child {
+          display: flex;
+        }
+        .split .ws-pane:first-child {
+          display: flex;
+        }
+        /* DW-8.4 row 3 — a FULL-BLEED block fills the visible viewport despite the
      mobile browser chrome (safe-area + toolbar), so it takes 100svh. The
      single-pane full-bleed transcript is exactly that block. */
-  .ws-tabbed .ws-pane{min-height:100svh}
-  .split .ws-pane:first-child{min-height:100svh}
-}
+        .ws-tabbed .ws-pane {
+          min-height: 100svh;
+        }
+        .split .ws-pane:first-child {
+          min-height: 100svh;
+        }
+      }
 
-/* ============================================================================
+      /* ============================================================================
    DESIGN-DELIVERABLE NOTES (not rendered) — part of the Phase 8 spec.
 
    ---- GESTURE OWNERSHIP (DW-8.7 / 8.8 / 8.9) -------------------------------
@@ -553,231 +1511,1128 @@ body[data-ws="reordered"] .ws-tabbed{display:block}
    pan-y would forbid the browser from scrolling at all. Ownership stays with
    "what actually moved". Recorded here so a later reviewer does not reverse it.
    ============================================================================ */
-</style></head><body aria-label="Workspace">
+    </style>
+  </head>
+  <body aria-label="Workspace">
+    <aside aria-label="Fleet navigation">
+      <div class="brand">
+        <div class="logo">
+          <svg
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.7"
+            viewBox="0 0 24 24"
+          >
+            <path d="M4 4h16v16H4z" />
+            <path d="M4 4h8v16H4z" fill="currentColor" />
+          </svg>
+        </div>
+        <b>Whiffle</b>
+        <button aria-label="Home (fleet board)" class="home" type="button">
+          <svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+            <g fill="currentColor">
+              <path
+                d="M13 15.4C13 13.3258 13 12.2887 13.659 11.6444C14.318 11 15.3787 11 17.5 11C19.6213 11 20.682 11 21.341 11.6444C22 12.2887 22 13.3258 22 15.4V17.6C22 19.6742 22 20.7113 21.341 21.3556C20.682 22 19.6213 22 17.5 22C15.3787 22 14.318 22 13.659 21.3556C13 20.7113 13 19.6742 13 17.6V15.4Z"
+                opacity=".5"
+              />
+              <path
+                d="M2 8.6C2 10.6742 2 11.7113 2.65901 12.3556C3.31802 13 4.37868 13 6.5 13C8.62132 13 9.68198 13 10.341 12.3556C11 11.7113 11 10.6742 11 8.6V6.4C11 4.32582 11 3.28873 10.341 2.64437C9.68198 2 8.62132 2 6.5 2C4.37868 2 3.31802 2 2.65901 2.64437C2 3.28873 2 4.32582 2 6.4V8.6Z"
+              />
+              <path
+                d="M13 5.5C13 4.4128 13 3.8692 13.1713 3.44041C13.3996 2.86867 13.8376 2.41443 14.389 2.17761C14.8024 2 15.3266 2 16.375 2H18.625C19.6734 2 20.1976 2 20.611 2.17761C21.1624 2.41443 21.6004 2.86867 21.8287 3.44041C22 3.8692 22 4.4128 22 5.5C22 6.5872 22 7.1308 21.8287 7.55959C21.6004 8.13133 21.1624 8.58557 20.611 8.82239C20.1976 9 19.6734 9 18.625 9H16.375C15.3266 9 14.8024 9 14.389 8.82239C13.8376 8.58557 13.3996 8.13133 13.1713 7.55959C13 7.1308 13 6.5872 13 5.5Z"
+              />
+              <path
+                d="M2 18.5C2 19.5872 2 20.1308 2.17127 20.5596C2.39963 21.1313 2.83765 21.5856 3.38896 21.8224C3.80245 22 4.32663 22 5.375 22H7.625C8.67337 22 9.19755 22 9.61104 21.8224C10.1624 21.5856 10.6004 21.1313 10.8287 20.5596C11 20.1308 11 19.5872 11 18.5C11 17.4128 11 16.8692 10.8287 16.4404C10.6004 15.8687 10.1624 15.4144 9.61104 15.1776C9.19755 15 8.67337 15 7.625 15H5.375C4.32663 15 3.80245 15 3.38896 15.1776C2.83765 15.4144 2.39963 15.8687 2.17127 16.4404C2 16.8692 2 17.4128 2 18.5Z"
+                opacity=".5"
+              />
+            </g>
+          </svg>
+        </button>
+      </div>
 
-<aside aria-label="Fleet navigation">
-  <div class="brand"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></div><b>Whiffle</b>
-    <button type="button" class="home" aria-label="Home (fleet board)"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M13 15.4C13 13.3258 13 12.2887 13.659 11.6444C14.318 11 15.3787 11 17.5 11C19.6213 11 20.682 11 21.341 11.6444C22 12.2887 22 13.3258 22 15.4V17.6C22 19.6742 22 20.7113 21.341 21.3556C20.682 22 19.6213 22 17.5 22C15.3787 22 14.318 22 13.659 21.3556C13 20.7113 13 19.6742 13 17.6V15.4Z" opacity=".5"/><path d="M2 8.6C2 10.6742 2 11.7113 2.65901 12.3556C3.31802 13 4.37868 13 6.5 13C8.62132 13 9.68198 13 10.341 12.3556C11 11.7113 11 10.6742 11 8.6V6.4C11 4.32582 11 3.28873 10.341 2.64437C9.68198 2 8.62132 2 6.5 2C4.37868 2 3.31802 2 2.65901 2.64437C2 3.28873 2 4.32582 2 6.4V8.6Z"/><path d="M13 5.5C13 4.4128 13 3.8692 13.1713 3.44041C13.3996 2.86867 13.8376 2.41443 14.389 2.17761C14.8024 2 15.3266 2 16.375 2H18.625C19.6734 2 20.1976 2 20.611 2.17761C21.1624 2.41443 21.6004 2.86867 21.8287 3.44041C22 3.8692 22 4.4128 22 5.5C22 6.5872 22 7.1308 21.8287 7.55959C21.6004 8.13133 21.1624 8.58557 20.611 8.82239C20.1976 9 19.6734 9 18.625 9H16.375C15.3266 9 14.8024 9 14.389 8.82239C13.8376 8.58557 13.3996 8.13133 13.1713 7.55959C13 7.1308 13 6.5872 13 5.5Z"/><path d="M2 18.5C2 19.5872 2 20.1308 2.17127 20.5596C2.39963 21.1313 2.83765 21.5856 3.38896 21.8224C3.80245 22 4.32663 22 5.375 22H7.625C8.67337 22 9.19755 22 9.61104 21.8224C10.1624 21.5856 10.6004 21.1313 10.8287 20.5596C11 20.1308 11 19.5872 11 18.5C11 17.4128 11 16.8692 10.8287 16.4404C10.6004 15.8687 10.1624 15.4144 9.61104 15.1776C9.19755 15 8.67337 15 7.625 15H5.375C4.32663 15 3.80245 15 3.38896 15.1776C2.83765 15.4144 2.39963 15.8687 2.17127 16.4404C2 16.8692 2 17.4128 2 18.5Z" opacity=".5"/></g></svg></button>
-  </div>
+      <div class="sec">Fleet</div>
+      <nav>
+        <a class="nav-i" href="#nav"
+          ><span class="ic"
+            ><svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+              <g fill="currentColor">
+                <path
+                  d="M13 15.4C13 13.3258 13 12.2887 13.659 11.6444C14.318 11 15.3787 11 17.5 11C19.6213 11 20.682 11 21.341 11.6444C22 12.2887 22 13.3258 22 15.4V17.6C22 19.6742 22 20.7113 21.341 21.3556C20.682 22 19.6213 22 17.5 22C15.3787 22 14.318 22 13.659 21.3556C13 20.7113 13 19.6742 13 17.6V15.4Z"
+                  opacity=".5"
+                />
+                <path
+                  d="M2 8.6C2 10.6742 2 11.7113 2.65901 12.3556C3.31802 13 4.37868 13 6.5 13C8.62132 13 9.68198 13 10.341 12.3556C11 11.7113 11 10.6742 11 8.6V6.4C11 4.32582 11 3.28873 10.341 2.64437C9.68198 2 8.62132 2 6.5 2C4.37868 2 3.31802 2 2.65901 2.64437C2 3.28873 2 4.32582 2 6.4V8.6Z"
+                />
+                <path
+                  d="M13 5.5C13 4.4128 13 3.8692 13.1713 3.44041C13.3996 2.86867 13.8376 2.41443 14.389 2.17761C14.8024 2 15.3266 2 16.375 2H18.625C19.6734 2 20.1976 2 20.611 2.17761C21.1624 2.41443 21.6004 2.86867 21.8287 3.44041C22 3.8692 22 4.4128 22 5.5C22 6.5872 22 7.1308 21.8287 7.55959C21.6004 8.13133 21.1624 8.58557 20.611 8.82239C20.1976 9 19.6734 9 18.625 9H16.375C15.3266 9 14.8024 9 14.389 8.82239C13.8376 8.58557 13.3996 8.13133 13.1713 7.55959C13 7.1308 13 6.5872 13 5.5Z"
+                />
+                <path
+                  d="M2 18.5C2 19.5872 2 20.1308 2.17127 20.5596C2.39963 21.1313 2.83765 21.5856 3.38896 21.8224C3.80245 22 4.32663 22 5.375 22H7.625C8.67337 22 9.19755 22 9.61104 21.8224C10.1624 21.5856 10.6004 21.1313 10.8287 20.5596C11 20.1308 11 19.5872 11 18.5C11 17.4128 11 16.8692 10.8287 16.4404C10.6004 15.8687 10.1624 15.4144 9.61104 15.1776C9.19755 15 8.67337 15 7.625 15H5.375C4.32663 15 3.80245 15 3.38896 15.1776C2.83765 15.4144 2.39963 15.8687 2.17127 16.4404C2 16.8692 2 17.4128 2 18.5Z"
+                  opacity=".5"
+                />
+              </g>
+            </svg></span
+          >Fleet<span class="cnt">6</span></a
+        >
+        <a class="nav-i" href="#nav"
+          ><span class="ic"
+            ><svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+              <g fill="currentColor">
+                <path
+                  d="M12 4C12 2.89543 12.8954 2 14 2C15.1046 2 16 2.89543 16 4C16 5.10457 15.1046 6 14 6C12.8954 6 12 5.10457 12 4Z"
+                />
+                <path
+                  d="M12 10C13.1046 10 14 10.8954 14 12C14 13.1046 13.1046 14 12 14C10.8954 14 10 13.1046 10 12C10 10.8954 10.8954 10 12 10Z"
+                />
+                <path
+                  d="M10 18C11.1046 18 12 18.8954 12 20C12 21.1046 11.1046 22 10 22C8.89543 22 8 21.1046 8 20C8 18.8954 8.89543 18 10 18Z"
+                />
+                <g opacity=".5">
+                  <path
+                    d="M13.8546 12.75C13.9484 12.5184 14 12.2652 14 12C14 11.7348 13.9484 11.4816 13.8546 11.25L19 11.25C19.4142 11.25 19.75 11.5858 19.75 12C19.75 12.4142 19.4142 12.75 19 12.75L13.8546 12.75Z"
+                  />
+                  <path
+                    d="M10.1454 11.25C10.0516 11.4816 10 11.7348 10 12C10 12.2652 10.0516 12.5184 10.1454 12.75H5C4.58579 12.75 4.25 12.4142 4.25 12C4.25 11.5858 4.58579 11.25 5 11.25H10.1454Z"
+                  />
+                  <path
+                    d="M11.8546 19.25C11.9484 19.4816 12 19.7348 12 20C12 20.2652 11.9484 20.5184 11.8546 20.75H19C19.4142 20.75 19.75 20.4142 19.75 20C19.75 19.5858 19.4142 19.25 19 19.25H11.8546Z"
+                  />
+                  <path
+                    d="M8.14538 19.25H5C4.58579 19.25 4.25 19.5858 4.25 20C4.25 20.4142 4.58579 20.75 5 20.75H8.14538C8.05163 20.5184 8 20.2652 8 20C8 19.7348 8.05163 19.4816 8.14538 19.25Z"
+                  />
+                  <path
+                    d="M15.8546 4.75C15.9484 4.51839 16 4.26523 16 4C16 3.73478 15.9484 3.48161 15.8546 3.25L19 3.25C19.4142 3.25 19.75 3.58579 19.75 4C19.75 4.41421 19.4142 4.75 19 4.75L15.8546 4.75Z"
+                  />
+                  <path
+                    d="M12.1454 4.75C12.0516 4.51839 12 4.26523 12 4C12 3.73478 12.0516 3.48161 12.1454 3.25L5 3.25C4.58579 3.25 4.25 3.58579 4.25 4C4.25 4.41421 4.58579 4.75 5 4.75L12.1454 4.75Z"
+                  />
+                </g>
+              </g>
+            </svg></span
+          >Tools</a
+        >
+        <a class="nav-i" href="#nav"
+          ><span class="ic"
+            ><svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+              <g fill="currentColor">
+                <path
+                  d="M2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12Z"
+                  opacity=".5"
+                />
+                <path
+                  d="M10.5431 7.51724C10.8288 7.2173 10.8172 6.74256 10.5172 6.4569C10.2173 6.17123 9.74256 6.18281 9.4569 6.48276L7.14286 8.9125L6.5431 8.28276C6.25744 7.98281 5.78271 7.97123 5.48276 8.2569C5.18281 8.54256 5.17123 9.01729 5.4569 9.31724L6.59976 10.5172C6.74131 10.6659 6.9376 10.75 7.14286 10.75C7.34812 10.75 7.5444 10.6659 7.68596 10.5172L10.5431 7.51724Z"
+                />
+                <path
+                  d="M13 8.25C12.5858 8.25 12.25 8.58579 12.25 9C12.25 9.41422 12.5858 9.75 13 9.75H18C18.4142 9.75 18.75 9.41422 18.75 9C18.75 8.58579 18.4142 8.25 18 8.25H13Z"
+                />
+                <path
+                  d="M10.5431 14.5172C10.8288 14.2173 10.8172 13.7426 10.5172 13.4569C10.2173 13.1712 9.74256 13.1828 9.4569 13.4828L7.14286 15.9125L6.5431 15.2828C6.25744 14.9828 5.78271 14.9712 5.48276 15.2569C5.18281 15.5426 5.17123 16.0173 5.4569 16.3172L6.59976 17.5172C6.74131 17.6659 6.9376 17.75 7.14286 17.75C7.34812 17.75 7.5444 17.6659 7.68596 17.5172L10.5431 14.5172Z"
+                />
+                <path
+                  d="M13 15.25C12.5858 15.25 12.25 15.5858 12.25 16C12.25 16.4142 12.5858 16.75 13 16.75H18C18.4142 16.75 18.75 16.4142 18.75 16C18.75 15.5858 18.4142 15.25 18 15.25H13Z"
+                />
+              </g>
+            </svg></span
+          >Rules</a
+        >
+        <a class="nav-i" href="#nav"
+          ><span class="ic"
+            ><svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+              <g fill="currentColor">
+                <path
+                  d="M3.29289 9.29289C3 9.58579 3 10.0572 3 11V17C3 17.9428 3 18.4142 3.29289 18.7071C3.58579 19 4.05719 19 5 19C5.94281 19 6.41421 19 6.70711 18.7071C7 18.4142 7 17.9428 7 17V11C7 10.0572 7 9.58579 6.70711 9.29289C6.41421 9 5.94281 9 5 9C4.05719 9 3.58579 9 3.29289 9.29289Z"
+                />
+                <path
+                  d="M17.2929 2.29289C17 2.58579 17 3.05719 17 4V17C17 17.9428 17 18.4142 17.2929 18.7071C17.5858 19 18.0572 19 19 19C19.9428 19 20.4142 19 20.7071 18.7071C21 18.4142 21 17.9428 21 17V4C21 3.05719 21 2.58579 20.7071 2.29289C20.4142 2 19.9428 2 19 2C18.0572 2 17.5858 2 17.2929 2.29289Z"
+                  opacity=".5"
+                />
+                <path
+                  d="M10 7C10 6.05719 10 5.58579 10.2929 5.29289C10.5858 5 11.0572 5 12 5C12.9428 5 13.4142 5 13.7071 5.29289C14 5.58579 14 6.05719 14 7V17C14 17.9428 14 18.4142 13.7071 18.7071C13.4142 19 12.9428 19 12 19C11.0572 19 10.5858 19 10.2929 18.7071C10 18.4142 10 17.9428 10 17V7Z"
+                  opacity=".5"
+                />
+                <path
+                  d="M3 21.25C2.58579 21.25 2.25 21.5858 2.25 22C2.25 22.4142 2.58579 22.75 3 22.75H21C21.4142 22.75 21.75 22.4142 21.75 22C21.75 21.5858 21.4142 21.25 21 21.25H3Z"
+                />
+              </g>
+            </svg></span
+          >Usage</a
+        >
+      </nav>
 
-  <div class="sec">Fleet</div>
-  <nav>
-    <a class="nav-i" href="#nav"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M13 15.4C13 13.3258 13 12.2887 13.659 11.6444C14.318 11 15.3787 11 17.5 11C19.6213 11 20.682 11 21.341 11.6444C22 12.2887 22 13.3258 22 15.4V17.6C22 19.6742 22 20.7113 21.341 21.3556C20.682 22 19.6213 22 17.5 22C15.3787 22 14.318 22 13.659 21.3556C13 20.7113 13 19.6742 13 17.6V15.4Z" opacity=".5"/><path d="M2 8.6C2 10.6742 2 11.7113 2.65901 12.3556C3.31802 13 4.37868 13 6.5 13C8.62132 13 9.68198 13 10.341 12.3556C11 11.7113 11 10.6742 11 8.6V6.4C11 4.32582 11 3.28873 10.341 2.64437C9.68198 2 8.62132 2 6.5 2C4.37868 2 3.31802 2 2.65901 2.64437C2 3.28873 2 4.32582 2 6.4V8.6Z"/><path d="M13 5.5C13 4.4128 13 3.8692 13.1713 3.44041C13.3996 2.86867 13.8376 2.41443 14.389 2.17761C14.8024 2 15.3266 2 16.375 2H18.625C19.6734 2 20.1976 2 20.611 2.17761C21.1624 2.41443 21.6004 2.86867 21.8287 3.44041C22 3.8692 22 4.4128 22 5.5C22 6.5872 22 7.1308 21.8287 7.55959C21.6004 8.13133 21.1624 8.58557 20.611 8.82239C20.1976 9 19.6734 9 18.625 9H16.375C15.3266 9 14.8024 9 14.389 8.82239C13.8376 8.58557 13.3996 8.13133 13.1713 7.55959C13 7.1308 13 6.5872 13 5.5Z"/><path d="M2 18.5C2 19.5872 2 20.1308 2.17127 20.5596C2.39963 21.1313 2.83765 21.5856 3.38896 21.8224C3.80245 22 4.32663 22 5.375 22H7.625C8.67337 22 9.19755 22 9.61104 21.8224C10.1624 21.5856 10.6004 21.1313 10.8287 20.5596C11 20.1308 11 19.5872 11 18.5C11 17.4128 11 16.8692 10.8287 16.4404C10.6004 15.8687 10.1624 15.4144 9.61104 15.1776C9.19755 15 8.67337 15 7.625 15H5.375C4.32663 15 3.80245 15 3.38896 15.1776C2.83765 15.4144 2.39963 15.8687 2.17127 16.4404C2 16.8692 2 17.4128 2 18.5Z" opacity=".5"/></g></svg></span>Fleet<span class="cnt">6</span></a>
-    <a class="nav-i" href="#nav"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M12 4C12 2.89543 12.8954 2 14 2C15.1046 2 16 2.89543 16 4C16 5.10457 15.1046 6 14 6C12.8954 6 12 5.10457 12 4Z"/><path d="M12 10C13.1046 10 14 10.8954 14 12C14 13.1046 13.1046 14 12 14C10.8954 14 10 13.1046 10 12C10 10.8954 10.8954 10 12 10Z"/><path d="M10 18C11.1046 18 12 18.8954 12 20C12 21.1046 11.1046 22 10 22C8.89543 22 8 21.1046 8 20C8 18.8954 8.89543 18 10 18Z"/><g opacity=".5"><path d="M13.8546 12.75C13.9484 12.5184 14 12.2652 14 12C14 11.7348 13.9484 11.4816 13.8546 11.25L19 11.25C19.4142 11.25 19.75 11.5858 19.75 12C19.75 12.4142 19.4142 12.75 19 12.75L13.8546 12.75Z"/><path d="M10.1454 11.25C10.0516 11.4816 10 11.7348 10 12C10 12.2652 10.0516 12.5184 10.1454 12.75H5C4.58579 12.75 4.25 12.4142 4.25 12C4.25 11.5858 4.58579 11.25 5 11.25H10.1454Z"/><path d="M11.8546 19.25C11.9484 19.4816 12 19.7348 12 20C12 20.2652 11.9484 20.5184 11.8546 20.75H19C19.4142 20.75 19.75 20.4142 19.75 20C19.75 19.5858 19.4142 19.25 19 19.25H11.8546Z"/><path d="M8.14538 19.25H5C4.58579 19.25 4.25 19.5858 4.25 20C4.25 20.4142 4.58579 20.75 5 20.75H8.14538C8.05163 20.5184 8 20.2652 8 20C8 19.7348 8.05163 19.4816 8.14538 19.25Z"/><path d="M15.8546 4.75C15.9484 4.51839 16 4.26523 16 4C16 3.73478 15.9484 3.48161 15.8546 3.25L19 3.25C19.4142 3.25 19.75 3.58579 19.75 4C19.75 4.41421 19.4142 4.75 19 4.75L15.8546 4.75Z"/><path d="M12.1454 4.75C12.0516 4.51839 12 4.26523 12 4C12 3.73478 12.0516 3.48161 12.1454 3.25L5 3.25C4.58579 3.25 4.25 3.58579 4.25 4C4.25 4.41421 4.58579 4.75 5 4.75L12.1454 4.75Z"/></g></g></svg></span>Tools</a>
-    <a class="nav-i" href="#nav"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12Z" opacity=".5"/><path d="M10.5431 7.51724C10.8288 7.2173 10.8172 6.74256 10.5172 6.4569C10.2173 6.17123 9.74256 6.18281 9.4569 6.48276L7.14286 8.9125L6.5431 8.28276C6.25744 7.98281 5.78271 7.97123 5.48276 8.2569C5.18281 8.54256 5.17123 9.01729 5.4569 9.31724L6.59976 10.5172C6.74131 10.6659 6.9376 10.75 7.14286 10.75C7.34812 10.75 7.5444 10.6659 7.68596 10.5172L10.5431 7.51724Z"/><path d="M13 8.25C12.5858 8.25 12.25 8.58579 12.25 9C12.25 9.41422 12.5858 9.75 13 9.75H18C18.4142 9.75 18.75 9.41422 18.75 9C18.75 8.58579 18.4142 8.25 18 8.25H13Z"/><path d="M10.5431 14.5172C10.8288 14.2173 10.8172 13.7426 10.5172 13.4569C10.2173 13.1712 9.74256 13.1828 9.4569 13.4828L7.14286 15.9125L6.5431 15.2828C6.25744 14.9828 5.78271 14.9712 5.48276 15.2569C5.18281 15.5426 5.17123 16.0173 5.4569 16.3172L6.59976 17.5172C6.74131 17.6659 6.9376 17.75 7.14286 17.75C7.34812 17.75 7.5444 17.6659 7.68596 17.5172L10.5431 14.5172Z"/><path d="M13 15.25C12.5858 15.25 12.25 15.5858 12.25 16C12.25 16.4142 12.5858 16.75 13 16.75H18C18.4142 16.75 18.75 16.4142 18.75 16C18.75 15.5858 18.4142 15.25 18 15.25H13Z"/></g></svg></span>Rules</a>
-    <a class="nav-i" href="#nav"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M3.29289 9.29289C3 9.58579 3 10.0572 3 11V17C3 17.9428 3 18.4142 3.29289 18.7071C3.58579 19 4.05719 19 5 19C5.94281 19 6.41421 19 6.70711 18.7071C7 18.4142 7 17.9428 7 17V11C7 10.0572 7 9.58579 6.70711 9.29289C6.41421 9 5.94281 9 5 9C4.05719 9 3.58579 9 3.29289 9.29289Z"/><path d="M17.2929 2.29289C17 2.58579 17 3.05719 17 4V17C17 17.9428 17 18.4142 17.2929 18.7071C17.5858 19 18.0572 19 19 19C19.9428 19 20.4142 19 20.7071 18.7071C21 18.4142 21 17.9428 21 17V4C21 3.05719 21 2.58579 20.7071 2.29289C20.4142 2 19.9428 2 19 2C18.0572 2 17.5858 2 17.2929 2.29289Z" opacity=".5"/><path d="M10 7C10 6.05719 10 5.58579 10.2929 5.29289C10.5858 5 11.0572 5 12 5C12.9428 5 13.4142 5 13.7071 5.29289C14 5.58579 14 6.05719 14 7V17C14 17.9428 14 18.4142 13.7071 18.7071C13.4142 19 12.9428 19 12 19C11.0572 19 10.5858 19 10.2929 18.7071C10 18.4142 10 17.9428 10 17V7Z" opacity=".5"/><path d="M3 21.25C2.58579 21.25 2.25 21.5858 2.25 22C2.25 22.4142 2.58579 22.75 3 22.75H21C21.4142 22.75 21.75 22.4142 21.75 22C21.75 21.5858 21.4142 21.25 21 21.25H3Z"/></g></svg></span>Usage</a>
-  </nav>
-
-  <div class="sec">Running now</div>
-  <div class="runs">
-    <!-- open tabs live in the strip below; these sidebar rows are the SESSIONS
+      <div class="sec">Running now</div>
+      <div class="runs">
+        <!-- open tabs live in the strip below; these sidebar rows are the SESSIONS
          THAT EXIST but are NOT open, to prove the gesture reachable set is the
          open strip, never every session (DW-8.9). -->
-    <a class="run-i" href="#session"><span class="mark" style="background-color:var(--mark-2)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg></span><span class="nm">table system spike</span><span class="st">2</span></a>
-    <a class="run-i" href="#session"><span class="mark" style="background-color:var(--mark-5)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span><span class="nm">flaky ws reconnect</span></a>
-  </div>
+        <a class="run-i" href="#session"
+          ><span class="mark" style="background-color:var(--mark-2)"
+            ><svg
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M9 8l-4 4 4 4M15 8l4 4-4 4" />
+            </svg></span
+          ><span class="nm">table system spike</span
+          ><span class="st">2</span></a
+        >
+        <a class="run-i" href="#session"
+          ><span class="mark" style="background-color:var(--mark-5)"
+            ><svg
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+            </svg></span
+          ><span class="nm">flaky ws reconnect</span></a
+        >
+      </div>
 
-  <div class="quota" style="margin-top:auto;margin:auto 10px 12px;background:var(--surface-field);border:1px solid var(--border-hairline);border-radius:var(--radius-panel);padding:13px">
-    <div class="n" style="font-size:var(--text-md);font-weight:var(--weight-strong);display:flex;align-items:center;gap:6px"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M8.73167 5.77133L5.66953 9.91436C4.3848 11.6526 3.74244 12.5217 4.09639 13.205C4.10225 13.2164 4.10829 13.2276 4.1145 13.2387C4.48945 13.9117 5.59888 13.9117 7.81775 13.9117C9.05079 13.9117 9.6673 13.9117 10.054 14.2754L10.074 14.2946L13.946 9.72466L13.926 9.70541C13.5474 9.33386 13.5474 8.74151 13.5474 7.55682V7.24712C13.5474 3.96249 13.5474 2.32018 12.6241 2.03721C11.7007 1.75425 10.711 3.09327 8.73167 5.77133Z" clip-rule="evenodd"/><path d="M10.4527 16.4432L10.4527 16.7528C10.4527 20.0374 10.4527 21.6798 11.376 21.9627C12.2994 22.2457 13.2891 20.9067 15.2685 18.2286L18.3306 14.0856C19.6154 12.3474 20.2577 11.4783 19.9038 10.7949C19.8979 10.7836 19.8919 10.7724 19.8857 10.7613C19.5107 10.0883 18.4013 10.0883 16.1824 10.0883C14.9494 10.0883 14.3329 10.0883 13.9462 9.72461L10.0742 14.2946C10.4528 14.6661 10.4527 15.2585 10.4527 16.4432Z" opacity=".5"/></g></svg>18.40 / 50.00</div>
-    <div class="s" style="font-size:var(--text-sm);color:var(--ink-muted);margin:2px 0 8px">Spend today across the fleet</div>
-    <button type="button" style="width:100%;height:var(--w-btn-h);border:0;border-radius:var(--radius-control);background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);color:var(--on-brand);font-family:var(--font-body);font-size:var(--text-base);font-weight:var(--weight-strong);cursor:pointer">View usage</button>
-  </div>
-</aside>
+      <div
+        class="quota"
+        style="margin-top:auto;margin:auto 10px 12px;background:var(--surface-field);border:1px solid var(--border-hairline);border-radius:var(--radius-panel);padding:13px"
+      >
+        <div
+          class="n"
+          style="font-size:var(--text-md);font-weight:var(--weight-strong);display:flex;align-items:center;gap:6px"
+        >
+          <svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+            <g fill="currentColor">
+              <path
+                clip-rule="evenodd"
+                d="M8.73167 5.77133L5.66953 9.91436C4.3848 11.6526 3.74244 12.5217 4.09639 13.205C4.10225 13.2164 4.10829 13.2276 4.1145 13.2387C4.48945 13.9117 5.59888 13.9117 7.81775 13.9117C9.05079 13.9117 9.6673 13.9117 10.054 14.2754L10.074 14.2946L13.946 9.72466L13.926 9.70541C13.5474 9.33386 13.5474 8.74151 13.5474 7.55682V7.24712C13.5474 3.96249 13.5474 2.32018 12.6241 2.03721C11.7007 1.75425 10.711 3.09327 8.73167 5.77133Z"
+                fill-rule="evenodd"
+              />
+              <path
+                d="M10.4527 16.4432L10.4527 16.7528C10.4527 20.0374 10.4527 21.6798 11.376 21.9627C12.2994 22.2457 13.2891 20.9067 15.2685 18.2286L18.3306 14.0856C19.6154 12.3474 20.2577 11.4783 19.9038 10.7949C19.8979 10.7836 19.8919 10.7724 19.8857 10.7613C19.5107 10.0883 18.4013 10.0883 16.1824 10.0883C14.9494 10.0883 14.3329 10.0883 13.9462 9.72461L10.0742 14.2946C10.4528 14.6661 10.4527 15.2585 10.4527 16.4432Z"
+                opacity=".5"
+              />
+            </g>
+          </svg
+          >18.40 / 50.00
+        </div>
+        <div
+          class="s"
+          style="font-size:var(--text-sm);color:var(--ink-muted);margin:2px 0 8px"
+        >
+          Spend today across the fleet
+        </div>
+        <button
+          style="width:100%;height:var(--w-btn-h);border:0;border-radius:var(--radius-control);background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);color:var(--on-brand);font-family:var(--font-body);font-size:var(--text-base);font-weight:var(--weight-strong);cursor:pointer"
+          type="button"
+        >
+          View usage
+        </button>
+      </div>
+    </aside>
 
-<main id="workspace">
-  <header class="shead">
-    <button type="button" class="burger" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22Z" opacity=".5"/><path d="M18.75 8C18.75 8.41421 18.4142 8.75 18 8.75H6C5.58579 8.75 5.25 8.41421 5.25 8C5.25 7.58579 5.58579 7.25 6 7.25H18C18.4142 7.25 18.75 7.58579 18.75 8Z"/><path d="M18.75 12C18.75 12.4142 18.4142 12.75 18 12.75H6C5.58579 12.75 5.25 12.4142 5.25 12C5.25 11.5858 5.58579 11.25 6 11.25H18C18.4142 11.25 18.75 11.5858 18.75 12Z"/><path d="M18.75 16C18.75 16.4142 18.4142 16.75 18 16.75H6C5.58579 16.75 5.25 16.4142 5.25 16C5.25 15.5858 5.58579 15.25 6 15.25H18C18.4142 15.25 18.75 15.5858 18.75 16Z"/></g></svg></button>
-    <button type="button" class="back" aria-label="Home (back to fleet board)" id="ws-home"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M11.5956 8.30273L8.16485 11.6296C7.94505 11.8428 7.94505 12.1573 8.16485 12.3704L14.7953 18.8001C15.2091 19.2013 16 18.9581 16 18.4297V12.7071L11.5956 8.30273Z"/><path d="M15.9999 11.2929L15.9999 5.5703C15.9999 5.04189 15.2089 4.79869 14.7952 5.1999L12.3135 7.60648L15.9999 11.2929Z" opacity=".5"/></g></svg></button>
-    <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span>
-    <h1>wire delegate row outcomes</h1>
-    <span class="path">nixbox : ~/whiffle</span>
-    <span class="pill fs-pill live">
-      <svg class="g-live" viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="6" r="3.1"/></svg>
-      <span class="fs-label">running</span>
-    </span>
-    <div class="meta"><span>Claude Code</span><span><b>3</b> tabs</span><span><b>$4.12</b></span></div>
-  </header>
+    <main id="workspace">
+      <header class="shead">
+        <button aria-label="Open navigation" class="burger" type="button">
+          <svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+            <g fill="currentColor">
+              <path
+                d="M12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22Z"
+                opacity=".5"
+              />
+              <path
+                d="M18.75 8C18.75 8.41421 18.4142 8.75 18 8.75H6C5.58579 8.75 5.25 8.41421 5.25 8C5.25 7.58579 5.58579 7.25 6 7.25H18C18.4142 7.25 18.75 7.58579 18.75 8Z"
+              />
+              <path
+                d="M18.75 12C18.75 12.4142 18.4142 12.75 18 12.75H6C5.58579 12.75 5.25 12.4142 5.25 12C5.25 11.5858 5.58579 11.25 6 11.25H18C18.4142 11.25 18.75 11.5858 18.75 12Z"
+              />
+              <path
+                d="M18.75 16C18.75 16.4142 18.4142 16.75 18 16.75H6C5.58579 16.75 5.25 16.4142 5.25 16C5.25 15.5858 5.58579 15.25 6 15.25H18C18.4142 15.25 18.75 15.5858 18.75 16Z"
+              />
+            </g>
+          </svg>
+        </button>
+        <button
+          aria-label="Home (back to fleet board)"
+          class="back"
+          id="ws-home"
+          type="button"
+        >
+          <svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+            <g fill="currentColor">
+              <path
+                d="M11.5956 8.30273L8.16485 11.6296C7.94505 11.8428 7.94505 12.1573 8.16485 12.3704L14.7953 18.8001C15.2091 19.2013 16 18.9581 16 18.4297V12.7071L11.5956 8.30273Z"
+              />
+              <path
+                d="M15.9999 11.2929L15.9999 5.5703C15.9999 5.04189 15.2089 4.79869 14.7952 5.1999L12.3135 7.60648L15.9999 11.2929Z"
+                opacity=".5"
+              />
+            </g>
+          </svg>
+        </button>
+        <span class="mark"
+          ><svg
+            fill="none"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            viewBox="0 0 24 24"
+          >
+            <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+          </svg></span
+        >
+        <h1>wire delegate row outcomes</h1>
+        <span class="path">nixbox : ~/whiffle</span>
+        <span class="pill fs-pill live">
+          <svg class="g-live" fill="currentColor" viewBox="0 0 12 12">
+            <circle cx="6" cy="6" r="3.1" />
+          </svg>
+          <span class="fs-label">running</span>
+        </span>
+        <div class="meta">
+          <span>Claude Code</span><span><b>3</b> tabs</span
+          ><span><b>$4.12</b></span>
+        </div>
+      </header>
 
-  <!-- ================= TAB STRIP (DW-8.1 / 8.9) ================= -->
-  <!-- data-open-tabs enumerates the OPEN sessions = the gesture reachable set.
+      <!-- ================= TAB STRIP (DW-8.1 / 8.9) ================= -->
+      <!-- data-open-tabs enumerates the OPEN sessions = the gesture reachable set.
        The sidebar "Running now" shows sessions that EXIST but are not open here. -->
-  <div class="tabstrip" role="tablist" aria-label="Open sessions" data-order="default" data-open-tabs="sess-a,sess-b,sess-c,sess-d">
-    <div role="tab" tabindex="0" id="tab-a" class="tab on" aria-selected="true">
-      <span class="grip"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M9.25 14C10.9069 14 12.25 15.3431 12.25 17C12.25 18.6569 10.9069 20 9.25 20C7.59315 20 6.25 18.6569 6.25 17C6.25 15.3431 7.59315 14 9.25 14Z"/><path d="M14.25 4C12.5931 4 11.25 5.34315 11.25 7C11.25 8.65685 12.5931 10 14.25 10C15.9069 10 17.25 8.65685 17.25 7C17.25 5.34315 15.9069 4 14.25 4Z"/><g opacity=".5"><path d="M17.1658 7.7085C17.2208 7.48132 17.25 7.24405 17.25 6.99997C17.25 6.72602 17.2133 6.46064 17.1445 6.2085H21.75C22.1642 6.2085 22.5 6.54428 22.5 6.9585C22.5 7.37271 22.1642 7.7085 21.75 7.7085L17.1658 7.7085Z"/><path d="M11.3555 6.2085C11.2867 6.46064 11.25 6.72602 11.25 6.99997C11.25 7.24405 11.2791 7.48132 11.3342 7.7085L1.75 7.7085C1.33579 7.7085 1 7.37271 1 6.9585C1 6.54428 1.33579 6.2085 1.75 6.2085H11.3555Z"/><path d="M6.35551 16.2085H1.75C1.33579 16.2085 1 16.5443 1 16.9585C1 17.3727 1.33579 17.7085 1.75 17.7085H6.33416C6.27915 17.4813 6.25 17.2441 6.25 17C6.25 16.726 6.28672 16.4606 6.35551 16.2085Z"/><path d="M12.1658 17.7085H21.75C22.1642 17.7085 22.5 17.3727 22.5 16.9585C22.5 16.5443 22.1642 16.2085 21.75 16.2085H12.1445C12.2133 16.4606 12.25 16.726 12.25 17C12.25 17.2441 12.2209 17.4813 12.1658 17.7085Z"/></g></g></svg></span>
-      <span class="tm"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span>
-      <span class="tl">wire delegate row outc…</span>
-      <button type="button" class="tclose" aria-label="Close tab wire delegate row outcomes"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" opacity=".5"/><path d="M8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967L12 10.9393L14.4697 8.46967C14.7626 8.17678 15.2374 8.17678 15.5303 8.46967C15.8232 8.76256 15.8232 9.23744 15.5303 9.53033L13.0607 12L15.5303 14.4697C15.8232 14.7626 15.8232 15.2374 15.5303 15.5303C15.2374 15.8232 14.7626 15.8232 14.4697 15.5303L12 13.0607L9.53033 15.5303C9.23744 15.8232 8.76256 15.8232 8.46967 15.5303C8.17678 15.2374 8.17678 14.7626 8.46967 14.4697L10.9393 12L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967Z"/></g></svg></button>
-    </div>
-    <div role="tab" tabindex="0" id="tab-b" class="tab" aria-selected="false">
-      <span class="grip"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M9.25 14C10.9069 14 12.25 15.3431 12.25 17C12.25 18.6569 10.9069 20 9.25 20C7.59315 20 6.25 18.6569 6.25 17C6.25 15.3431 7.59315 14 9.25 14Z"/><path d="M14.25 4C12.5931 4 11.25 5.34315 11.25 7C11.25 8.65685 12.5931 10 14.25 10C15.9069 10 17.25 8.65685 17.25 7C17.25 5.34315 15.9069 4 14.25 4Z"/><g opacity=".5"><path d="M17.1658 7.7085C17.2208 7.48132 17.25 7.24405 17.25 6.99997C17.25 6.72602 17.2133 6.46064 17.1445 6.2085H21.75C22.1642 6.2085 22.5 6.54428 22.5 6.9585C22.5 7.37271 22.1642 7.7085 21.75 7.7085L17.1658 7.7085Z"/><path d="M11.3555 6.2085C11.2867 6.46064 11.25 6.72602 11.25 6.99997C11.25 7.24405 11.2791 7.48132 11.3342 7.7085L1.75 7.7085C1.33579 7.7085 1 7.37271 1 6.9585C1 6.54428 1.33579 6.2085 1.75 6.2085H11.3555Z"/><path d="M6.35551 16.2085H1.75C1.33579 16.2085 1 16.5443 1 16.9585C1 17.3727 1.33579 17.7085 1.75 17.7085H6.33416C6.27915 17.4813 6.25 17.2441 6.25 17C6.25 16.726 6.28672 16.4606 6.35551 16.2085Z"/><path d="M12.1658 17.7085H21.75C22.1642 17.7085 22.5 17.3727 22.5 16.9585C22.5 16.5443 22.1642 16.2085 21.75 16.2085H12.1445C12.2133 16.4606 12.25 16.726 12.25 17C12.25 17.2441 12.2209 17.4813 12.1658 17.7085Z"/></g></g></svg></span>
-      <span class="tm"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg></span>
-      <span class="tl">landing copy pass</span>
-      <button type="button" class="tclose" aria-label="Close tab landing copy pass"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" opacity=".5"/><path d="M8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967L12 10.9393L14.4697 8.46967C14.7626 8.17678 15.2374 8.17678 15.5303 8.46967C15.8232 8.76256 15.8232 9.23744 15.5303 9.53033L13.0607 12L15.5303 14.4697C15.8232 14.7626 15.8232 15.2374 15.5303 15.5303C15.2374 15.8232 14.7626 15.8232 14.4697 15.5303L12 13.0607L9.53033 15.5303C9.23744 15.8232 8.76256 15.8232 8.46967 15.5303C8.17678 15.2374 8.17678 14.7626 8.46967 14.4697L10.9393 12L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967Z"/></g></svg></button>
-    </div>
-    <div role="tab" tabindex="0" id="tab-c" class="tab" aria-selected="false">
-      <span class="grip"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M9.25 14C10.9069 14 12.25 15.3431 12.25 17C12.25 18.6569 10.9069 20 9.25 20C7.59315 20 6.25 18.6569 6.25 17C6.25 15.3431 7.59315 14 9.25 14Z"/><path d="M14.25 4C12.5931 4 11.25 5.34315 11.25 7C11.25 8.65685 12.5931 10 14.25 10C15.9069 10 17.25 8.65685 17.25 7C17.25 5.34315 15.9069 4 14.25 4Z"/><g opacity=".5"><path d="M17.1658 7.7085C17.2208 7.48132 17.25 7.24405 17.25 6.99997C17.25 6.72602 17.2133 6.46064 17.1445 6.2085H21.75C22.1642 6.2085 22.5 6.54428 22.5 6.9585C22.5 7.37271 22.1642 7.7085 21.75 7.7085L17.1658 7.7085Z"/><path d="M11.3555 6.2085C11.2867 6.46064 11.25 6.72602 11.25 6.99997C11.25 7.24405 11.2791 7.48132 11.3342 7.7085L1.75 7.7085C1.33579 7.7085 1 7.37271 1 6.9585C1 6.54428 1.33579 6.2085 1.75 6.2085H11.3555Z"/><path d="M6.35551 16.2085H1.75C1.33579 16.2085 1 16.5443 1 16.9585C1 17.3727 1.33579 17.7085 1.75 17.7085H6.33416C6.27915 17.4813 6.25 17.2441 6.25 17C6.25 16.726 6.28672 16.4606 6.35551 16.2085Z"/><path d="M12.1658 17.7085H21.75C22.1642 17.7085 22.5 17.3727 22.5 16.9585C22.5 16.5443 22.1642 16.2085 21.75 16.2085H12.1445C12.2133 16.4606 12.25 16.726 12.25 17C12.25 17.2441 12.2209 17.4813 12.1658 17.7085Z"/></g></g></svg></span>
-      <span class="tm"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5h14M9 7.5v9M15 7.5v6.5a2.5 2.5 0 0 0 4 0"/></svg></span>
-      <span class="tl">table system spike</span>
-      <button type="button" class="tclose" aria-label="Close tab table system spike"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" opacity=".5"/><path d="M8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967L12 10.9393L14.4697 8.46967C14.7626 8.17678 15.2374 8.17678 15.5303 8.46967C15.8232 8.76256 15.8232 9.23744 15.5303 9.53033L13.0607 12L15.5303 14.4697C15.8232 14.7626 15.8232 15.2374 15.5303 15.5303C15.2374 15.8232 14.7626 15.8232 14.4697 15.5303L12 13.0607L9.53033 15.5303C9.23744 15.8232 8.76256 15.8232 8.46967 15.5303C8.17678 15.2374 8.17678 14.7626 8.46967 14.4697L10.9393 12L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967Z"/></g></svg></button>
-    </div>
-    <div role="tab" tabindex="0" id="tab-d" class="tab" aria-selected="false">
-      <span class="grip"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M9.25 14C10.9069 14 12.25 15.3431 12.25 17C12.25 18.6569 10.9069 20 9.25 20C7.59315 20 6.25 18.6569 6.25 17C6.25 15.3431 7.59315 14 9.25 14Z"/><path d="M14.25 4C12.5931 4 11.25 5.34315 11.25 7C11.25 8.65685 12.5931 10 14.25 10C15.9069 10 17.25 8.65685 17.25 7C17.25 5.34315 15.9069 4 14.25 4Z"/><g opacity=".5"><path d="M17.1658 7.7085C17.2208 7.48132 17.25 7.24405 17.25 6.99997C17.25 6.72602 17.2133 6.46064 17.1445 6.2085H21.75C22.1642 6.2085 22.5 6.54428 22.5 6.9585C22.5 7.37271 22.1642 7.7085 21.75 7.7085L17.1658 7.7085Z"/><path d="M11.3555 6.2085C11.2867 6.46064 11.25 6.72602 11.25 6.99997C11.25 7.24405 11.2791 7.48132 11.3342 7.7085L1.75 7.7085C1.33579 7.7085 1 7.37271 1 6.9585C1 6.54428 1.33579 6.2085 1.75 6.2085H11.3555Z"/><path d="M6.35551 16.2085H1.75C1.33579 16.2085 1 16.5443 1 16.9585C1 17.3727 1.33579 17.7085 1.75 17.7085H6.33416C6.27915 17.4813 6.25 17.2441 6.25 17C6.25 16.726 6.28672 16.4606 6.35551 16.2085Z"/><path d="M12.1658 17.7085H21.75C22.1642 17.7085 22.5 17.3727 22.5 16.9585C22.5 16.5443 22.1642 16.2085 21.75 16.2085H12.1445C12.2133 16.4606 12.25 16.726 12.25 17C12.25 17.2441 12.2209 17.4813 12.1658 17.7085Z"/></g></g></svg></span>
-      <span class="tm"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span>
-      <span class="tl">flaky ws reconnect</span>
-      <button type="button" class="tclose" aria-label="Close tab flaky ws reconnect"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" opacity=".5"/><path d="M8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967L12 10.9393L14.4697 8.46967C14.7626 8.17678 15.2374 8.17678 15.5303 8.46967C15.8232 8.76256 15.8232 9.23744 15.5303 9.53033L13.0607 12L15.5303 14.4697C15.8232 14.7626 15.8232 15.2374 15.5303 15.5303C15.2374 15.8232 14.7626 15.8232 14.4697 15.5303L12 13.0607L9.53033 15.5303C9.23744 15.8232 8.76256 15.8232 8.46967 15.5303C8.17678 15.2374 8.17678 14.7626 8.46967 14.4697L10.9393 12L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967Z"/></g></svg></button>
-    </div>
-    <!-- DW-8.7: the pager is the NON-GESTURE equivalent of a swipe — explicit
+      <div
+        aria-label="Open sessions"
+        class="tabstrip"
+        data-open-tabs="sess-a,sess-b,sess-c,sess-d"
+        data-order="default"
+        role="tablist"
+      >
+        <div
+          aria-selected="true"
+          class="tab on"
+          id="tab-a"
+          role="tab"
+          tabindex="0"
+        >
+          <span class="grip"
+            ><svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+              <g fill="currentColor">
+                <path
+                  d="M9.25 14C10.9069 14 12.25 15.3431 12.25 17C12.25 18.6569 10.9069 20 9.25 20C7.59315 20 6.25 18.6569 6.25 17C6.25 15.3431 7.59315 14 9.25 14Z"
+                />
+                <path
+                  d="M14.25 4C12.5931 4 11.25 5.34315 11.25 7C11.25 8.65685 12.5931 10 14.25 10C15.9069 10 17.25 8.65685 17.25 7C17.25 5.34315 15.9069 4 14.25 4Z"
+                />
+                <g opacity=".5">
+                  <path
+                    d="M17.1658 7.7085C17.2208 7.48132 17.25 7.24405 17.25 6.99997C17.25 6.72602 17.2133 6.46064 17.1445 6.2085H21.75C22.1642 6.2085 22.5 6.54428 22.5 6.9585C22.5 7.37271 22.1642 7.7085 21.75 7.7085L17.1658 7.7085Z"
+                  />
+                  <path
+                    d="M11.3555 6.2085C11.2867 6.46064 11.25 6.72602 11.25 6.99997C11.25 7.24405 11.2791 7.48132 11.3342 7.7085L1.75 7.7085C1.33579 7.7085 1 7.37271 1 6.9585C1 6.54428 1.33579 6.2085 1.75 6.2085H11.3555Z"
+                  />
+                  <path
+                    d="M6.35551 16.2085H1.75C1.33579 16.2085 1 16.5443 1 16.9585C1 17.3727 1.33579 17.7085 1.75 17.7085H6.33416C6.27915 17.4813 6.25 17.2441 6.25 17C6.25 16.726 6.28672 16.4606 6.35551 16.2085Z"
+                  />
+                  <path
+                    d="M12.1658 17.7085H21.75C22.1642 17.7085 22.5 17.3727 22.5 16.9585C22.5 16.5443 22.1642 16.2085 21.75 16.2085H12.1445C12.2133 16.4606 12.25 16.726 12.25 17C12.25 17.2441 12.2209 17.4813 12.1658 17.7085Z"
+                  />
+                </g>
+              </g>
+            </svg></span
+          >
+          <span class="tm"
+            ><svg
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+            </svg></span
+          >
+          <span class="tl">wire delegate row outc…</span>
+          <button
+            aria-label="Close tab wire delegate row outcomes"
+            class="tclose"
+            type="button"
+          >
+            <svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+              <g fill="currentColor">
+                <path
+                  d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z"
+                  fill-rule="evenodd"
+                  opacity=".5"
+                />
+                <path
+                  d="M8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967L12 10.9393L14.4697 8.46967C14.7626 8.17678 15.2374 8.17678 15.5303 8.46967C15.8232 8.76256 15.8232 9.23744 15.5303 9.53033L13.0607 12L15.5303 14.4697C15.8232 14.7626 15.8232 15.2374 15.5303 15.5303C15.2374 15.8232 14.7626 15.8232 14.4697 15.5303L12 13.0607L9.53033 15.5303C9.23744 15.8232 8.76256 15.8232 8.46967 15.5303C8.17678 15.2374 8.17678 14.7626 8.46967 14.4697L10.9393 12L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967Z"
+                />
+              </g>
+            </svg>
+          </button>
+        </div>
+        <div
+          aria-selected="false"
+          class="tab"
+          id="tab-b"
+          role="tab"
+          tabindex="0"
+        >
+          <span class="grip"
+            ><svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+              <g fill="currentColor">
+                <path
+                  d="M9.25 14C10.9069 14 12.25 15.3431 12.25 17C12.25 18.6569 10.9069 20 9.25 20C7.59315 20 6.25 18.6569 6.25 17C6.25 15.3431 7.59315 14 9.25 14Z"
+                />
+                <path
+                  d="M14.25 4C12.5931 4 11.25 5.34315 11.25 7C11.25 8.65685 12.5931 10 14.25 10C15.9069 10 17.25 8.65685 17.25 7C17.25 5.34315 15.9069 4 14.25 4Z"
+                />
+                <g opacity=".5">
+                  <path
+                    d="M17.1658 7.7085C17.2208 7.48132 17.25 7.24405 17.25 6.99997C17.25 6.72602 17.2133 6.46064 17.1445 6.2085H21.75C22.1642 6.2085 22.5 6.54428 22.5 6.9585C22.5 7.37271 22.1642 7.7085 21.75 7.7085L17.1658 7.7085Z"
+                  />
+                  <path
+                    d="M11.3555 6.2085C11.2867 6.46064 11.25 6.72602 11.25 6.99997C11.25 7.24405 11.2791 7.48132 11.3342 7.7085L1.75 7.7085C1.33579 7.7085 1 7.37271 1 6.9585C1 6.54428 1.33579 6.2085 1.75 6.2085H11.3555Z"
+                  />
+                  <path
+                    d="M6.35551 16.2085H1.75C1.33579 16.2085 1 16.5443 1 16.9585C1 17.3727 1.33579 17.7085 1.75 17.7085H6.33416C6.27915 17.4813 6.25 17.2441 6.25 17C6.25 16.726 6.28672 16.4606 6.35551 16.2085Z"
+                  />
+                  <path
+                    d="M12.1658 17.7085H21.75C22.1642 17.7085 22.5 17.3727 22.5 16.9585C22.5 16.5443 22.1642 16.2085 21.75 16.2085H12.1445C12.2133 16.4606 12.25 16.726 12.25 17C12.25 17.2441 12.2209 17.4813 12.1658 17.7085Z"
+                  />
+                </g>
+              </g>
+            </svg></span
+          >
+          <span class="tm"
+            ><svg
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M9 8l-4 4 4 4M15 8l4 4-4 4" />
+            </svg></span
+          >
+          <span class="tl">landing copy pass</span>
+          <button
+            aria-label="Close tab landing copy pass"
+            class="tclose"
+            type="button"
+          >
+            <svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+              <g fill="currentColor">
+                <path
+                  d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z"
+                  fill-rule="evenodd"
+                  opacity=".5"
+                />
+                <path
+                  d="M8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967L12 10.9393L14.4697 8.46967C14.7626 8.17678 15.2374 8.17678 15.5303 8.46967C15.8232 8.76256 15.8232 9.23744 15.5303 9.53033L13.0607 12L15.5303 14.4697C15.8232 14.7626 15.8232 15.2374 15.5303 15.5303C15.2374 15.8232 14.7626 15.8232 14.4697 15.5303L12 13.0607L9.53033 15.5303C9.23744 15.8232 8.76256 15.8232 8.46967 15.5303C8.17678 15.2374 8.17678 14.7626 8.46967 14.4697L10.9393 12L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967Z"
+                />
+              </g>
+            </svg>
+          </button>
+        </div>
+        <div
+          aria-selected="false"
+          class="tab"
+          id="tab-c"
+          role="tab"
+          tabindex="0"
+        >
+          <span class="grip"
+            ><svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+              <g fill="currentColor">
+                <path
+                  d="M9.25 14C10.9069 14 12.25 15.3431 12.25 17C12.25 18.6569 10.9069 20 9.25 20C7.59315 20 6.25 18.6569 6.25 17C6.25 15.3431 7.59315 14 9.25 14Z"
+                />
+                <path
+                  d="M14.25 4C12.5931 4 11.25 5.34315 11.25 7C11.25 8.65685 12.5931 10 14.25 10C15.9069 10 17.25 8.65685 17.25 7C17.25 5.34315 15.9069 4 14.25 4Z"
+                />
+                <g opacity=".5">
+                  <path
+                    d="M17.1658 7.7085C17.2208 7.48132 17.25 7.24405 17.25 6.99997C17.25 6.72602 17.2133 6.46064 17.1445 6.2085H21.75C22.1642 6.2085 22.5 6.54428 22.5 6.9585C22.5 7.37271 22.1642 7.7085 21.75 7.7085L17.1658 7.7085Z"
+                  />
+                  <path
+                    d="M11.3555 6.2085C11.2867 6.46064 11.25 6.72602 11.25 6.99997C11.25 7.24405 11.2791 7.48132 11.3342 7.7085L1.75 7.7085C1.33579 7.7085 1 7.37271 1 6.9585C1 6.54428 1.33579 6.2085 1.75 6.2085H11.3555Z"
+                  />
+                  <path
+                    d="M6.35551 16.2085H1.75C1.33579 16.2085 1 16.5443 1 16.9585C1 17.3727 1.33579 17.7085 1.75 17.7085H6.33416C6.27915 17.4813 6.25 17.2441 6.25 17C6.25 16.726 6.28672 16.4606 6.35551 16.2085Z"
+                  />
+                  <path
+                    d="M12.1658 17.7085H21.75C22.1642 17.7085 22.5 17.3727 22.5 16.9585C22.5 16.5443 22.1642 16.2085 21.75 16.2085H12.1445C12.2133 16.4606 12.25 16.726 12.25 17C12.25 17.2441 12.2209 17.4813 12.1658 17.7085Z"
+                  />
+                </g>
+              </g>
+            </svg></span
+          >
+          <span class="tm"
+            ><svg
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M5 7.5h14M9 7.5v9M15 7.5v6.5a2.5 2.5 0 0 0 4 0" />
+            </svg></span
+          >
+          <span class="tl">table system spike</span>
+          <button
+            aria-label="Close tab table system spike"
+            class="tclose"
+            type="button"
+          >
+            <svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+              <g fill="currentColor">
+                <path
+                  d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z"
+                  fill-rule="evenodd"
+                  opacity=".5"
+                />
+                <path
+                  d="M8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967L12 10.9393L14.4697 8.46967C14.7626 8.17678 15.2374 8.17678 15.5303 8.46967C15.8232 8.76256 15.8232 9.23744 15.5303 9.53033L13.0607 12L15.5303 14.4697C15.8232 14.7626 15.8232 15.2374 15.5303 15.5303C15.2374 15.8232 14.7626 15.8232 14.4697 15.5303L12 13.0607L9.53033 15.5303C9.23744 15.8232 8.76256 15.8232 8.46967 15.5303C8.17678 15.2374 8.17678 14.7626 8.46967 14.4697L10.9393 12L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967Z"
+                />
+              </g>
+            </svg>
+          </button>
+        </div>
+        <div
+          aria-selected="false"
+          class="tab"
+          id="tab-d"
+          role="tab"
+          tabindex="0"
+        >
+          <span class="grip"
+            ><svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+              <g fill="currentColor">
+                <path
+                  d="M9.25 14C10.9069 14 12.25 15.3431 12.25 17C12.25 18.6569 10.9069 20 9.25 20C7.59315 20 6.25 18.6569 6.25 17C6.25 15.3431 7.59315 14 9.25 14Z"
+                />
+                <path
+                  d="M14.25 4C12.5931 4 11.25 5.34315 11.25 7C11.25 8.65685 12.5931 10 14.25 10C15.9069 10 17.25 8.65685 17.25 7C17.25 5.34315 15.9069 4 14.25 4Z"
+                />
+                <g opacity=".5">
+                  <path
+                    d="M17.1658 7.7085C17.2208 7.48132 17.25 7.24405 17.25 6.99997C17.25 6.72602 17.2133 6.46064 17.1445 6.2085H21.75C22.1642 6.2085 22.5 6.54428 22.5 6.9585C22.5 7.37271 22.1642 7.7085 21.75 7.7085L17.1658 7.7085Z"
+                  />
+                  <path
+                    d="M11.3555 6.2085C11.2867 6.46064 11.25 6.72602 11.25 6.99997C11.25 7.24405 11.2791 7.48132 11.3342 7.7085L1.75 7.7085C1.33579 7.7085 1 7.37271 1 6.9585C1 6.54428 1.33579 6.2085 1.75 6.2085H11.3555Z"
+                  />
+                  <path
+                    d="M6.35551 16.2085H1.75C1.33579 16.2085 1 16.5443 1 16.9585C1 17.3727 1.33579 17.7085 1.75 17.7085H6.33416C6.27915 17.4813 6.25 17.2441 6.25 17C6.25 16.726 6.28672 16.4606 6.35551 16.2085Z"
+                  />
+                  <path
+                    d="M12.1658 17.7085H21.75C22.1642 17.7085 22.5 17.3727 22.5 16.9585C22.5 16.5443 22.1642 16.2085 21.75 16.2085H12.1445C12.2133 16.4606 12.25 16.726 12.25 17C12.25 17.2441 12.2209 17.4813 12.1658 17.7085Z"
+                  />
+                </g>
+              </g>
+            </svg></span
+          >
+          <span class="tm"
+            ><svg
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+            </svg></span
+          >
+          <span class="tl">flaky ws reconnect</span>
+          <button
+            aria-label="Close tab flaky ws reconnect"
+            class="tclose"
+            type="button"
+          >
+            <svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+              <g fill="currentColor">
+                <path
+                  d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z"
+                  fill-rule="evenodd"
+                  opacity=".5"
+                />
+                <path
+                  d="M8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967L12 10.9393L14.4697 8.46967C14.7626 8.17678 15.2374 8.17678 15.5303 8.46967C15.8232 8.76256 15.8232 9.23744 15.5303 9.53033L13.0607 12L15.5303 14.4697C15.8232 14.7626 15.8232 15.2374 15.5303 15.5303C15.2374 15.8232 14.7626 15.8232 14.4697 15.5303L12 13.0607L9.53033 15.5303C9.23744 15.8232 8.76256 15.8232 8.46967 15.5303C8.17678 15.2374 8.17678 14.7626 8.46967 14.4697L10.9393 12L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967Z"
+                />
+              </g>
+            </svg>
+          </button>
+        </div>
+        <!-- DW-8.7: the pager is the NON-GESTURE equivalent of a swipe — explicit
          prev/next buttons so tab switching is never gesture-only. -->
-    <div class="pager" aria-label="Switch session with buttons (non-gesture equivalent)">
-      <button type="button" aria-label="Previous open session"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M11.5956 8.30273L8.16485 11.6296C7.94505 11.8428 7.94505 12.1573 8.16485 12.3704L14.7953 18.8001C15.2091 19.2013 16 18.9581 16 18.4297V12.7071L11.5956 8.30273Z"/><path d="M15.9999 11.2929L15.9999 5.5703C15.9999 5.04189 15.2089 4.79869 14.7952 5.1999L12.3135 7.60648L15.9999 11.2929Z" opacity=".5"/></g></svg></button>
-      <button type="button" aria-label="Next open session"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M12.4044 8.30273L15.8351 11.6296C16.0549 11.8428 16.0549 12.1573 15.8351 12.3704L9.20467 18.8001C8.79094 19.2013 8 18.9581 8 18.4297V12.7071L12.4044 8.30273Z"/><path d="M8 11.2929L8 5.5703C8 5.04189 8.79094 4.79869 9.20467 5.1999L11.6864 7.60648L8 11.2929Z" opacity=".5"/></g></svg></button>
-    </div>
-  </div>
+        <div
+          aria-label="Switch session with buttons (non-gesture equivalent)"
+          class="pager"
+        >
+          <button aria-label="Previous open session" type="button">
+            <svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+              <g fill="currentColor">
+                <path
+                  d="M11.5956 8.30273L8.16485 11.6296C7.94505 11.8428 7.94505 12.1573 8.16485 12.3704L14.7953 18.8001C15.2091 19.2013 16 18.9581 16 18.4297V12.7071L11.5956 8.30273Z"
+                />
+                <path
+                  d="M15.9999 11.2929L15.9999 5.5703C15.9999 5.04189 15.2089 4.79869 14.7952 5.1999L12.3135 7.60648L15.9999 11.2929Z"
+                  opacity=".5"
+                />
+              </g>
+            </svg>
+          </button>
+          <button aria-label="Next open session" type="button">
+            <svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+              <g fill="currentColor">
+                <path
+                  d="M12.4044 8.30273L15.8351 11.6296C16.0549 11.8428 16.0549 12.1573 15.8351 12.3704L9.20467 18.8001C8.79094 19.2013 8 18.9581 8 18.4297V12.7071L12.4044 8.30273Z"
+                />
+                <path
+                  d="M8 11.2929L8 5.5703C8 5.04189 8.79094 4.79869 9.20467 5.1999L11.6864 7.60648L8 11.2929Z"
+                  opacity=".5"
+                />
+              </g>
+            </svg>
+          </button>
+        </div>
+      </div>
 
-  <!-- ================= SPLIT VIEW (DW-8.2) =================
+      <!-- ================= SPLIT VIEW (DW-8.2) =================
        One .split region, two panes. Shared chrome (shead, tabstrip, composer) is
        NOT duplicated — it appears once above. Active pane identified without
        colour: graphite left rail + "Active" word + aria-selected + ink weight. -->
-  <div class="split" role="group" aria-label="Session split view">
-    <!-- PANE 1 — the ACTIVE pane -->
-    <section class="ws-pane active" role="tabpanel" id="pane-a" aria-labelledby="tab-a" aria-selected="true">
-      <span class="pane-rail" aria-hidden="true"></span>
-      <header class="pane-head">
-        <span class="tm"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span>
-        <span class="pn">wire delegate row outcomes</span>
-        <span class="pact">Active</span>
-        <span class="ps" aria-label="status: active">28 turns</span>
-      </header>
-      <div class="tr-pane" id="tr-a" role="log" aria-live="polite" aria-relevant="additions text"
-           aria-label="Session transcript — wire delegate row outcomes">
-        <section class="turn">
-          <h2 class="who"><span class="dot u"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M8.25 6.5C8.25 4.42893 9.92893 2.75 12 2.75C14.0711 2.75 15.75 4.42893 15.75 6.5C15.75 8.57107 14.0711 10.25 12 10.25C9.92893 10.25 8.25 8.57107 8.25 6.5ZM12 1.25C9.10051 1.25 6.75 3.60051 6.75 6.5C6.75 9.39949 9.10051 11.75 12 11.75C14.8995 11.75 17.25 9.39949 17.25 6.5C17.25 3.60051 14.8995 1.25 12 1.25ZM3.25 20C3.25 15.9959 6.66084 12.75 12 12.75C17.3392 12.75 20.75 15.9959 20.75 20C20.75 20.4142 20.4142 20.75 20 20.75H4C3.58579 20.75 3.25 20.4142 3.25 20Z" opacity=".5"/></g></svg></span><span class="role">You</span></h2>
-          <div class="msg">The delegate rows and the fleet board disagree on how they order equal-age items. Make them consistent.</div>
-        </section>
-        <section class="turn">
-          <h2 class="who"><span class="dot a"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 12C12.8284 12 13.5 11.3284 13.5 10.5C13.5 9.67157 12.8284 9 12 9C11.1716 9 10.5 9.67157 10.5 10.5C10.5 11.3284 11.1716 12 12 12ZM12 13.5C13.6569 13.5 15 12.1569 15 10.5C15 8.84315 13.6569 7.5 12 7.5C10.3431 7.5 9 8.84315 9 10.5C9 12.1569 10.3431 13.5 12 13.5Z"/><path d="M12 13.75C10.0854 13.75 8.24506 14.7709 6.77027 16.5236C8.19439 18.3582 10.0665 19.5 12 19.5C13.9335 19.5 15.8056 18.3582 17.2297 16.5236C15.7549 14.7709 13.9146 13.75 12 13.75ZM5.71943 15.5466C7.63629 13.2954 9.77287 11.75 12 11.75C14.2271 11.75 16.3637 13.2954 18.2806 15.5466C20.1113 13.2445 21 10.8976 21 10.5C21 7.46243 16.9706 5 12 5C7.02944 5 3 7.46243 3 10.5C3 10.8976 3.88873 13.2445 5.71943 15.5466Z" opacity=".5"/></g></svg></span><span class="role">Claude Code</span></h2>
-          <div class="msg">Three call sites use the age comparator: <code>FleetBoard.svelte</code>, <code>SessionPane.svelte</code>, <code>fleet-memory.ts</code>.</div>
-          <div class="tools">
-            <div class="trow"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill="currentColor" d="M20.313 11.157a9.157 9.157 0 1 1-18.313 0a9.157 9.157 0 0 1 18.313 0" opacity=".5"/><path fill="currentColor" d="m17.1 18.122l3.666 3.666a.723.723 0 0 0 1.023-1.022L18.122 17.1a9 9 0 0 1-1.022 1.022"/></svg></span><span class="tk">Grep</span><span class="arg">outcomeLabel\( — 4 files</span><span class="t">0.4s</span></div>
-            <div class="trow"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M3 10C3 6.22876 3 4.34315 4.17157 3.17157C5.34315 2 7.22876 2 11 2H13C16.7712 2 18.6569 2 19.8284 3.17157C21 4.34315 21 6.22876 21 10V14C21 17.7712 21 19.6569 19.8284 20.8284C18.6569 22 16.7712 22 13 22H11C7.22876 22 5.34315 22 4.17157 20.8284C3 19.6569 3 17.7712 3 14V10Z" opacity=".5"/><path fill-rule="evenodd" d="M7.25 12C7.25 11.5858 7.58579 11.25 8 11.25H16C16.4142 11.25 16.75 11.5858 16.75 12C16.75 12.4142 16.4142 12.75 16 12.75H8C7.58579 12.75 7.25 12.4142 7.25 12Z" clip-rule="evenodd"/><path fill-rule="evenodd" d="M7.25 8C7.25 7.58579 7.58579 7.25 8 7.25H16C16.4142 7.25 16.75 7.58579 16.75 8C16.75 8.41421 16.4142 8.75 16 8.75H8C7.58579 8.75 7.25 8.41421 7.25 8Z" clip-rule="evenodd"/><path fill-rule="evenodd" d="M7.25 16C7.25 15.5858 7.58579 15.25 8 15.25H13C13.4142 15.25 13.75 15.5858 13.75 16C13.75 16.4142 13.4142 16.75 13 16.75H8C7.58579 16.75 7.25 16.4142 7.25 16Z" clip-rule="evenodd"/></g></svg></span><span class="tk">Read</span><span class="arg">lib/state/delegates.svelte.ts</span><span class="t">0.2s</span></div>
-          </div>
-        </section>
-        <!-- DW-8.5 / 8.8: a horizontally-scrolling code block inside the pane.
+      <div aria-label="Session split view" class="split" role="group">
+        <!-- PANE 1 — the ACTIVE pane -->
+        <section
+          aria-labelledby="tab-a"
+          aria-selected="true"
+          class="ws-pane active"
+          id="pane-a"
+          role="tabpanel"
+        >
+          <span aria-hidden="true" class="pane-rail"></span>
+          <header class="pane-head">
+            <span class="tm"
+              ><svg
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                viewBox="0 0 24 24"
+              >
+                <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+              </svg></span
+            >
+            <span class="pn">wire delegate row outcomes</span>
+            <span class="pact">Active</span>
+            <span aria-label="status: active" class="ps">28 turns</span>
+          </header>
+          <div
+            aria-label="Session transcript — wire delegate row outcomes"
+            aria-live="polite"
+            aria-relevant="additions text"
+            class="tr-pane"
+            id="tr-a"
+            role="log"
+          >
+            <section class="turn">
+              <h2 class="who">
+                <span class="dot u"
+                  ><svg
+                    aria-hidden="true"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <g fill="currentColor">
+                      <path
+                        d="M8.25 6.5C8.25 4.42893 9.92893 2.75 12 2.75C14.0711 2.75 15.75 4.42893 15.75 6.5C15.75 8.57107 14.0711 10.25 12 10.25C9.92893 10.25 8.25 8.57107 8.25 6.5ZM12 1.25C9.10051 1.25 6.75 3.60051 6.75 6.5C6.75 9.39949 9.10051 11.75 12 11.75C14.8995 11.75 17.25 9.39949 17.25 6.5C17.25 3.60051 14.8995 1.25 12 1.25ZM3.25 20C3.25 15.9959 6.66084 12.75 12 12.75C17.3392 12.75 20.75 15.9959 20.75 20C20.75 20.4142 20.4142 20.75 20 20.75H4C3.58579 20.75 3.25 20.4142 3.25 20Z"
+                        fill-rule="evenodd"
+                        opacity=".5"
+                      />
+                    </g>
+                  </svg></span
+                ><span class="role">You</span>
+              </h2>
+              <div class="msg">
+                The delegate rows and the fleet board disagree on how they order
+                equal-age items. Make them consistent.
+              </div>
+            </section>
+            <section class="turn">
+              <h2 class="who">
+                <span class="dot a"
+                  ><svg
+                    aria-hidden="true"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <g fill="currentColor">
+                      <path
+                        d="M12 12C12.8284 12 13.5 11.3284 13.5 10.5C13.5 9.67157 12.8284 9 12 9C11.1716 9 10.5 9.67157 10.5 10.5C10.5 11.3284 11.1716 12 12 12ZM12 13.5C13.6569 13.5 15 12.1569 15 10.5C15 8.84315 13.6569 7.5 12 7.5C10.3431 7.5 9 8.84315 9 10.5C9 12.1569 10.3431 13.5 12 13.5Z"
+                        fill-rule="evenodd"
+                      />
+                      <path
+                        d="M12 13.75C10.0854 13.75 8.24506 14.7709 6.77027 16.5236C8.19439 18.3582 10.0665 19.5 12 19.5C13.9335 19.5 15.8056 18.3582 17.2297 16.5236C15.7549 14.7709 13.9146 13.75 12 13.75ZM5.71943 15.5466C7.63629 13.2954 9.77287 11.75 12 11.75C14.2271 11.75 16.3637 13.2954 18.2806 15.5466C20.1113 13.2445 21 10.8976 21 10.5C21 7.46243 16.9706 5 12 5C7.02944 5 3 7.46243 3 10.5C3 10.8976 3.88873 13.2445 5.71943 15.5466Z"
+                        opacity=".5"
+                      />
+                    </g>
+                  </svg></span
+                ><span class="role">Claude Code</span>
+              </h2>
+              <div class="msg">
+                Three call sites use the age comparator:
+                <code>FleetBoard.svelte</code>, <code>SessionPane.svelte</code>,
+                <code>fleet-memory.ts</code>.
+              </div>
+              <div class="tools">
+                <div class="trow">
+                  <span class="ic"
+                    ><svg
+                      aria-hidden="true"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        d="M20.313 11.157a9.157 9.157 0 1 1-18.313 0a9.157 9.157 0 0 1 18.313 0"
+                        fill="currentColor"
+                        opacity=".5"
+                      />
+                      <path
+                        d="m17.1 18.122l3.666 3.666a.723.723 0 0 0 1.023-1.022L18.122 17.1a9 9 0 0 1-1.022 1.022"
+                        fill="currentColor"
+                      />
+                    </svg></span
+                  ><span class="tk">Grep</span
+                  ><span class="arg">outcomeLabel\( — 4 files</span
+                  ><span class="t">0.4s</span>
+                </div>
+                <div class="trow">
+                  <span class="ic"
+                    ><svg
+                      aria-hidden="true"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <g fill="currentColor">
+                        <path
+                          d="M3 10C3 6.22876 3 4.34315 4.17157 3.17157C5.34315 2 7.22876 2 11 2H13C16.7712 2 18.6569 2 19.8284 3.17157C21 4.34315 21 6.22876 21 10V14C21 17.7712 21 19.6569 19.8284 20.8284C18.6569 22 16.7712 22 13 22H11C7.22876 22 5.34315 22 4.17157 20.8284C3 19.6569 3 17.7712 3 14V10Z"
+                          opacity=".5"
+                        />
+                        <path
+                          clip-rule="evenodd"
+                          d="M7.25 12C7.25 11.5858 7.58579 11.25 8 11.25H16C16.4142 11.25 16.75 11.5858 16.75 12C16.75 12.4142 16.4142 12.75 16 12.75H8C7.58579 12.75 7.25 12.4142 7.25 12Z"
+                          fill-rule="evenodd"
+                        />
+                        <path
+                          clip-rule="evenodd"
+                          d="M7.25 8C7.25 7.58579 7.58579 7.25 8 7.25H16C16.4142 7.25 16.75 7.58579 16.75 8C16.75 8.41421 16.4142 8.75 16 8.75H8C7.58579 8.75 7.25 8.41421 7.25 8Z"
+                          fill-rule="evenodd"
+                        />
+                        <path
+                          clip-rule="evenodd"
+                          d="M7.25 16C7.25 15.5858 7.58579 15.25 8 15.25H13C13.4142 15.25 13.75 15.5858 13.75 16C13.75 16.4142 13.4142 16.75 13 16.75H8C7.58579 16.75 7.25 16.4142 7.25 16Z"
+                          fill-rule="evenodd"
+                        />
+                      </g>
+                    </svg></span
+                  ><span class="tk">Read</span
+                  ><span class="arg">lib/state/delegates.svelte.ts</span
+                  ><span class="t">0.2s</span>
+                </div>
+              </div>
+            </section>
+            <!-- DW-8.5 / 8.8: a horizontally-scrolling code block inside the pane.
              A swipe begun here never changes the tab. -->
-        <section class="turn">
-          <h2 class="who"><span class="dot a"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 12C12.8284 12 13.5 11.3284 13.5 10.5C13.5 9.67157 12.8284 9 12 9C11.1716 9 10.5 9.67157 10.5 10.5C10.5 11.3284 11.1716 12 12 12ZM12 13.5C13.6569 13.5 15 12.1569 15 10.5C15 8.84315 13.6569 7.5 12 7.5C10.3431 7.5 9 8.84315 9 10.5C9 12.1569 10.3431 13.5 12 13.5Z"/><path d="M12 13.75C10.0854 13.75 8.24506 14.7709 6.77027 16.5236C8.19439 18.3582 10.0665 19.5 12 19.5C13.9335 19.5 15.8056 18.3582 17.2297 16.5236C15.7549 14.7709 13.9146 13.75 12 13.75ZM5.71943 15.5466C7.63629 13.2954 9.77287 11.75 12 11.75C14.2271 11.75 16.3637 13.2954 18.2806 15.5466C20.1113 13.2445 21 10.8976 21 10.5C21 7.46243 16.9706 5 12 5C7.02944 5 3 7.46243 3 10.5C3 10.8976 3.88873 13.2445 5.71943 15.5466Z" opacity=".5"/></g></svg></span><span class="role">Claude Code</span></h2>
-          <div class="msg">The token rename landed in the same branch, so the build cache holds the old CSS custom properties:</div>
-          <div class="code-scroll" data-sideways="1" aria-label="horizontally scrollable build output">
-<pre>--neutral-12:#2c2e31  --status-attn-bg:color-mix(in oklab,var(--warning-3) 76%,var(--warning-9))  --rail:linear-gradient(...)  [long tool output line that overflows the pane width]</pre>
+            <section class="turn">
+              <h2 class="who">
+                <span class="dot a"
+                  ><svg
+                    aria-hidden="true"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <g fill="currentColor">
+                      <path
+                        d="M12 12C12.8284 12 13.5 11.3284 13.5 10.5C13.5 9.67157 12.8284 9 12 9C11.1716 9 10.5 9.67157 10.5 10.5C10.5 11.3284 11.1716 12 12 12ZM12 13.5C13.6569 13.5 15 12.1569 15 10.5C15 8.84315 13.6569 7.5 12 7.5C10.3431 7.5 9 8.84315 9 10.5C9 12.1569 10.3431 13.5 12 13.5Z"
+                        fill-rule="evenodd"
+                      />
+                      <path
+                        d="M12 13.75C10.0854 13.75 8.24506 14.7709 6.77027 16.5236C8.19439 18.3582 10.0665 19.5 12 19.5C13.9335 19.5 15.8056 18.3582 17.2297 16.5236C15.7549 14.7709 13.9146 13.75 12 13.75ZM5.71943 15.5466C7.63629 13.2954 9.77287 11.75 12 11.75C14.2271 11.75 16.3637 13.2954 18.2806 15.5466C20.1113 13.2445 21 10.8976 21 10.5C21 7.46243 16.9706 5 12 5C7.02944 5 3 7.46243 3 10.5C3 10.8976 3.88873 13.2445 5.71943 15.5466Z"
+                        opacity=".5"
+                      />
+                    </g>
+                  </svg></span
+                ><span class="role">Claude Code</span>
+              </h2>
+              <div class="msg">
+                The token rename landed in the same branch, so the build cache
+                holds the old CSS custom properties:
+              </div>
+              <div
+                aria-label="horizontally scrollable build output"
+                class="code-scroll"
+                data-sideways="1"
+              >
+                <pre
+                >--neutral-12:#2c2e31  --status-attn-bg:color-mix(in oklab,var(--warning-3) 76%,var(--warning-9))  --rail:linear-gradient(...)  [long tool output line that overflows the pane width]</pre>
+              </div>
+            </section>
+            <section aria-labelledby="p1-a" class="hitl">
+              <h2 id="p1-a">
+                <span class="pill attn"
+                  ><svg
+                    aria-hidden="true"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <g fill="currentColor">
+                      <path
+                        d="M12 22C16.7189 22 20.5355 18.1834 20.5355 13.4645C20.5355 8.74553 16.7189 4.92893 12 4.92893C7.28105 4.92893 3.46447 8.74553 3.46447 13.4645C3.46447 18.1834 7.28105 22 12 22Z"
+                        fill-rule="evenodd"
+                        opacity=".5"
+                      />
+                      <path
+                        d="M12 19C11.5858 19 11.25 18.6642 11.25 18.25V8.81066L7.78033 12.2803C7.48744 12.5732 7.01256 12.5732 6.71967 12.2803C6.42678 11.9874 6.42678 11.5126 6.71967 11.2197L11.4697 6.46967C11.7626 6.17678 12.2374 6.17678 12.5303 6.46967L17.2803 11.2197C17.5732 11.5126 17.5732 11.9874 17.2803 12.2803C16.9874 12.5732 16.5126 12.5732 16.2197 12.2803L12.75 8.81066V18.25C12.75 18.6642 12.4142 19 12 19Z"
+                      />
+                    </g>
+                  </svg
+                  >needs you</span
+                >Permission — run a shell command
+              </h2>
+              <p class="lede">
+                This rebuilds the SvelteKit cache so the next build picks up the
+                renamed tokens. The change is reversible; nothing outside
+                <code>apps/dashboard</code> is touched.
+              </p>
+              <div class="cmd">
+                rm -rf apps/dashboard/.svelte-kit<span class="eff"
+                  >Removes a generated build-cache folder inside apps/dashboard
+                  only; recreated by the next build.</span
+                >
+              </div>
+              <dl class="scope">
+                <dt>Machine</dt>
+                <dd>
+                  nixbox <span class="no">— other machines not affected</span>
+                </dd>
+                <dt>Path</dt>
+                <dd class="mono">
+                  /home/bewinxed/whiffle/apps/dashboard/.svelte-kit
+                </dd>
+                <dt>Network</dt>
+                <dd>No network access requested.</dd>
+                <dt>Future</dt>
+                <dd>
+                  Approving covers this one command; it does not widen what the
+                  agent may run later.
+                </dd>
+              </dl>
+              <div class="choice">
+                <button class="grant" type="button">
+                  <svg
+                    aria-hidden="true"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <g fill="currentColor">
+                      <path
+                        d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
+                        fill-rule="evenodd"
+                        opacity=".5"
+                      />
+                      <path
+                        d="M16.25 8.5C16.5607 8.5 16.8536 8.63457 17.0607 8.84164C17.2678 9.04871 17.4023 9.34158 17.4023 9.65231C17.4023 9.96305 17.2678 10.2559 17.0607 10.463L12.0607 15.463C11.8536 15.6701 11.5607 15.8046 11.25 15.8046C10.9393 15.8046 10.6464 15.6701 10.4393 15.463L6.93934 11.963C6.73223 11.7559 6.59766 11.463 6.59766 11.1523C6.59766 10.9666 6.63987 10.7831 6.72091 10.6159C6.80195 10.4486 6.9194 10.3017 7.06439 10.186C7.20938 10.0703 7.37786 9.98886 7.55761 9.9479C7.73735 9.90693 7.92389 9.90755 8.10338 9.94974C8.28287 9.99193 8.45089 10.07449 8.59521 10.19114C8.73953 10.30779 8.85605 10.45551 8.93602 10.62339L11.25 12.9374L15.064 9.12339C15.2711 8.91628 15.564 8.78171 15.8747 8.78171C16.0061 8.78171 16.1346 8.8101 16.2525 8.86265C16.3705 8.9152 16.4748 8.99063 16.5583 9.08328C16.6417 9.17592 16.7023 9.28337 16.7358 9.39936C16.7694 9.51536 16.7751 9.63708 16.7524 9.75531L16.25 8.5Z"
+                        fill-rule="evenodd"
+                      />
+                    </g>
+                  </svg
+                  >Approve
+                </button>
+                <button class="refuse" type="button">
+                  <svg
+                    aria-hidden="true"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <g fill="currentColor">
+                      <path
+                        d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z"
+                        fill-rule="evenodd"
+                        opacity=".5"
+                      />
+                      <path
+                        d="M8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967L12 10.9393L14.4697 8.46967C14.7626 8.17678 15.2374 8.17678 15.5303 8.46967C15.8232 8.76256 15.8232 9.23744 15.5303 9.53033L13.0607 12L15.5303 14.4697C15.8232 14.7626 15.8232 15.2374 15.5303 15.5303C15.2374 15.8232 14.7626 15.8232 14.4697 15.5303L12 13.0607L9.53033 15.5303C9.23744 15.8232 8.76256 15.8232 8.46967 15.5303C8.17678 15.2374 8.17678 14.7626 8.46967 14.4697L10.9393 12L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967Z"
+                      />
+                    </g>
+                  </svg
+                  >Deny
+                </button>
+              </div>
+            </section>
           </div>
         </section>
-        <section class="hitl" aria-labelledby="p1-a">
-          <h2 id="p1-a"><span class="pill attn"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 22C16.7189 22 20.5355 18.1834 20.5355 13.4645C20.5355 8.74553 16.7189 4.92893 12 4.92893C7.28105 4.92893 3.46447 8.74553 3.46447 13.4645C3.46447 18.1834 7.28105 22 12 22Z" opacity=".5"/><path d="M12 19C11.5858 19 11.25 18.6642 11.25 18.25V8.81066L7.78033 12.2803C7.48744 12.5732 7.01256 12.5732 6.71967 12.2803C6.42678 11.9874 6.42678 11.5126 6.71967 11.2197L11.4697 6.46967C11.7626 6.17678 12.2374 6.17678 12.5303 6.46967L17.2803 11.2197C17.5732 11.5126 17.5732 11.9874 17.2803 12.2803C16.9874 12.5732 16.5126 12.5732 16.2197 12.2803L12.75 8.81066V18.25C12.75 18.6642 12.4142 19 12 19Z"/></g></svg>needs you</span>Permission — run a shell command</h2>
-          <p class="lede">This rebuilds the SvelteKit cache so the next build picks up the renamed tokens. The change is reversible; nothing outside <code>apps/dashboard</code> is touched.</p>
-          <div class="cmd">rm -rf apps/dashboard/.svelte-kit<span class="eff">Removes a generated build-cache folder inside apps/dashboard only; recreated by the next build.</span></div>
-          <dl class="scope">
-            <dt>Machine</dt><dd>nixbox <span class="no">— other machines not affected</span></dd>
-            <dt>Path</dt><dd class="mono">/home/bewinxed/whiffle/apps/dashboard/.svelte-kit</dd>
-            <dt>Network</dt><dd>No network access requested.</dd>
-            <dt>Future</dt><dd>Approving covers this one command; it does not widen what the agent may run later.</dd>
-          </dl>
-          <div class="choice">
-            <button type="button" class="grant"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" opacity=".5"/><path fill-rule="evenodd" d="M16.25 8.5C16.5607 8.5 16.8536 8.63457 17.0607 8.84164C17.2678 9.04871 17.4023 9.34158 17.4023 9.65231C17.4023 9.96305 17.2678 10.2559 17.0607 10.463L12.0607 15.463C11.8536 15.6701 11.5607 15.8046 11.25 15.8046C10.9393 15.8046 10.6464 15.6701 10.4393 15.463L6.93934 11.963C6.73223 11.7559 6.59766 11.463 6.59766 11.1523C6.59766 10.9666 6.63987 10.7831 6.72091 10.6159C6.80195 10.4486 6.9194 10.3017 7.06439 10.186C7.20938 10.0703 7.37786 9.98886 7.55761 9.9479C7.73735 9.90693 7.92389 9.90755 8.10338 9.94974C8.28287 9.99193 8.45089 10.07449 8.59521 10.19114C8.73953 10.30779 8.85605 10.45551 8.93602 10.62339L11.25 12.9374L15.064 9.12339C15.2711 8.91628 15.564 8.78171 15.8747 8.78171C16.0061 8.78171 16.1346 8.8101 16.2525 8.86265C16.3705 8.9152 16.4748 8.99063 16.5583 9.08328C16.6417 9.17592 16.7023 9.28337 16.7358 9.39936C16.7694 9.51536 16.7751 9.63708 16.7524 9.75531L16.25 8.5Z"/></g></svg>Approve</button>
-            <button type="button" class="refuse"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" opacity=".5"/><path d="M8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967L12 10.9393L14.4697 8.46967C14.7626 8.17678 15.2374 8.17678 15.5303 8.46967C15.8232 8.76256 15.8232 9.23744 15.5303 9.53033L13.0607 12L15.5303 14.4697C15.8232 14.7626 15.8232 15.2374 15.5303 15.5303C15.2374 15.8232 14.7626 15.8232 14.4697 15.5303L12 13.0607L9.53033 15.5303C9.23744 15.8232 8.76256 15.8232 8.46967 15.5303C8.17678 15.2374 8.17678 14.7626 8.46967 14.4697L10.9393 12L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967Z"/></g></svg>Deny</button>
+
+        <!-- PANE 2 — the BACKGROUND pane (dimmed, not active) -->
+        <section
+          aria-labelledby="tab-b"
+          aria-selected="false"
+          class="ws-pane"
+          id="pane-b"
+          role="tabpanel"
+        >
+          <header class="pane-head">
+            <span class="tm"
+              ><svg
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                viewBox="0 0 24 24"
+              >
+                <path d="M9 8l-4 4 4 4M15 8l4 4-4 4" />
+              </svg></span
+            >
+            <span class="pn">landing copy pass</span>
+            <span aria-label="status: idle" class="ps">14 turns</span>
+          </header>
+          <div
+            aria-label="Session transcript — landing copy pass"
+            aria-live="polite"
+            aria-relevant="additions text"
+            class="tr-pane"
+            id="tr-b"
+            role="log"
+          >
+            <section class="turn">
+              <h2 class="who">
+                <span class="dot u"
+                  ><svg
+                    aria-hidden="true"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <g fill="currentColor">
+                      <path
+                        d="M8.25 6.5C8.25 4.42893 9.92893 2.75 12 2.75C14.0711 2.75 15.75 4.42893 15.75 6.5C15.75 8.57107 14.0711 10.25 12 10.25C9.92893 10.25 8.25 8.57107 8.25 6.5ZM12 1.25C9.10051 1.25 6.75 3.60051 6.75 6.5C6.75 9.39949 9.10051 11.75 12 11.75C14.8995 11.75 17.25 9.39949 17.25 6.5C17.25 3.60051 14.8995 1.25 12 1.25ZM3.25 20C3.25 15.9959 6.66084 12.75 12 12.75C17.3392 12.75 20.75 15.9959 20.75 20C20.75 20.4142 20.4142 20.75 20 20.75H4C3.58579 20.75 3.25 20.4142 3.25 20Z"
+                        fill-rule="evenodd"
+                        opacity=".5"
+                      />
+                    </g>
+                  </svg></span
+                ><span class="role">You</span>
+              </h2>
+              <div class="msg">
+                Tighten the landing hero. It reads like a template sentence.
+              </div>
+            </section>
+            <section class="turn">
+              <h2 class="who">
+                <span class="dot a"
+                  ><svg
+                    aria-hidden="true"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <g fill="currentColor">
+                      <path
+                        d="M12 12C12.8284 12 13.5 11.3284 13.5 10.5C13.5 9.67157 12.8284 9 12 9C11.1716 9 10.5 9.67157 10.5 10.5C10.5 11.3284 11.1716 12 12 12ZM12 13.5C13.6569 13.5 15 12.1569 15 10.5C15 8.84315 13.6569 7.5 12 7.5C10.3431 7.5 9 8.84315 9 10.5C9 12.1569 10.3431 13.5 12 13.5Z"
+                        fill-rule="evenodd"
+                      />
+                      <path
+                        d="M12 13.75C10.0854 13.75 8.24506 14.7709 6.77027 16.5236C8.19439 18.3582 10.0665 19.5 12 19.5C13.9335 19.5 15.8056 18.3582 17.2297 16.5236C15.7549 14.7709 13.9146 13.75 12 13.75ZM5.71943 15.5466C7.63629 13.2954 9.77287 11.75 12 11.75C14.2271 11.75 16.3637 13.2954 18.2806 15.5466C20.1113 13.2445 21 10.8976 21 10.5C21 7.46243 16.9706 5 12 5C7.02944 5 3 7.46243 3 10.5C3 10.8976 3.88873 13.2445 5.71943 15.5466Z"
+                        opacity=".5"
+                      />
+                    </g>
+                  </svg></span
+                ><span class="role">Claude Code</span>
+              </h2>
+              <div class="msg">
+                Two candidates — a concrete outcome line and a held-back claim:
+              </div>
+              <div class="tools">
+                <div class="trow">
+                  <span class="ic"
+                    ><svg
+                      aria-hidden="true"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <g fill="currentColor">
+                        <path
+                          d="M20.8487 8.71306C22.3844 7.17735 22.3844 4.68748 20.8487 3.15178C19.313 1.61607 16.8231 1.61607 15.2874 3.15178L14.4004 4.03882C14.4125 4.0755 14.4251 4.11268 14.4382 4.15035C14.7633 5.0875 15.3768 6.31601 16.5308 7.47002C17.6848 8.62403 18.9133 9.23749 19.8505 9.56262C19.888 9.57563 19.925 9.58817 19.9615 9.60026L20.8487 8.71306Z"
+                          opacity=".5"
+                        />
+                        <path
+                          d="M14.4386 4L14.4004 4.03819C14.4125 4.07487 14.4251 4.11206 14.4382 4.14973C14.7633 5.08687 15.3768 6.31538 16.5308 7.4694C17.6848 8.62341 18.9133 9.23686 19.8505 9.56199C19.8876 9.57489 19.9243 9.58733 19.9606 9.59933L11.4001 18.1598C10.823 18.7369 10.5343 19.0255 10.2162 19.2737C9.84082 19.5665 9.43469 19.8175 9.00498 20.0223C8.6407 20.1959 8.25351 20.3249 7.47918 20.583L3.39584 21.9442C3.01478 22.0712 2.59466 21.972 2.31063 21.688C2.0266 21.4039 1.92743 20.9838 2.05445 20.6028L3.41556 16.5194C3.67368 15.7451 3.80273 15.3579 3.97634 14.9936C4.18114 14.5639 4.43213 14.1578 4.7249 13.7824C4.97307 13.4643 5.26165 13.1757 5.83874 12.5986L14.4386 4Z"
+                        />
+                      </g>
+                    </svg></span
+                  ><span class="tk">Edit</span
+                  ><span class="arg">routes/+page.svelte</span
+                  ><span class="d">+12 −7</span>
+                </div>
+              </div>
+            </section>
           </div>
         </section>
       </div>
-    </section>
 
-    <!-- PANE 2 — the BACKGROUND pane (dimmed, not active) -->
-    <section class="ws-pane" role="tabpanel" id="pane-b" aria-labelledby="tab-b" aria-selected="false">
-      <header class="pane-head">
-        <span class="tm"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg></span>
-        <span class="pn">landing copy pass</span>
-        <span class="ps" aria-label="status: idle">14 turns</span>
-      </header>
-      <div class="tr-pane" id="tr-b" role="log" aria-live="polite" aria-relevant="additions text"
-           aria-label="Session transcript — landing copy pass">
-        <section class="turn">
-          <h2 class="who"><span class="dot u"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M8.25 6.5C8.25 4.42893 9.92893 2.75 12 2.75C14.0711 2.75 15.75 4.42893 15.75 6.5C15.75 8.57107 14.0711 10.25 12 10.25C9.92893 10.25 8.25 8.57107 8.25 6.5ZM12 1.25C9.10051 1.25 6.75 3.60051 6.75 6.5C6.75 9.39949 9.10051 11.75 12 11.75C14.8995 11.75 17.25 9.39949 17.25 6.5C17.25 3.60051 14.8995 1.25 12 1.25ZM3.25 20C3.25 15.9959 6.66084 12.75 12 12.75C17.3392 12.75 20.75 15.9959 20.75 20C20.75 20.4142 20.4142 20.75 20 20.75H4C3.58579 20.75 3.25 20.4142 3.25 20Z" opacity=".5"/></g></svg></span><span class="role">You</span></h2>
-          <div class="msg">Tighten the landing hero. It reads like a template sentence.</div>
-        </section>
-        <section class="turn">
-          <h2 class="who"><span class="dot a"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 12C12.8284 12 13.5 11.3284 13.5 10.5C13.5 9.67157 12.8284 9 12 9C11.1716 9 10.5 9.67157 10.5 10.5C10.5 11.3284 11.1716 12 12 12ZM12 13.5C13.6569 13.5 15 12.1569 15 10.5C15 8.84315 13.6569 7.5 12 7.5C10.3431 7.5 9 8.84315 9 10.5C9 12.1569 10.3431 13.5 12 13.5Z"/><path d="M12 13.75C10.0854 13.75 8.24506 14.7709 6.77027 16.5236C8.19439 18.3582 10.0665 19.5 12 19.5C13.9335 19.5 15.8056 18.3582 17.2297 16.5236C15.7549 14.7709 13.9146 13.75 12 13.75ZM5.71943 15.5466C7.63629 13.2954 9.77287 11.75 12 11.75C14.2271 11.75 16.3637 13.2954 18.2806 15.5466C20.1113 13.2445 21 10.8976 21 10.5C21 7.46243 16.9706 5 12 5C7.02944 5 3 7.46243 3 10.5C3 10.8976 3.88873 13.2445 5.71943 15.5466Z" opacity=".5"/></g></svg></span><span class="role">Claude Code</span></h2>
-          <div class="msg">Two candidates — a concrete outcome line and a held-back claim:</div>
-          <div class="tools">
-            <div class="trow"><span class="ic"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M20.8487 8.71306C22.3844 7.17735 22.3844 4.68748 20.8487 3.15178C19.313 1.61607 16.8231 1.61607 15.2874 3.15178L14.4004 4.03882C14.4125 4.0755 14.4251 4.11268 14.4382 4.15035C14.7633 5.0875 15.3768 6.31601 16.5308 7.47002C17.6848 8.62403 18.9133 9.23749 19.8505 9.56262C19.888 9.57563 19.925 9.58817 19.9615 9.60026L20.8487 8.71306Z" opacity=".5"/><path d="M14.4386 4L14.4004 4.03819C14.4125 4.07487 14.4251 4.11206 14.4382 4.14973C14.7633 5.08687 15.3768 6.31538 16.5308 7.4694C17.6848 8.62341 18.9133 9.23686 19.8505 9.56199C19.8876 9.57489 19.9243 9.58733 19.9606 9.59933L11.4001 18.1598C10.823 18.7369 10.5343 19.0255 10.2162 19.2737C9.84082 19.5665 9.43469 19.8175 9.00498 20.0223C8.6407 20.1959 8.25351 20.3249 7.47918 20.583L3.39584 21.9442C3.01478 22.0712 2.59466 21.972 2.31063 21.688C2.0266 21.4039 1.92743 20.9838 2.05445 20.6028L3.41556 16.5194C3.67368 15.7451 3.80273 15.3579 3.97634 14.9936C4.18114 14.5639 4.43213 14.1578 4.7249 13.7824C4.97307 13.4643 5.26165 13.1757 5.83874 12.5986L14.4386 4Z"/></g></svg></span><span class="tk">Edit</span><span class="arg">routes/+page.svelte</span><span class="d">+12 −7</span></div>
+      <!-- single-pane tabbed view (used by the tabbed / reordered ws states) -->
+      <div class="ws-tabbed">
+        <section
+          aria-labelledby="tab-a"
+          aria-selected="true"
+          class="ws-pane active"
+          id="pane-a-lone"
+          role="tabpanel"
+        >
+          <span aria-hidden="true" class="pane-rail"></span>
+          <header class="pane-head">
+            <span class="tm"
+              ><svg
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                viewBox="0 0 24 24"
+              >
+                <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+              </svg></span
+            >
+            <span class="pn">wire delegate row outcomes</span>
+            <span class="pact">Active</span>
+            <span aria-label="status: active" class="ps">28 turns</span>
+          </header>
+          <div
+            aria-label="Session transcript — wire delegate row outcomes (single pane)"
+            aria-live="polite"
+            aria-relevant="additions text"
+            class="tr-pane"
+            role="log"
+          >
+            <section class="turn">
+              <h2 class="who">
+                <span class="dot u"
+                  ><svg
+                    aria-hidden="true"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <g fill="currentColor">
+                      <path
+                        d="M8.25 6.5C8.25 4.42893 9.92893 2.75 12 2.75C14.0711 2.75 15.75 4.42893 15.75 6.5C15.75 8.57107 14.0711 10.25 12 10.25C9.92893 10.25 8.25 8.57107 8.25 6.5ZM12 1.25C9.10051 1.25 6.75 3.60051 6.75 6.5C6.75 9.39949 9.10051 11.75 12 11.75C14.8995 11.75 17.25 9.39949 17.25 6.5C17.25 3.60051 14.8995 1.25 12 1.25ZM3.25 20C3.25 15.9959 6.66084 12.75 12 12.75C17.3392 12.75 20.75 15.9959 20.75 20C20.75 20.4142 20.4142 20.75 20 20.75H4C3.58579 20.75 3.25 20.4142 3.25 20Z"
+                        fill-rule="evenodd"
+                        opacity=".5"
+                      />
+                    </g>
+                  </svg></span
+                ><span class="role">You</span>
+              </h2>
+              <div class="msg">
+                The delegate rows and the fleet board disagree on how they order
+                equal-age items. Make them consistent.
+              </div>
+            </section>
+            <section class="turn">
+              <h2 class="who">
+                <span class="dot a"
+                  ><svg
+                    aria-hidden="true"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <g fill="currentColor">
+                      <path
+                        d="M12 12C12.8284 12 13.5 11.3284 13.5 10.5C13.5 9.67157 12.8284 9 12 9C11.1716 9 10.5 9.67157 10.5 10.5C10.5 11.3284 11.1716 12 12 12ZM12 13.5C13.6569 13.5 15 12.1569 15 10.5C15 8.84315 13.6569 7.5 12 7.5C10.3431 7.5 9 8.84315 9 10.5C9 12.1569 10.3431 13.5 12 13.5Z"
+                        fill-rule="evenodd"
+                      />
+                      <path
+                        d="M12 13.75C10.0854 13.75 8.24506 14.7709 6.77027 16.5236C8.19439 18.3582 10.0665 19.5 12 19.5C13.9335 19.5 15.8056 18.3582 17.2297 16.5236C15.7549 14.7709 13.9146 13.75 12 13.75ZM5.71943 15.5466C7.63629 13.2954 9.77287 11.75 12 11.75C14.2271 11.75 16.3637 13.2954 18.2806 15.5466C20.1113 13.2445 21 10.8976 21 10.5C21 7.46243 16.9706 5 12 5C7.02944 5 3 7.46243 3 10.5C3 10.8976 3.88873 13.2445 5.71943 15.5466Z"
+                        opacity=".5"
+                      />
+                    </g>
+                  </svg></span
+                ><span class="role">Claude Code</span>
+              </h2>
+              <div class="msg">
+                Three call sites use the age comparator. A fourth hit is a test
+                fixture asserting the old shape deliberately.
+              </div>
+            </section>
           </div>
         </section>
       </div>
-    </section>
-  </div>
 
-  <!-- single-pane tabbed view (used by the tabbed / reordered ws states) -->
-  <div class="ws-tabbed">
-    <section class="ws-pane active" role="tabpanel" id="pane-a-lone" aria-labelledby="tab-a" aria-selected="true">
-      <span class="pane-rail" aria-hidden="true"></span>
-      <header class="pane-head">
-        <span class="tm"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span>
-        <span class="pn">wire delegate row outcomes</span>
-        <span class="pact">Active</span>
-        <span class="ps" aria-label="status: active">28 turns</span>
-      </header>
-      <div class="tr-pane" role="log" aria-live="polite" aria-relevant="additions text"
-           aria-label="Session transcript — wire delegate row outcomes (single pane)">
-        <section class="turn">
-          <h2 class="who"><span class="dot u"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M8.25 6.5C8.25 4.42893 9.92893 2.75 12 2.75C14.0711 2.75 15.75 4.42893 15.75 6.5C15.75 8.57107 14.0711 10.25 12 10.25C9.92893 10.25 8.25 8.57107 8.25 6.5ZM12 1.25C9.10051 1.25 6.75 3.60051 6.75 6.5C6.75 9.39949 9.10051 11.75 12 11.75C14.8995 11.75 17.25 9.39949 17.25 6.5C17.25 3.60051 14.8995 1.25 12 1.25ZM3.25 20C3.25 15.9959 6.66084 12.75 12 12.75C17.3392 12.75 20.75 15.9959 20.75 20C20.75 20.4142 20.4142 20.75 20 20.75H4C3.58579 20.75 3.25 20.4142 3.25 20Z" opacity=".5"/></g></svg></span><span class="role">You</span></h2>
-          <div class="msg">The delegate rows and the fleet board disagree on how they order equal-age items. Make them consistent.</div>
-        </section>
-        <section class="turn">
-          <h2 class="who"><span class="dot a"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path fill-rule="evenodd" d="M12 12C12.8284 12 13.5 11.3284 13.5 10.5C13.5 9.67157 12.8284 9 12 9C11.1716 9 10.5 9.67157 10.5 10.5C10.5 11.3284 11.1716 12 12 12ZM12 13.5C13.6569 13.5 15 12.1569 15 10.5C15 8.84315 13.6569 7.5 12 7.5C10.3431 7.5 9 8.84315 9 10.5C9 12.1569 10.3431 13.5 12 13.5Z"/><path d="M12 13.75C10.0854 13.75 8.24506 14.7709 6.77027 16.5236C8.19439 18.3582 10.0665 19.5 12 19.5C13.9335 19.5 15.8056 18.3582 17.2297 16.5236C15.7549 14.7709 13.9146 13.75 12 13.75ZM5.71943 15.5466C7.63629 13.2954 9.77287 11.75 12 11.75C14.2271 11.75 16.3637 13.2954 18.2806 15.5466C20.1113 13.2445 21 10.8976 21 10.5C21 7.46243 16.9706 5 12 5C7.02944 5 3 7.46243 3 10.5C3 10.8976 3.88873 13.2445 5.71943 15.5466Z" opacity=".5"/></g></svg></span><span class="role">Claude Code</span></h2>
-          <div class="msg">Three call sites use the age comparator. A fourth hit is a test fixture asserting the old shape deliberately.</div>
-        </section>
+      <div class="fade"></div>
+      <div class="composer" id="comp">
+        <form
+          aria-label="Message the agent"
+          class="cin"
+          onsubmit="return false"
+        >
+          <textarea
+            aria-label="Message the agent"
+            id="ws-input"
+            placeholder="Message the agent…"
+          ></textarea>
+          <div class="aff-row">
+            <div class="inner">
+              <span>/ commands</span><span>@ mention</span
+              ><span>＋ attach</span>
+              <span class="hint">Enter sends · Shift+Enter for a new line</span>
+            </div>
+          </div>
+          <button
+            aria-label="Stop the agent"
+            class="stop"
+            id="ws-stop"
+            type="button"
+          >
+            <svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+              <g fill="currentColor">
+                <path
+                  d="M2 6C2 4.11438 2 3.17157 2.58579 2.58579C3.17157 2 4.11438 2 6 2C7.88562 2 8.82843 2 9.41421 2.58579C10 3.17157 10 4.11438 10 6V18C10 19.8856 10 20.8284 9.41421 21.4142C8.82843 22 7.88562 22 6 22C4.11438 22 3.17157 22 2.58579 21.4142C2 20.8284 2 19.8856 2 18V6Z"
+                />
+                <path
+                  d="M14 6C14 4.11438 14 3.17157 14.5858 2.58579C15.1716 2 16.1144 2 18 2C19.8856 2 20.8284 2 21.4142 2.58579C22 3.17157 22 4.11438 22 6V18C22 19.8856 22 20.8284 21.4142 21.4142C20.8284 22 19.8856 22 18 22C16.1144 22 15.1716 22 14.5858 21.4142C14 20.8284 14 19.8856 14 18V6Z"
+                  opacity=".5"
+                />
+              </g>
+            </svg>
+          </button>
+        </form>
       </div>
-    </section>
-  </div>
+    </main>
 
-  <div class="fade"></div>
-  <div class="composer" id="comp">
-    <form class="cin" onsubmit="return false" aria-label="Message the agent">
-      <textarea placeholder="Message the agent…" aria-label="Message the agent" id="ws-input"></textarea>
-      <div class="aff-row"><div class="inner">
-        <span>/ commands</span><span>@ mention</span><span>＋ attach</span>
-        <span class="hint">Enter sends · Shift+Enter for a new line</span>
-      </div></div>
-      <button class="stop" type="button" aria-label="Stop the agent" id="ws-stop"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><g fill="currentColor"><path d="M2 6C2 4.11438 2 3.17157 2.58579 2.58579C3.17157 2 4.11438 2 6 2C7.88562 2 8.82843 2 9.41421 2.58579C10 3.17157 10 4.11438 10 6V18C10 19.8856 10 20.8284 9.41421 21.4142C8.82843 22 7.88562 22 6 22C4.11438 22 3.17157 22 2.58579 21.4142C2 20.8284 2 19.8856 2 18V6Z"/><path d="M14 6C14 4.11438 14 3.17157 14.5858 2.58579C15.1716 2 16.1144 2 18 2C19.8856 2 20.8284 2 21.4142 2.58579C22 3.17157 22 4.11438 22 6V18C22 19.8856 22 20.8284 21.4142 21.4142C20.8284 22 19.8856 22 18 22C16.1144 22 15.1716 22 14.5858 21.4142C14 20.8284 14 19.8856 14 18V6Z" opacity=".5"/></g></svg></button>
-    </form>
-  </div>
-</main>
-
-<!-- ws state switcher: split / tabbed / reordered (gate + screenshot affordance) -->
-<div class="wsbar" role="toolbar" aria-label="Workspace state">
-  <button type="button" data-ws-btn="split" class="on">split</button>
-  <button type="button" data-ws-btn="tabbed">tabbed</button>
-  <button type="button" data-ws-btn="reordered">reordered</button>
-</div>
-<script>
-/* ws-state switcher (screenshot / gate affordance; not the product). Only the
+    <!-- ws state switcher: split / tabbed / reordered (gate + screenshot affordance) -->
+    <div aria-label="Workspace state" class="wsbar" role="toolbar">
+      <button class="on" data-ws-btn="split" type="button">split</button>
+      <button data-ws-btn="tabbed" type="button">tabbed</button>
+      <button data-ws-btn="reordered" type="button">reordered</button>
+    </div>
+    <script>
+      "use strict";
+      /* ws-state switcher (screenshot / gate affordance; not the product). Only the
    transcript panes and the tab strip's active highlight change. The fixed
    anchors — Home, composer input, Stop — live in chrome that does not move
    between these states (DW-8.3). */
-(function () {
-  var bar = document.querySelector('.wsbar');
-  if (!bar) return;
-  bar.addEventListener('click', function (e) {
-    var b = e.target.closest('button[data-ws-btn]');
-    if (!b) return;
-    var ws = b.getAttribute('data-ws-btn');
-    document.body.setAttribute('data-ws', ws);
-    Array.prototype.forEach.call(bar.querySelectorAll('button'), function (x) {
-      x.classList.toggle('on', x === b);
-    });
-    if (ws === 'reordered') {
-      document.querySelector('.tabstrip').setAttribute('data-order', 'reordered');
-    } else {
-      document.querySelector('.tabstrip').setAttribute('data-order', 'default');
-    }
-  });
-})();
-</script>
-</body></html>
+      (() => {
+        var bar = document.querySelector(".wsbar");
+        if (!bar) {
+          return;
+        }
+        bar.addEventListener("click", (e) => {
+          var b = e.target.closest("button[data-ws-btn]");
+          if (!b) {
+            return;
+          }
+          var ws = b.getAttribute("data-ws-btn");
+          document.body.setAttribute("data-ws", ws);
+          Array.prototype.forEach.call(bar.querySelectorAll("button"), (x) => {
+            x.classList.toggle("on", x === b);
+          });
+          if (ws === "reordered") {
+            document
+              .querySelector(".tabstrip")
+              .setAttribute("data-order", "reordered");
+          } else {
+            document
+              .querySelector(".tabstrip")
+              .setAttribute("data-order", "default");
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

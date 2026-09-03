@@ -8,61 +8,69 @@
    * card renders is fetched, and nothing it renders resolves anything: the
    * adopt/overwrite affordance for a failed sync stays a click on `/tools`.
    */
-  import type { BuildInfo } from '@whiffle/core';
-  import { IconCheck, IconWarningTriangle } from '$lib/icons';
-  import { Badge } from '$lib/components/ui/badge';
-  import * as Tooltip from '$lib/components/ui/tooltip';
-  import { MACHINE_UNREACHABLE_HINT } from './activity';
+  import type { BuildInfo } from "@whiffle/core";
+  import { Badge } from "$lib/components/ui/badge";
+  import * as Tooltip from "$lib/components/ui/tooltip";
+  import { IconCheck, IconWarningTriangle } from "$lib/icons";
+  import { formatDistanceToNow } from "$lib/utils/time";
+  import { MACHINE_UNREACHABLE_HINT } from "./activity";
+  import type { Machine } from "./client.svelte";
   import {
     buildConvergence,
+    type DeployKind,
     deployInfoOf,
     fleetSyncAgeMs,
     isDeployDiverged,
-    type DeployKind,
-  } from './convergence';
-  import { CAUSE, machineFaults } from './fleet-faults';
-  import { formatDistanceToNow } from '$lib/utils/time';
-  import type { Machine } from './client.svelte';
-  import { machineLabel } from './machine';
-  import OsMark from './OsMark.svelte';
+  } from "./convergence";
+  import { CAUSE, machineFaults } from "./fleet-faults";
+  import { machineLabel } from "./machine";
+  import OsMark from "./OsMark.svelte";
 
-  let { machine, hubBuild }: { machine: Machine; hubBuild: BuildInfo | undefined } = $props();
+  let {
+    machine,
+    hubBuild,
+  }: { machine: Machine; hubBuild: BuildInfo | undefined } = $props();
 
-  const online = $derived(machine.status === 'online');
+  const online = $derived(machine.status === "online");
   const build = $derived(buildConvergence(machine.build, hubBuild));
   const failures = $derived(machineFaults(machine.machineId, machine.fleet));
   const syncAge = $derived(fleetSyncAgeMs(machine.fleet));
   // Structural read (convergence.ts's own doc): `deploy` does not exist on
   // AgentRow yet, so this is `undefined` on every board today and lights up
   // the moment whichever leaf wires C1's DeployWatcher onto the hub frame.
-  const deploy = $derived(deployInfoOf((machine as unknown as { deploy?: unknown }).deploy));
+  const deploy = $derived(
+    deployInfoOf((machine as unknown as { deploy?: unknown }).deploy)
+  );
   const diverged = $derived(isDeployDiverged(deploy));
 
   const DEPLOY_LABEL: Record<DeployKind, string> = {
-    unmarked: '',
-    current: '',
-    behind: 'Update pending',
-    ahead: 'Local commits on deploy clone',
-    unreachable: 'Deploy check failed',
-    diverged: 'Diverged — refusing to deploy',
+    unmarked: "",
+    current: "",
+    behind: "Update pending",
+    ahead: "Local commits on deploy clone",
+    unreachable: "Deploy check failed",
+    diverged: "Diverged — refusing to deploy",
   };
 
   // Same recipe as Sidebar.svelte's pillClass (A5): a tint carries a fact this
   // reader has, an outline carries the admission that it only has an absence.
   const pillBase =
-    'inline-flex h-[var(--c-pill-h)] items-center rounded-[var(--radius-pill)] gap-1 px-2.5 text-micro font-medium leading-none no-underline';
+    "inline-flex h-[var(--c-pill-h)] items-center rounded-[var(--radius-pill)] gap-1 px-2.5 text-micro font-medium leading-none no-underline";
   const outlinePill = `${pillBase} border border-[var(--border)] bg-transparent text-[var(--ink-muted)]`;
   const warnPill = `${pillBase} border-transparent bg-[var(--warning-3)] text-[var(--warning-11)]`;
   const failPill = `${pillBase} border-transparent bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]`;
 
-  const commitOf = (info: BuildInfo | undefined) => info?.commit ?? '?';
+  const commitOf = (info: BuildInfo | undefined) => info?.commit ?? "?";
 </script>
 
 <li class="row" role="listitem">
   <span class="who">
-    <OsMark os={machine.os} class="size-4 shrink-0" />
+    <OsMark class="size-4 shrink-0" os={machine.os} />
     <span class="nm">{machineLabel(machine.hostname)}</span>
-    <span class="dot {online ? 'up' : ''}" title={online ? 'Online' : 'Offline'}></span>
+    <span
+      class="dot {online ? 'up' : ''}"
+      title={online ? 'Online' : 'Offline'}
+    ></span>
   </span>
 
   <span class="badges">
@@ -110,7 +118,8 @@
           {/snippet}
         </Tooltip.Trigger>
         <Tooltip.Content>
-          {commitOf(machine.build)} on this machine, hub is on {commitOf(hubBuild)}.
+          {commitOf(machine.build)}
+          on this machine, hub is on {commitOf(hubBuild)}.
         </Tooltip.Content>
       </Tooltip.Root>
     {:else}
@@ -141,7 +150,7 @@
             <!-- Lands on the "Needs attention" panel, not on the panel that
                  lists the row: what the reader needs first is what broke and
                  why, and that is where both live. -->
-            <a {...props} href="/tools#fleet-trouble" class={warnPill}>
+            <a {...props} class={warnPill} href="/tools#fleet-trouble">
               <IconWarningTriangle class="size-3" />
               Fleet sync failed{failures.length > 1 ? ` (${failures.length})` : ''}
             </a>
@@ -155,7 +164,9 @@
             <span>{CAUSE[first.cause].title}.</span>
             {#if syncAge !== undefined}
               <span class="text-micro opacity-80">
-                Last synced {formatDistanceToNow(new Date(Date.now() - syncAge))} — resolve on Tools.
+                Last synced
+                {formatDistanceToNow(new Date(Date.now() - syncAge))} — resolve
+                on Tools.
               </span>
             {/if}
           </div>

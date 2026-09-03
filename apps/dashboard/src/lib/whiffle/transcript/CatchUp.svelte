@@ -8,7 +8,7 @@
    */
 </script>
 
-<div class="catchup" role="status" aria-busy="true">
+<div aria-busy="true" class="catchup" role="status">
   <span class="spoken">Catching up…</span>
   <div class="who"><span class="mark"></span><span class="name"></span></div>
   <div class="ln"></div>
@@ -66,7 +66,7 @@
   /* The one thing that moves: the skeleton's band, crossing on --breath,
      transform only, linear so it reads as something arriving. */
   .catchup::after {
-    content: '';
+    content: "";
     position: absolute;
     inset: 0;
     pointer-events: none;

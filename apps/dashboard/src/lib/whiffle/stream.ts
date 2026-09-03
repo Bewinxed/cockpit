@@ -23,7 +23,7 @@
  * - A command is a transaction with a stage the UI can read, and stages only
  *   ever move forward.
  */
-import { STREAM_V1 } from '@whiffle/core';
+
 import type {
   CommandAck,
   CommandEnvelope,
@@ -33,7 +33,8 @@ import type {
   StreamClientMessage,
   StreamDelta,
   StreamReset,
-} from '@whiffle/core';
+} from "@whiffle/core";
+import { STREAM_V1 } from "@whiffle/core";
 
 /** How long a submitted command may go unacknowledged before it is called off. */
 export const COMMAND_ACK_TIMEOUT_MS = 15_000;
@@ -56,22 +57,18 @@ export interface SessionCursor {
   /** The highest seq applied. Meaningless until {@link seen}. */
   lastSeq: number;
   /**
-   * Whether any event has been applied. Before the first one the client has no
-   * origin, so it adopts whatever seq the hub sends first rather than reading
-   * `lastSeq = 0` as a hole back to the beginning of the session.
-   */
-  seen: boolean;
-  /** A `stream.subscribe` for this session has gone out on the current socket. */
-  subscribed: boolean;
-  /**
    * The `afterSeq` of the resume that is out, or null when none is. One resume
    * per gap: a burst of fifty out-of-order deltas is one hole, not fifty.
    */
   resyncAfter: number | null;
   /** Consecutive resumes that failed to heal the gap — see {@link MAX_RESYNC_ATTEMPTS}. */
   resyncFailures: number;
-  /** A protocol violation has been reported for this session; don't repeat it. */
-  warned: boolean;
+  /**
+   * Whether any event has been applied. Before the first one the client has no
+   * origin, so it adopts whatever seq the hub sends first rather than reading
+   * `lastSeq = 0` as a hole back to the beginning of the session.
+   */
+  seen: boolean;
   /**
    * The frame kinds this session has actually received over the stream.
    *
@@ -89,9 +86,13 @@ export interface SessionCursor {
    * against a hub that sends both copies; the alternative's cost is silence.
    */
   streamed: Set<string>;
+  /** A `stream.subscribe` for this session has gone out on the current socket. */
+  subscribed: boolean;
+  /** A protocol violation has been reported for this session; don't repeat it. */
+  warned: boolean;
 }
 
-export type CommandStage = 'submitted' | 'accepted' | 'applied' | 'failed';
+export type CommandStage = "submitted" | "accepted" | "applied" | "failed";
 
 /**
  * The stage at which the PROTOCOL has said its last word about a command —
@@ -110,21 +111,23 @@ export type CommandStage = 'submitted' | 'accepted' | 'applied' | 'failed';
  * every place that has to ask "is this one finished?". One field, decided
  * once, read by the sweep, the disconnect and the effects hook alike.
  */
-export type SettleStage = 'accepted' | 'applied';
+export type SettleStage = "accepted" | "applied";
 
 /** One operator action, from the click to the hub's last word on it. */
 export interface CommandRecord {
-  commandId: string;
-  sessionId: string;
-  kind: CommandKind;
-  stage: CommandStage;
   /** When it was submitted. */
   at: number;
   /** When the stage last moved — what pruning and "how long has this been out" read. */
   changedAt: number;
+  commandId: string;
+  /** The stream-dialect local half still owed an outcome; see {@link StreamEffects}. */
+  effects?: StreamEffects;
+  kind: CommandKind;
   reason?: string;
+  sessionId: string;
   /** Copied from the submission: the stage this kind is finished at. See {@link SettleStage}. */
   settlesAt: SettleStage;
+  stage: CommandStage;
   /**
    * Set only when this tab KNOWS the envelope never left it — a refused or
    * throwing dispatch, or a failure before the wire was reached at all.
@@ -138,16 +141,14 @@ export interface CommandRecord {
    * guess read off the reason string.
    */
   undelivered?: boolean;
-  /** The stream-dialect local half still owed an outcome; see {@link StreamEffects}. */
-  effects?: StreamEffects;
 }
 
 /** Everything the stream half of the store keeps. Plain data, so a runes module can `$state` it. */
 export interface StreamState {
   /** The hub has advertised {@link STREAM_V1} on this connection. */
   capable: boolean;
-  cursors: Record<string, SessionCursor>;
   commands: Record<string, CommandRecord>;
+  cursors: Record<string, SessionCursor>;
   /**
    * The handle of the ONE armed ack timer, or null when nothing is waiting.
    *
@@ -167,12 +168,7 @@ export interface StreamHost {
    * frame. The stream orders; it does not reshape.
    */
   applyFrame(sessionId: string, frame: unknown): void;
-  /** Re-read this session's transcript through the path that already exists. */
-  rereadHistory(sessionId: string): void;
-  /** Put a client message on the dashboard socket; false when it is not open. */
-  sendToHub(message: StreamClientMessage): boolean;
-  now(): number;
-  warn(message: string, detail?: unknown): void;
+  clearTimer?: (handle: number) => void;
   /**
    * Called once, the moment any command record settles at `failed`, whatever
    * killed it — a refusing ack, a dispatch that could not leave the tab, the
@@ -190,6 +186,11 @@ export interface StreamHost {
    * which need announcing — this file only guarantees the call.
    */
   noteFailure?: (record: CommandRecord) => void;
+  now(): number;
+  /** Re-read this session's transcript through the path that already exists. */
+  rereadHistory(sessionId: string): void;
+  /** Put a client message on the dashboard socket; false when it is not open. */
+  sendToHub(message: StreamClientMessage): boolean;
   /**
    * Run `run` after `delayMs` and hand back a handle {@link clearTimer} can
    * cancel — `setTimeout`, in the one place this file is allowed to know that.
@@ -203,7 +204,7 @@ export interface StreamHost {
    * unset to drive the clock by hand; the client passes one.
    */
   setTimer?: (delayMs: number, run: () => void) => number;
-  clearTimer?: (handle: number) => void;
+  warn(message: string, detail?: unknown): void;
 }
 
 export function createStreamState(): StreamState {
@@ -245,9 +246,16 @@ function cursorFor(state: StreamState, sessionId: string): SessionCursor {
  * were already open — capability can arrive long after frames have been
  * flowing down the legacy path, and the switch has to be clean either way.
  */
-export function noteCapabilities(state: StreamState, message: unknown): boolean {
-  if (state.capable) return false;
-  if (!carriesStreamV1(message)) return false;
+export function noteCapabilities(
+  state: StreamState,
+  message: unknown
+): boolean {
+  if (state.capable) {
+    return false;
+  }
+  if (!carriesStreamV1(message)) {
+    return false;
+  }
   state.capable = true;
   return true;
 }
@@ -261,10 +269,19 @@ export function noteCapabilities(state: StreamState, message: unknown): boolean 
  * real hub (defect E-1, caught by the stream e2e suite).
  */
 function carriesStreamV1(message: unknown): boolean {
-  if (typeof message !== 'object' || message === null) return false;
-  const { capabilities, payload } = message as { capabilities?: unknown; payload?: unknown };
-  if (Array.isArray(capabilities) && capabilities.includes(STREAM_V1)) return true;
-  if (typeof payload !== 'object' || payload === null) return false;
+  if (typeof message !== "object" || message === null) {
+    return false;
+  }
+  const { capabilities, payload } = message as {
+    capabilities?: unknown;
+    payload?: unknown;
+  };
+  if (Array.isArray(capabilities) && capabilities.includes(STREAM_V1)) {
+    return true;
+  }
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
   const nested = (payload as { capabilities?: unknown }).capabilities;
   return Array.isArray(nested) && nested.includes(STREAM_V1);
 }
@@ -274,8 +291,14 @@ function carriesStreamV1(message: unknown): boolean {
  * session — i.e. whether the legacy copy of it is now a duplicate. See
  * {@link SessionCursor.streamed} for why this is learnt rather than assumed.
  */
-export function streamCarries(state: StreamState, sessionId: string, kind: string): boolean {
-  if (!state.capable) return false;
+export function streamCarries(
+  state: StreamState,
+  sessionId: string,
+  kind: string
+): boolean {
+  if (!state.capable) {
+    return false;
+  }
   const cursor = state.cursors[sessionId];
   return !!cursor && cursor.subscribed && cursor.streamed.has(kind);
 }
@@ -303,24 +326,35 @@ export function streamCarries(state: StreamState, sessionId: string, kind: strin
  * refusal, and a refusal is a stage, so it is converted here rather than
  * anywhere it might be forgotten.
  */
-function dispatch(host: StreamHost, message: StreamClientMessage): string | null {
+function dispatch(
+  host: StreamHost,
+  message: StreamClientMessage
+): string | null {
   try {
-    if (host.sendToHub(message)) return null;
-    return 'Not connected to the hub. Check that it is running, then try again.';
+    if (host.sendToHub(message)) {
+      return null;
+    }
+    return "Not connected to the hub. Check that it is running, then try again.";
   } catch (error) {
     return messageOf(error);
   }
 }
 
-export function subscribeSession(state: StreamState, host: StreamHost, sessionId: string): void {
+export function subscribeSession(
+  state: StreamState,
+  host: StreamHost,
+  sessionId: string
+): void {
   const cursor = cursorFor(state, sessionId);
   const afterSeq = cursor.seen ? cursor.lastSeq : undefined;
   const refusal = dispatch(host, {
-    type: 'stream.subscribe',
+    type: "stream.subscribe",
     sessionId,
     ...(afterSeq === undefined ? {} : { afterSeq }),
   });
-  if (refusal !== null) return;
+  if (refusal !== null) {
+    return;
+  }
   cursor.subscribed = true;
   // A resume IS an outstanding resync: a delta that lands ahead of the replay
   // must not send a second one for the same hole.
@@ -340,14 +374,20 @@ export function syncStreamSubscriptions(
   host: StreamHost,
   sessionIds: string[]
 ): void {
-  if (!state.capable) return;
+  if (!state.capable) {
+    return;
+  }
   const wanted = new Set(sessionIds);
   for (const sessionId of Object.keys(state.cursors)) {
-    if (!wanted.has(sessionId)) delete state.cursors[sessionId];
+    if (!wanted.has(sessionId)) {
+      delete state.cursors[sessionId];
+    }
   }
   for (const sessionId of wanted) {
     const cursor = state.cursors[sessionId];
-    if (cursor?.subscribed) continue;
+    if (cursor?.subscribed) {
+      continue;
+    }
     subscribeSession(state, host, sessionId);
   }
 }
@@ -365,7 +405,11 @@ export function syncStreamSubscriptions(
  * carries the same warning: without it these failures are recorded but not
  * announced.
  */
-export function noteDisconnect(state: StreamState, now: number, host?: StreamHost): void {
+export function noteDisconnect(
+  state: StreamState,
+  now: number,
+  host?: StreamHost
+): void {
   state.capable = false;
   for (const cursor of Object.values(state.cursors)) {
     cursor.subscribed = false;
@@ -377,21 +421,25 @@ export function noteDisconnect(state: StreamState, now: number, host?: StreamHos
   for (const record of Object.values(state.commands)) {
     // Record-aware: a send already `accepted` was handed over before the socket
     // died and is not the connection's to take back.
-    if (isSettled(record)) continue;
+    if (isSettled(record)) {
+      continue;
+    }
     // Through advanceStage, not a raw write: a dying socket is a settling like
     // any other, and an optimistic value whose command it took down must roll
     // back here exactly as it would on a refusal.
     advanceStage(
       record,
-      'failed',
+      "failed",
       now,
-      'The connection to the hub dropped before that finished.',
+      "The connection to the hub dropped before that finished.",
       host
     );
   }
   // Nothing is outstanding any more, so nothing should be waited for. Without
   // this the timer would survive the socket that gave it a reason to exist.
-  if (host) armCommandSweep(state, host);
+  if (host) {
+    armCommandSweep(state, host);
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -399,10 +447,10 @@ export function noteDisconnect(state: StreamState, now: number, host?: StreamHos
  * ------------------------------------------------------------------ */
 
 const STREAM_MESSAGE_TYPES = new Set([
-  'stream.event',
-  'stream.backlog',
-  'stream.reset',
-  'command.ack',
+  "stream.event",
+  "stream.backlog",
+  "stream.reset",
+  "command.ack",
 ]);
 
 /**
@@ -418,22 +466,26 @@ export function handleStreamMessage(
   host: StreamHost,
   message: unknown
 ): boolean {
-  if (typeof message !== 'object' || message === null) return false;
+  if (typeof message !== "object" || message === null) {
+    return false;
+  }
   const type = (message as { type?: unknown }).type;
-  if (typeof type !== 'string' || !STREAM_MESSAGE_TYPES.has(type)) return false;
+  if (typeof type !== "string" || !STREAM_MESSAGE_TYPES.has(type)) {
+    return false;
+  }
   state.capable = true;
 
   switch (type) {
-    case 'stream.event':
+    case "stream.event":
       applyDelta(state, host, message as StreamDelta);
       return true;
-    case 'stream.backlog':
+    case "stream.backlog":
       applyBacklog(state, host, message as StreamBacklog);
       return true;
-    case 'stream.reset':
+    case "stream.reset":
       applyReset(state, host, message as StreamReset);
       return true;
-    case 'command.ack':
+    case "command.ack":
       noteCommandAck(state, message as CommandAck, host.now(), host);
       return true;
     default:
@@ -442,46 +494,67 @@ export function handleStreamMessage(
 }
 
 /** What a delta did, for tests and for anyone reading a trace. */
-export type DeltaOutcome = 'applied' | 'duplicate' | 'gap' | 'malformed';
+export type DeltaOutcome = "applied" | "duplicate" | "gap" | "malformed";
 
-function applyDelta(state: StreamState, host: StreamHost, message: StreamDelta): DeltaOutcome {
+function applyDelta(
+  state: StreamState,
+  host: StreamHost,
+  message: StreamDelta
+): DeltaOutcome {
   const event = message.event;
-  if (!event || typeof event.seq !== 'number' || typeof event.sessionId !== 'string') {
-    host.warn('stream: a delta arrived without a sequenced event', message);
-    return 'malformed';
+  if (
+    !event ||
+    typeof event.seq !== "number" ||
+    typeof event.sessionId !== "string"
+  ) {
+    host.warn("stream: a delta arrived without a sequenced event", message);
+    return "malformed";
   }
   const cursor = cursorFor(state, event.sessionId);
 
   // No origin yet: the hub's first word IS the origin. Reading `lastSeq = 0` as
   // a hole here would make every late join demand a replay of a whole session.
-  if (!cursor.seen) cursor.lastSeq = event.seq - 1;
+  if (!cursor.seen) {
+    cursor.lastSeq = event.seq - 1;
+  }
 
-  if (event.seq <= cursor.lastSeq) return 'duplicate';
+  if (event.seq <= cursor.lastSeq) {
+    return "duplicate";
+  }
 
   if (event.seq > cursor.lastSeq + 1) {
     // A hole. Nothing is applied and NOTHING IS BUFFERED: the replay the resume
     // asks for carries these events again, and a buffer here would be a second,
     // slower copy of the hub's ring with its own bugs.
     requestResync(host, event.sessionId, cursor);
-    return 'gap';
+    return "gap";
   }
 
   applyEvent(host, cursor, event);
-  return 'applied';
+  return "applied";
 }
 
-function applyEvent(host: StreamHost, cursor: SessionCursor, event: SessionStreamEvent): void {
+function applyEvent(
+  host: StreamHost,
+  cursor: SessionCursor,
+  event: SessionStreamEvent
+): void {
   const frame = event.frame;
-  if (typeof frame === 'object' && frame !== null) {
+  if (typeof frame === "object" && frame !== null) {
     const kind = (frame as { kind?: unknown }).kind;
-    if (typeof kind === 'string') cursor.streamed.add(kind);
+    if (typeof kind === "string") {
+      cursor.streamed.add(kind);
+    }
     host.applyFrame(event.sessionId, frame);
   } else if (!cursor.warned) {
     // A sequenced event the hub could not fill. The cursor still advances: this
     // seq happened, and refusing to move past it would turn one empty event
     // into a permanent hole and an endless resume.
     cursor.warned = true;
-    host.warn(`stream: an event arrived with no frame for ${event.sessionId}`, event.seq);
+    host.warn(
+      `stream: an event arrived with no frame for ${event.sessionId}`,
+      event.seq
+    );
   }
   cursor.lastSeq = event.seq;
   cursor.seen = true;
@@ -491,21 +564,33 @@ function applyEvent(host: StreamHost, cursor: SessionCursor, event: SessionStrea
 }
 
 /** Asks for the replay, once per hole. */
-function requestResync(host: StreamHost, sessionId: string, cursor: SessionCursor): void {
-  if (cursor.resyncAfter === cursor.lastSeq) return;
+function requestResync(
+  host: StreamHost,
+  sessionId: string,
+  cursor: SessionCursor
+): void {
+  if (cursor.resyncAfter === cursor.lastSeq) {
+    return;
+  }
   const refusal = dispatch(host, {
-    type: 'stream.subscribe',
+    type: "stream.subscribe",
     sessionId,
     afterSeq: cursor.lastSeq,
   });
   // A resume that never left cannot be waited for: leaving `resyncAfter` unset
   // means the next delta through the hole tries again.
-  if (refusal !== null) return;
+  if (refusal !== null) {
+    return;
+  }
   cursor.subscribed = true;
   cursor.resyncAfter = cursor.lastSeq;
 }
 
-function applyBacklog(state: StreamState, host: StreamHost, message: StreamBacklog): void {
+function applyBacklog(
+  state: StreamState,
+  host: StreamHost,
+  message: StreamBacklog
+): void {
   const sessionId = message.sessionId;
   const events = Array.isArray(message.events) ? message.events : [];
   const cursor = cursorFor(state, sessionId);
@@ -518,13 +603,17 @@ function applyBacklog(state: StreamState, host: StreamHost, message: StreamBackl
     return;
   }
 
-  if (!cursor.seen) cursor.lastSeq = events[0].seq - 1;
+  if (!cursor.seen) {
+    cursor.lastSeq = events[0].seq - 1;
+  }
 
   let broken = false;
   for (const event of events) {
     // A backlog re-sent after a retried resume repeats what is already applied.
     // Dropping by seq is what makes that harmless rather than a doubled turn.
-    if (event.seq <= cursor.lastSeq) continue;
+    if (event.seq <= cursor.lastSeq) {
+      continue;
+    }
     if (event.seq !== cursor.lastSeq + 1) {
       broken = true;
       break;
@@ -575,7 +664,11 @@ function applyBacklog(state: StreamState, host: StreamHost, message: StreamBackl
  * while it is reading and replays them behind the transcript, deduplicated by
  * uuid — the same discipline every other late join uses.
  */
-function applyReset(state: StreamState, host: StreamHost, message: StreamReset): void {
+function applyReset(
+  state: StreamState,
+  host: StreamHost,
+  message: StreamReset
+): void {
   const cursor = cursorFor(state, message.sessionId);
   cursor.lastSeq = message.nextSeq - 1;
   cursor.seen = true;
@@ -601,14 +694,14 @@ function applyReset(state: StreamState, host: StreamHost, message: StreamReset):
  * record knows where its own finish line is; ask it.
  */
 const isSettled = (record: CommandRecord): boolean =>
-  record.stage === 'failed' ||
-  record.stage === 'applied' ||
-  (record.stage === 'accepted' && record.settlesAt === 'accepted');
+  record.stage === "failed" ||
+  record.stage === "applied" ||
+  (record.stage === "accepted" && record.settlesAt === "accepted");
 
 /** Which stage may follow which. Terminal is terminal: a late ack cannot undo it. */
 const NEXT_STAGES: Record<CommandStage, Set<CommandStage>> = {
-  submitted: new Set<CommandStage>(['accepted', 'applied', 'failed']),
-  accepted: new Set<CommandStage>(['applied', 'failed']),
+  submitted: new Set<CommandStage>(["accepted", "applied", "failed"]),
+  accepted: new Set<CommandStage>(["applied", "failed"]),
   applied: new Set<CommandStage>(),
   failed: new Set<CommandStage>(),
 };
@@ -625,10 +718,14 @@ function advanceStage(
   reason?: string,
   host?: StreamHost
 ): boolean {
-  if (!NEXT_STAGES[record.stage].has(stage)) return false;
+  if (!NEXT_STAGES[record.stage].has(stage)) {
+    return false;
+  }
   record.stage = stage;
   record.changedAt = now;
-  if (reason !== undefined) record.reason = reason;
+  if (reason !== undefined) {
+    record.reason = reason;
+  }
   // Stream-dialect records carry the LOCAL half of their operation (see
   // {@link CommandSubmission.streamEffects}); settling is when its outcome
   // hooks run — including a timeout-swept failure, which must roll back an
@@ -643,11 +740,13 @@ function advanceStage(
   if (record.effects && isSettled(record)) {
     const settled = record.effects.settled;
     record.effects = undefined;
-    settled?.(stage as SettleStage | 'failed', record.reason);
+    settled?.(stage as SettleStage | "failed", record.reason);
   }
   // Fired after the stage is written so the reporter reads a settled record,
   // and only on the transition, so a record failed once is announced once.
-  if (stage === 'failed') host?.noteFailure?.(record);
+  if (stage === "failed") {
+    host?.noteFailure?.(record);
+  }
   return true;
 }
 
@@ -664,8 +763,6 @@ function advanceStage(
  * whole original function and already owns its own bookkeeping.
  */
 export interface StreamEffects {
-  /** Runs once, when the envelope is dispatched (before any ack). */
-  submitted?: () => void;
   /**
    * Runs once, when the record settles — ack, refusal, or timeout sweep.
    *
@@ -673,23 +770,14 @@ export interface StreamEffects {
    * (see {@link SettleStage}); hooks that roll an optimistic value back test
    * for `'failed'` and are unaffected by that widening.
    */
-  settled?: (stage: SettleStage | 'failed', reason?: string) => void;
+  settled?: (stage: SettleStage | "failed", reason?: string) => void;
+  /** Runs once, when the envelope is dispatched (before any ack). */
+  submitted?: () => void;
 }
 
 export interface CommandSubmission {
   commandId: string;
-  sessionId: string;
-  machineId: string;
   kind: CommandKind;
-  /**
-   * Where this kind's protocol stops talking: `'accepted'` for `send`,
-   * `'applied'` for the control kinds. Required, and deliberately so — a new
-   * command kind cannot be added without answering "what is its last word?",
-   * which is the question that, unanswered, retro-fails a delivered message.
-   */
-  settlesAt: SettleStage;
-  /** Exactly the payload the corresponding relay op takes today. */
-  payload: unknown;
   /**
    * What to do instead when the hub does not speak the protocol: today's call,
    * unchanged. Its own promise semantics are the stages — a synchronous return
@@ -697,6 +785,17 @@ export interface CommandSubmission {
    * daemon answered), a throw or rejection is `failed`.
    */
   legacy: () => void | Promise<unknown>;
+  machineId: string;
+  /** Exactly the payload the corresponding relay op takes today. */
+  payload: unknown;
+  sessionId: string;
+  /**
+   * Where this kind's protocol stops talking: `'accepted'` for `send`,
+   * `'applied'` for the control kinds. Required, and deliberately so — a new
+   * command kind cannot be added without answering "what is its last word?",
+   * which is the question that, unanswered, retro-fails a delivered message.
+   */
+  settlesAt: SettleStage;
   /** The command's local half, applied on the STREAM branch only. */
   streamEffects?: StreamEffects;
 }
@@ -719,7 +818,7 @@ export function submitCommand(
 
   if (state.capable) {
     const envelope: CommandEnvelope = {
-      type: 'command',
+      type: "command",
       commandId,
       sessionId,
       machineId,
@@ -741,7 +840,7 @@ export function submitCommand(
       // than inferring from the wording of a reason: it is what lets a retry
       // be offered as plainly safe instead of as a possible duplicate.
       record.undelivered = true;
-      advanceStage(record, 'failed', now, refusal, host);
+      advanceStage(record, "failed", now, refusal, host);
     }
     sweepCommands(state, now, host);
     return commandId;
@@ -751,8 +850,9 @@ export function submitCommand(
     const result = submission.legacy();
     if (result instanceof Promise) {
       result.then(
-        () => advanceStage(record, 'applied', host.now(), undefined, host),
-        (error: unknown) => advanceStage(record, 'failed', host.now(), messageOf(error), host)
+        () => advanceStage(record, "applied", host.now(), undefined, host),
+        (error: unknown) =>
+          advanceStage(record, "failed", host.now(), messageOf(error), host)
       );
     } else {
       // Nothing further will be said about it: the legacy relay ops that return
@@ -766,11 +866,11 @@ export function submitCommand(
       // failure invented for a call that succeeded and simply had nothing more
       // to report. `interrupt` and `permission.answer` both return void on this
       // dialect, so that lie was on the two most common legacy control paths.
-      record.settlesAt = 'accepted';
-      advanceStage(record, 'accepted', now, undefined, host);
+      record.settlesAt = "accepted";
+      advanceStage(record, "accepted", now, undefined, host);
     }
   } catch (error) {
-    advanceStage(record, 'failed', now, messageOf(error), host);
+    advanceStage(record, "failed", now, messageOf(error), host);
   }
   sweepCommands(state, now, host);
   return commandId;
@@ -782,17 +882,21 @@ const messageOf = (error: unknown): string =>
 /** What a record needs to exist at all — every submission is one, and so is a stillborn one. */
 type CommandStub = Pick<
   CommandSubmission,
-  'commandId' | 'sessionId' | 'kind' | 'settlesAt'
+  "commandId" | "sessionId" | "kind" | "settlesAt"
 >;
 
 /** Puts a fresh record in the ledger at `submitted`, and hands it back. */
-function openRecord(state: StreamState, stub: CommandStub, now: number): CommandRecord {
+function openRecord(
+  state: StreamState,
+  stub: CommandStub,
+  now: number
+): CommandRecord {
   state.commands[stub.commandId] = {
     commandId: stub.commandId,
     sessionId: stub.sessionId,
     kind: stub.kind,
     settlesAt: stub.settlesAt,
-    stage: 'submitted',
+    stage: "submitted",
     at: now,
     changedAt: now,
   };
@@ -826,7 +930,7 @@ export function failLocally(
   const record = openRecord(state, stub, now);
   // It died before the wire: provably undelivered, like a refused dispatch.
   record.undelivered = true;
-  advanceStage(record, 'failed', now, reason, host);
+  advanceStage(record, "failed", now, reason, host);
   sweepCommands(state, now, host);
   return record.commandId;
 }
@@ -839,7 +943,9 @@ export function noteCommandAck(
   host?: StreamHost
 ): boolean {
   const record = state.commands[ack.commandId];
-  if (!record) return false;
+  if (!record) {
+    return false;
+  }
   return advanceStage(record, ack.stage, now, ack.reason, host);
 }
 
@@ -856,7 +962,11 @@ export function noteCommandAck(
  * — can sweep; pass it everywhere else, because a sweep without it is a sweep
  * whose failures {@link StreamHost.noteFailure} never hears about.
  */
-export function sweepCommands(state: StreamState, now: number, host?: StreamHost): void {
+export function sweepCommands(
+  state: StreamState,
+  now: number,
+  host?: StreamHost
+): void {
   const settled: CommandRecord[] = [];
   for (const record of Object.values(state.commands)) {
     // Record-aware, and this is the line the whole `settlesAt` idea exists for:
@@ -865,7 +975,13 @@ export function sweepCommands(state: StreamState, now: number, host?: StreamHost
     // the transcript renders the send's own record.
     if (!isSettled(record)) {
       if (now - record.at >= COMMAND_ACK_TIMEOUT_MS) {
-        advanceStage(record, 'failed', now, 'The hub never acknowledged that.', host);
+        advanceStage(
+          record,
+          "failed",
+          now,
+          "The hub never acknowledged that.",
+          host
+        );
         settled.push(record);
       }
       continue;
@@ -878,7 +994,10 @@ export function sweepCommands(state: StreamState, now: number, host?: StreamHost
   }
   if (settled.length > SETTLED_COMMAND_LIMIT) {
     settled.sort((a, b) => a.changedAt - b.changedAt);
-    for (const record of settled.slice(0, settled.length - SETTLED_COMMAND_LIMIT)) {
+    for (const record of settled.slice(
+      0,
+      settled.length - SETTLED_COMMAND_LIMIT
+    )) {
       delete state.commands[record.commandId];
     }
   }
@@ -886,7 +1005,9 @@ export function sweepCommands(state: StreamState, now: number, host?: StreamHost
   // including "none", which disarms it. Doing it here rather than at each of
   // the four call sites is what keeps "a command is out" and "something will
   // come and call it off" from ever being separately true.
-  if (host) armCommandSweep(state, host);
+  if (host) {
+    armCommandSweep(state, host);
+  }
 }
 
 /**
@@ -896,9 +1017,13 @@ export function sweepCommands(state: StreamState, now: number, host?: StreamHost
 function nextAckDeadline(state: StreamState): number | null {
   let due: number | null = null;
   for (const record of Object.values(state.commands)) {
-    if (isSettled(record)) continue;
+    if (isSettled(record)) {
+      continue;
+    }
     const deadline = record.at + COMMAND_ACK_TIMEOUT_MS;
-    if (due === null || deadline < due) due = deadline;
+    if (due === null || deadline < due) {
+      due = deadline;
+    }
   }
   return due;
 }
@@ -921,10 +1046,14 @@ function nextAckDeadline(state: StreamState): number | null {
  * {@link disarmCommandSweep} when the client goes away.
  */
 export function armCommandSweep(state: StreamState, host: StreamHost): void {
-  if (!host.setTimer) return;
+  if (!host.setTimer) {
+    return;
+  }
   disarmCommandSweep(state, host);
   const due = nextAckDeadline(state);
-  if (due === null) return;
+  if (due === null) {
+    return;
+  }
   state.sweepTimer = host.setTimer(Math.max(0, due - host.now()), () => {
     state.sweepTimer = null;
     // Which re-arms, through the tail of `sweepCommands`: a burst of commands
@@ -935,14 +1064,21 @@ export function armCommandSweep(state: StreamState, host: StreamHost): void {
 
 /** Cancels the armed timer, if any. Idempotent; safe on a host with no clock. */
 export function disarmCommandSweep(state: StreamState, host: StreamHost): void {
-  if (state.sweepTimer === null) return;
+  if (state.sweepTimer === null) {
+    return;
+  }
   host.clearTimer?.(state.sweepTimer);
   state.sweepTimer = null;
 }
 
 /** Every command this tab has submitted for a session, oldest first. */
-export function sessionCommands(state: StreamState, sessionId: string): CommandRecord[] {
-  if (!sessionId) return [];
+export function sessionCommands(
+  state: StreamState,
+  sessionId: string
+): CommandRecord[] {
+  if (!sessionId) {
+    return [];
+  }
   return Object.values(state.commands)
     .filter((record) => record.sessionId && record.sessionId === sessionId)
     .sort((a, b) => a.at - b.at);
@@ -959,8 +1095,12 @@ export function latestCommand(
 ): CommandRecord | null {
   let latest: CommandRecord | null = null;
   for (const record of Object.values(state.commands)) {
-    if (record.sessionId !== sessionId || record.kind !== kind) continue;
-    if (!latest || record.at >= latest.at) latest = record;
+    if (record.sessionId !== sessionId || record.kind !== kind) {
+      continue;
+    }
+    if (!latest || record.at >= latest.at) {
+      latest = record;
+    }
   }
   return latest;
 }
@@ -981,9 +1121,15 @@ export function interruptedRecently(
   windowMs = 15_000
 ): boolean {
   for (const record of Object.values(state.commands)) {
-    if (record.kind !== 'interrupt' || record.sessionId !== sessionId) continue;
-    if (record.stage === 'failed') continue;
-    if (now - record.at <= windowMs) return true;
+    if (record.kind !== "interrupt" || record.sessionId !== sessionId) {
+      continue;
+    }
+    if (record.stage === "failed") {
+      continue;
+    }
+    if (now - record.at <= windowMs) {
+      return true;
+    }
   }
   return false;
 }

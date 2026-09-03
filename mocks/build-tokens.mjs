@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { execFileSync } from "node:child_process";
 /**
  * Emit mocks/tokens.css — the Phase 3 token system.
  *
@@ -16,35 +17,49 @@
  *
  *   node mocks/build-tokens.mjs
  */
-import { readFileSync, writeFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const PALETTE = '/home/bewinxed/.claude/plugins/cache/rtd/design-for-ai/4.2.0/scripts/palette.mjs';
-const ARGS = ['--seed', '263', '--chroma', 'muted', '--harmony', 'analogous', '--scheme', 'both'];
+const PALETTE =
+  "/home/bewinxed/.claude/plugins/cache/rtd/design-for-ai/4.2.0/scripts/palette.mjs";
+const ARGS = [
+  "--seed",
+  "263",
+  "--chroma",
+  "muted",
+  "--harmony",
+  "analogous",
+  "--scheme",
+  "both",
+];
 
 // palette.mjs exits 2 on a contrast miss but still prints the CSS, so stdout is
 // read on any exit code and the code is reported rather than swallowed.
-let out, code = 0;
+let out,
+  code = 0;
 try {
-  out = execFileSync('node', [PALETTE, ...ARGS], { encoding: 'utf8' });
+  out = execFileSync("node", [PALETTE, ...ARGS], { encoding: "utf8" });
 } catch (err) {
-  out = err.stdout || '';
+  out = err.stdout || "";
   code = err.status ?? 1;
-  if (!out) throw err;
+  if (!out) {
+    throw err;
+  }
 }
-console.log(`palette.mjs exit=${code}  FAIL lines=${(out.match(/FAIL/g) || []).length}`);
-writeFileSync(join(HERE, 'palette-263-muted-analogous.css'), out);
+console.log(
+  `palette.mjs exit=${code}  FAIL lines=${(out.match(/FAIL/g) || []).length}`
+);
+writeFileSync(join(HERE, "palette-263-muted-analogous.css"), out);
 
 // Bridge the generator's selector to this project's Tailwind v4 `.dark` class
 // variant. Without this the dark block is present in the file and never active.
 const global = out
-  .replace(/\n\/\* Contrast report[\s\S]*$/, '')
+  .replace(/\n\/\* Contrast report[\s\S]*$/, "")
   .replace('[data-theme="dark"] {', '[data-theme="dark"],\n.dark {');
 
-const report = (out.match(/\/\* Contrast report[\s\S]*$/) || [''])[0];
+const report = (out.match(/\/\* Contrast report[\s\S]*$/) || [""])[0];
 
 const css = `/* =============================================================================
    Whiffle — "Quiet Ledger" design tokens
@@ -445,5 +460,5 @@ ${global.trim()}
 ${report.trim()}
 `;
 
-writeFileSync(join(HERE, 'tokens.css'), css);
+writeFileSync(join(HERE, "tokens.css"), css);
 console.log(`WROTE mocks/tokens.css (${css.length} bytes)`);

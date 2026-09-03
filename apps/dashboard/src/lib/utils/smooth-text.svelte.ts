@@ -1,10 +1,11 @@
-import { untrack } from 'svelte';
+import { untrack } from "svelte";
 
 /** Frames a backlog is spread over — ~0.4s at 60fps, whatever its size. */
 const CATCH_UP_FRAMES = 24;
 
 const prefersReducedMotion = () =>
-  typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  typeof matchMedia !== "undefined" &&
+  matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
  * Paces a streaming string so a burst arrives as a steady reveal instead of a
@@ -13,7 +14,7 @@ const prefersReducedMotion = () =>
  * costs nothing: no frame is scheduled once the shown text has caught up.
  */
 export function smoothText(source: () => string): { readonly text: string } {
-  let shown = $state('');
+  let shown = $state("");
 
   $effect(() => {
     const target = source();
@@ -26,7 +27,9 @@ export function smoothText(source: () => string): { readonly text: string } {
       return;
     }
     const backlog = target.length - from.length;
-    if (backlog <= 0) return;
+    if (backlog <= 0) {
+      return;
+    }
 
     // Fixed for this drain, so the reveal is steady rather than easing out; the
     // next chunk re-arms the effect and sizes its own step against its own
@@ -36,7 +39,9 @@ export function smoothText(source: () => string): { readonly text: string } {
     let frame = requestAnimationFrame(function reveal() {
       const next = shown.length + step;
       shown = target.slice(0, next);
-      if (next < target.length) frame = requestAnimationFrame(reveal);
+      if (next < target.length) {
+        frame = requestAnimationFrame(reveal);
+      }
     });
 
     return () => cancelAnimationFrame(frame);
@@ -45,6 +50,6 @@ export function smoothText(source: () => string): { readonly text: string } {
   return {
     get text() {
       return shown;
-    }
+    },
   };
 }

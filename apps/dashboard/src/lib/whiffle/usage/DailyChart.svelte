@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { BarChart } from "layerchart";
   /**
    * The daily usage chart — stacked bars by day, one series per harness, so the
    * two currencies never sit in one bar. Claude and opencode are the two series
@@ -9,49 +10,67 @@
    * The first chart in the app (USAGE-SPEC.md §7.2.3): the shadcn `ChartContainer`
    * / `ChartTooltip` wrapper over layerchart, painted from the `--chart-1..5` ramp.
    */
-  import { ChartContainer, ChartTooltip, type ChartConfig } from '$lib/components/ui/chart';
-  import { BarChart } from 'layerchart';
-  import { compactNumber, totalTokensOf, type UsageSummary } from '../usage';
+  import {
+    type ChartConfig,
+    ChartContainer,
+    ChartTooltip,
+  } from "$lib/components/ui/chart";
+  import { compactNumber, totalTokensOf, type UsageSummary } from "../usage";
 
   const DAY_MS = 86_400_000;
 
   const RANGES = [
-    { id: '7d', label: '7d', days: 7 },
-    { id: '30d', label: '30d', days: 30 },
-    { id: '90d', label: '90d', days: 90 },
-    { id: 'all', label: 'All', days: null },
+    { id: "7d", label: "7d", days: 7 },
+    { id: "30d", label: "30d", days: 30 },
+    { id: "90d", label: "90d", days: 90 },
+    { id: "all", label: "All", days: null },
   ] as const;
 
-  type RangeId = (typeof RANGES)[number]['id'];
+  type RangeId = (typeof RANGES)[number]["id"];
 
   interface DayPoint {
+    claude: number;
     day: number;
     label: string;
-    claude: number;
     opencode: number;
   }
 
-  let range = $state<RangeId>('30d');
+  let range = $state<RangeId>("30d");
   let points = $state<DayPoint[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
 
   const chartConfig = {
-    claude: { label: 'Claude', color: 'var(--chart-1)' },
-    opencode: { label: 'opencode', color: 'var(--chart-2)' },
+    claude: { label: "Claude", color: "var(--chart-1)" },
+    opencode: { label: "opencode", color: "var(--chart-2)" },
   } satisfies ChartConfig;
 
   const series = [
-    { key: 'claude', label: 'Claude', value: (d: DayPoint) => d.claude, color: 'var(--chart-1)' },
-    { key: 'opencode', label: 'opencode', value: (d: DayPoint) => d.opencode, color: 'var(--chart-2)' },
+    {
+      key: "claude",
+      label: "Claude",
+      value: (d: DayPoint) => d.claude,
+      color: "var(--chart-1)",
+    },
+    {
+      key: "opencode",
+      label: "opencode",
+      value: (d: DayPoint) => d.opencode,
+      color: "var(--chart-2)",
+    },
   ];
 
   const dayLabel = (ms: number): string =>
-    new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    new Date(ms).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
 
   const tokensByDay = (summary: UsageSummary | null): Map<number, number> => {
     const map = new Map<number, number>();
-    for (const row of summary?.rows ?? []) map.set(Number(row.key), totalTokensOf(row));
+    for (const row of summary?.rows ?? []) {
+      map.set(Number(row.key), totalTokensOf(row));
+    }
     return map;
   };
 
@@ -59,15 +78,17 @@
     loading = true;
     error = null;
     const spec = RANGES.find((r) => r.id === range) ?? RANGES[1];
-    const sinceParam = spec.days ? `&since=${Date.now() - spec.days * DAY_MS}` : '';
+    const sinceParam = spec.days
+      ? `&since=${Date.now() - spec.days * DAY_MS}`
+      : "";
     try {
       const [claude, opencode] = await Promise.all([
-        fetch(`/api/usage/summary?harness=claude&groupBy=day${sinceParam}`).then((r) =>
-          r.ok ? (r.json() as Promise<UsageSummary>) : null
-        ),
-        fetch(`/api/usage/summary?harness=opencode&groupBy=day${sinceParam}`).then((r) =>
-          r.ok ? (r.json() as Promise<UsageSummary>) : null
-        ),
+        fetch(
+          `/api/usage/summary?harness=claude&groupBy=day${sinceParam}`
+        ).then((r) => (r.ok ? (r.json() as Promise<UsageSummary>) : null)),
+        fetch(
+          `/api/usage/summary?harness=opencode&groupBy=day${sinceParam}`
+        ).then((r) => (r.ok ? (r.json() as Promise<UsageSummary>) : null)),
       ]);
       const cMap = tokensByDay(claude);
       const oMap = tokensByDay(opencode);
@@ -91,7 +112,7 @@
       }
       points = out;
     } catch {
-      error = 'Could not read the daily totals.';
+      error = "Could not read the daily totals.";
     } finally {
       loading = false;
     }
@@ -111,11 +132,11 @@
     <div class="flex gap-1 rounded-[var(--radius-control)] bg-muted p-0.5">
       {#each RANGES as r (r.id)}
         <button
+          aria-pressed={range === r.id}
           class="rounded-[var(--radius-tile)] px-2.5 py-1 text-micro tabular-nums transition-colors duration-150 ease-out
                  {range === r.id
             ? 'bg-card text-foreground shadow-sm'
             : 'text-muted-foreground hover:text-foreground'}"
-          aria-pressed={range === r.id}
           onclick={() => (range = r.id)}
         >
           {r.label}
@@ -129,25 +150,30 @@
   {:else if loading}
     <div class="h-56 w-full rounded-[var(--radius-card)] bg-muted/40"></div>
   {:else}
-    <ChartContainer config={chartConfig} class="h-56 w-full">
+    <ChartContainer class="h-56 w-full" config={chartConfig}>
       <BarChart
         data={points}
-        x="label"
-        {series}
-        seriesLayout="stack"
         props={{
           xAxis: { ticks: 6, tickMarks: false },
           yAxis: { format: 'metric', ticks: 4 },
         }}
+        {series}
+        seriesLayout="stack"
+        x="label"
       >
         {#snippet tooltip()}
           <ChartTooltip>
             {#snippet formatter({ value, name })}
               {@const color = name === 'Claude' ? 'var(--chart-1)' : 'var(--chart-2)'}
               <div class="flex items-center gap-2">
-                <span class="size-2.5 shrink-0 rounded-[2px]" style="background-color: {color}"></span>
+                <span
+                  class="size-2.5 shrink-0 rounded-[2px]"
+                  style="background-color: {color}"
+                ></span>
                 <span>{name}</span>
-                <span class="ml-auto font-mono text-micro tabular-nums">{compactNumber(Number(value))}</span>
+                <span class="ml-auto font-mono text-micro tabular-nums"
+                  >{compactNumber(Number(value))}</span
+                >
               </div>
             {/snippet}
           </ChartTooltip>

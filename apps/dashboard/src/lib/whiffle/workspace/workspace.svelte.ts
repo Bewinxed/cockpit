@@ -17,43 +17,40 @@
  * grid can grow into them without a rewrite; only the ownership of `tabs`
  * moves later.
  */
-import { browser } from '$app/environment';
-import { pushState, replaceState } from '$app/navigation';
-import { workingSet } from '../working-set.svelte';
-import { whiffle } from '../client.svelte';
+import { browser } from "$app/environment";
+import { pushState, replaceState } from "$app/navigation";
+import { whiffle } from "../client.svelte";
+import { workingSet } from "../working-set.svelte";
 
 /** A split: two or more children laid out along one axis. */
 export interface BranchNode {
-  t: 'b';
+  dir: "h" | "v";
   id: string;
-  dir: 'h' | 'v';
+  kids: PaneNode[];
   /** Percentages, one per child, summing to 100. Written by paneforge. */
   sizes: number[];
-  kids: PaneNode[];
+  t: "b";
 }
 
 /** A group of tabs with one showing — VS Code's editor group. */
 export interface LeafNode {
-  t: 'l';
-  id: string;
-  tabs: string[];
   /** `null` is the fleet board: a leaf holding nothing is where you start. */
   active: string | null;
+  id: string;
+  t: "l";
+  tabs: string[];
 }
 
 export type PaneNode = BranchNode | LeafNode;
 
 /** How a stored conversation is addressed: which machine, which folder. */
 export interface SessionContext {
-  machine: string;
   cwd: string;
   harness: string;
+  machine: string;
 }
 
 export interface WorkspaceV1 {
-  v: 1;
-  root: PaneNode;
-  focusedLeaf: string;
   /**
    * The address of every conversation the tree holds.
    *
@@ -65,16 +62,25 @@ export interface WorkspaceV1 {
    * unreachable. Two records of one fact, one of them allowed to forget.
    */
   ctx?: Record<string, SessionContext>;
+  focusedLeaf: string;
+  root: PaneNode;
+  v: 1;
 }
 
-const KEY = 'whiffle-workspace';
+const KEY = "whiffle-workspace";
 /** A year: the layout is a habit, not a session. Matches the working set. */
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 let seq = 0;
-const nodeId = (): string => `p${Date.now().toString(36)}${(seq++).toString(36)}`;
+const nodeId = (): string =>
+  `p${Date.now().toString(36)}${(seq++).toString(36)}`;
 
-const emptyLeaf = (): LeafNode => ({ t: 'l', id: nodeId(), tabs: [], active: null });
+const emptyLeaf = (): LeafNode => ({
+  t: "l",
+  id: nodeId(),
+  tabs: [],
+  active: null,
+});
 
 function blank(): WorkspaceV1 {
   const leaf = emptyLeaf();
@@ -87,9 +93,13 @@ function blank(): WorkspaceV1 {
    does, so the first paint and the first client render agree. */
 
 const fromCookie = (): string | null => {
-  if (typeof document === 'undefined') return null;
+  if (typeof document === "undefined") {
+    return null;
+  }
   const match = new RegExp(`(?:^|;\\s*)${KEY}=([^;]*)`).exec(document.cookie);
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
   try {
     return decodeURIComponent(match[1]);
   } catch {
@@ -99,13 +109,17 @@ const fromCookie = (): string | null => {
 
 /** Whether a parsed value is actually a tree, and not merely JSON. */
 function validate(node: unknown): node is PaneNode {
-  if (!node || typeof node !== 'object') return false;
+  if (!node || typeof node !== "object") {
+    return false;
+  }
   const n = node as Partial<BranchNode> & Partial<LeafNode>;
-  if (n.t === 'l') return typeof n.id === 'string' && Array.isArray(n.tabs);
-  if (n.t === 'b') {
+  if (n.t === "l") {
+    return typeof n.id === "string" && Array.isArray(n.tabs);
+  }
+  if (n.t === "b") {
     return (
-      typeof n.id === 'string' &&
-      (n.dir === 'h' || n.dir === 'v') &&
+      typeof n.id === "string" &&
+      (n.dir === "h" || n.dir === "v") &&
       Array.isArray(n.kids) &&
       n.kids.length > 0 &&
       n.kids.every(validate)
@@ -115,11 +129,17 @@ function validate(node: unknown): node is PaneNode {
 }
 
 function parse(raw: string | null | undefined): WorkspaceV1 | null {
-  if (!raw) return null;
+  if (!raw) {
+    return null;
+  }
   try {
     const held = JSON.parse(raw) as WorkspaceV1;
-    if (held?.v !== 1 || !validate(held.root)) return null;
-    if (typeof held.focusedLeaf !== 'string') return null;
+    if (held?.v !== 1 || !validate(held.root)) {
+      return null;
+    }
+    if (typeof held.focusedLeaf !== "string") {
+      return null;
+    }
     return held;
   } catch {
     return null;
@@ -129,16 +149,25 @@ function parse(raw: string | null | undefined): WorkspaceV1 | null {
 function load(): WorkspaceV1 {
   let stored: string | null = null;
   try {
-    if (typeof localStorage !== 'undefined') stored = localStorage.getItem(KEY);
+    if (typeof localStorage !== "undefined") {
+      stored = localStorage.getItem(KEY);
+    }
   } catch {
     // A browser that will not read storage still has the cookie.
   }
   const held = parse(stored) ?? parse(fromCookie());
-  if (held) return held;
+  if (held) {
+    return held;
+  }
   // Migration: a reader who already has open tabs keeps them, in one leaf.
   const carried = browser ? workingSet.order : [];
   if (carried.length > 0) {
-    const leaf: LeafNode = { t: 'l', id: nodeId(), tabs: [...carried], active: null };
+    const leaf: LeafNode = {
+      t: "l",
+      id: nodeId(),
+      tabs: [...carried],
+      active: null,
+    };
     return { v: 1, root: leaf, focusedLeaf: leaf.id };
   }
   return blank();
@@ -147,10 +176,14 @@ function load(): WorkspaceV1 {
 const held = $state<WorkspaceV1>(load());
 
 function save(): void {
-  if (!browser) return;
+  if (!browser) {
+    return;
+  }
   const payload = JSON.stringify(held);
   try {
-    if (typeof localStorage !== 'undefined') localStorage.setItem(KEY, payload);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(KEY, payload);
+    }
   } catch {
     // A browser that will not store just starts the layout over next time.
   }
@@ -164,8 +197,13 @@ function save(): void {
 /* ── Tree walking ─────────────────────────────────────────────────────── */
 
 function leavesOf(node: PaneNode, out: LeafNode[] = []): LeafNode[] {
-  if (node.t === 'l') out.push(node);
-  else for (const kid of node.kids) leavesOf(kid, out);
+  if (node.t === "l") {
+    out.push(node);
+  } else {
+    for (const kid of node.kids) {
+      leavesOf(kid, out);
+    }
+  }
   return out;
 }
 
@@ -174,25 +212,38 @@ function leafById(id: string): LeafNode | null {
 }
 
 function leafHolding(sessionId: string): LeafNode | null {
-  return leavesOf(held.root).find((leaf) => leaf.tabs.includes(sessionId)) ?? null;
+  return (
+    leavesOf(held.root).find((leaf) => leaf.tabs.includes(sessionId)) ?? null
+  );
 }
 
 /** The focused leaf, or the first one — `focusedLeaf` can name a closed leaf. */
 function focused(): LeafNode {
   const named = leafById(held.focusedLeaf);
-  if (named) return named;
+  if (named) {
+    return named;
+  }
   const first = leavesOf(held.root)[0];
   held.focusedLeaf = first.id;
   return first;
 }
 
 /** The branch holding a node, or `null` for the root. */
-function parentOf(target: PaneNode, node: PaneNode = held.root): BranchNode | null {
-  if (node.t === 'l') return null;
-  if (node.kids.includes(target)) return node;
+function parentOf(
+  target: PaneNode,
+  node: PaneNode = held.root
+): BranchNode | null {
+  if (node.t === "l") {
+    return null;
+  }
+  if (node.kids.includes(target)) {
+    return node;
+  }
   for (const kid of node.kids) {
     const found = parentOf(target, kid);
-    if (found) return found;
+    if (found) {
+      return found;
+    }
   }
   return null;
 }
@@ -208,7 +259,8 @@ function replace(old: PaneNode, next: PaneNode): void {
 }
 
 /** Even shares, so a fresh split lands down the middle. */
-const evenly = (count: number): number[] => Array.from({ length: count }, () => 100 / count);
+const evenly = (count: number): number[] =>
+  Array.from({ length: count }, () => 100 / count);
 
 /**
  * Put the tree back into a shape the renderer can trust, after any mutation.
@@ -223,22 +275,33 @@ const evenly = (count: number): number[] => Array.from({ length: count }, () => 
  * open is not broken, it is the fleet board.
  */
 function normalize(node: PaneNode = held.root): PaneNode | null {
-  if (node.t === 'l') {
+  if (node.t === "l") {
     return node.tabs.length > 0 || node === held.root ? node : null;
   }
-  const kids = node.kids.map((kid) => normalize(kid)).filter((kid): kid is PaneNode => !!kid);
-  if (kids.length === 0) return null;
-  if (kids.length === 1) return kids[0];
+  const kids = node.kids
+    .map((kid) => normalize(kid))
+    .filter((kid): kid is PaneNode => !!kid);
+  if (kids.length === 0) {
+    return null;
+  }
+  if (kids.length === 1) {
+    return kids[0];
+  }
   // A child that survived may have been promoted out of a branch of the same
   // direction; folding it in keeps `h(a, h(b, c))` from rendering as nested
   // groups when it means the same thing as `h(a, b, c)`.
   const flat: PaneNode[] = [];
   for (const kid of kids) {
-    if (kid.t === 'b' && kid.dir === node.dir) flat.push(...kid.kids);
-    else flat.push(kid);
+    if (kid.t === "b" && kid.dir === node.dir) {
+      flat.push(...kid.kids);
+    } else {
+      flat.push(kid);
+    }
   }
   node.kids = flat;
-  if (node.sizes.length !== flat.length) node.sizes = evenly(flat.length);
+  if (node.sizes.length !== flat.length) {
+    node.sizes = evenly(flat.length);
+  }
   return node;
 }
 
@@ -260,12 +323,14 @@ function remember(
   sessionId: string,
   ctx?: { machine?: string | null; cwd?: string; harness?: string }
 ): void {
-  if (!ctx?.machine) return;
+  if (!ctx?.machine) {
+    return;
+  }
   held.ctx ??= {};
   held.ctx[sessionId] = {
     machine: ctx.machine,
-    cwd: ctx.cwd ?? '',
-    harness: ctx.harness ?? 'claude',
+    cwd: ctx.cwd ?? "",
+    harness: ctx.harness ?? "claude",
   };
 }
 
@@ -291,20 +356,22 @@ export function contextOf(sessionId: string): SessionContext | null {
   if (instance?.machineId) {
     return {
       machine: instance.machineId,
-      cwd: instance.cwd ?? '',
-      harness: instance.harness ?? 'claude',
+      cwd: instance.cwd ?? "",
+      harness: instance.harness ?? "claude",
     };
   }
   for (const machine of whiffle.machines) {
-    if (machine.status !== 'online') continue;
+    if (machine.status !== "online") {
+      continue;
+    }
     const stored = whiffle
       .catalogOf(machine.machineId)
       .find((entry) => entry.sessionId === sessionId);
     if (stored) {
       return {
         machine: machine.machineId,
-        cwd: stored.cwd ?? '',
-        harness: stored.harness ?? 'claude',
+        cwd: stored.cwd ?? "",
+        harness: stored.harness ?? "claude",
       };
     }
   }
@@ -331,24 +398,36 @@ const asking = new Map<string, Promise<SessionContext | null>>();
 
 export function locate(sessionId: string): Promise<SessionContext | null> {
   const local = contextOf(sessionId);
-  if (local) return Promise.resolve(local);
+  if (local) {
+    return Promise.resolve(local);
+  }
   const already = asking.get(sessionId);
-  if (already) return already;
+  if (already) {
+    return already;
+  }
 
   const ask = (async (): Promise<SessionContext | null> => {
     try {
-      const response = await fetch(`/api/instances/${encodeURIComponent(sessionId)}/location`);
-      if (!response.ok) return null;
+      const response = await fetch(
+        `/api/instances/${encodeURIComponent(sessionId)}/location`
+      );
+      if (!response.ok) {
+        return null;
+      }
       // The hub answers in its own vocabulary — `machineId`, as every row of
       // the fleet is keyed — and this store speaks of a `machine`.
-      const found = (await response.json()) as
-        | { machineId?: string; cwd?: string; harness?: string }
-        | null;
-      if (!found?.machineId) return null;
+      const found = (await response.json()) as {
+        machineId?: string;
+        cwd?: string;
+        harness?: string;
+      } | null;
+      if (!found?.machineId) {
+        return null;
+      }
       const where: SessionContext = {
         machine: found.machineId,
-        cwd: found.cwd ?? '',
-        harness: found.harness ?? 'claude',
+        cwd: found.cwd ?? "",
+        harness: found.harness ?? "claude",
       };
       held.ctx ??= {};
       held.ctx[sessionId] = where;
@@ -372,14 +451,18 @@ export function locate(sessionId: string): Promise<SessionContext | null> {
  * that can go stale.
  */
 export function urlFor(sessionId: string | null): string {
-  if (!sessionId) return '/session';
+  if (!sessionId) {
+    return "/session";
+  }
   return `/session/${sessionId}`;
 }
 
 /** The session id a URL names, or `null` for the board. */
 export function sessionIdOf(url: URL): string | null {
-  const parts = url.pathname.split('/').filter(Boolean);
-  if (parts[0] !== 'session') return null;
+  const parts = url.pathname.split("/").filter(Boolean);
+  if (parts[0] !== "session") {
+    return null;
+  }
   return parts[1] ?? null;
 }
 
@@ -395,12 +478,17 @@ export function sessionIdOf(url: URL): string | null {
  * synchronous mutation down with it, and the URL is the one part of this
  * that is allowed to be best-effort.
  */
-function project(sessionId: string | null, mode: 'push' | 'replace'): void {
-  if (!browser) return;
+function project(sessionId: string | null, mode: "push" | "replace"): void {
+  if (!browser) {
+    return;
+  }
   const url = urlFor(sessionId);
   try {
-    if (mode === 'push') pushState(url, {});
-    else replaceState(url, {});
+    if (mode === "push") {
+      pushState(url, {});
+    } else {
+      replaceState(url, {});
+    }
   } catch {
     // Before the router is ready the URL is already correct — this is a
     // no-op, not a failure.
@@ -453,21 +541,26 @@ export const workspace = {
    * catches up afterwards without a load.
    */
   activate(sessionId: string | null, leafId?: string): void {
-    const leaf = (leafId ? leafById(leafId) : leafHolding(sessionId ?? '')) ?? focused();
-    if (sessionId && !leaf.tabs.includes(sessionId)) leaf.tabs.push(sessionId);
+    const leaf =
+      (leafId ? leafById(leafId) : leafHolding(sessionId ?? "")) ?? focused();
+    if (sessionId && !leaf.tabs.includes(sessionId)) {
+      leaf.tabs.push(sessionId);
+    }
     leaf.active = sessionId;
     held.focusedLeaf = leaf.id;
     save();
-    project(sessionId, 'push');
+    project(sessionId, "push");
   },
 
   /** Move keyboard focus between groups without changing what is shown. */
   focus(leafId: string): void {
     const leaf = leafById(leafId);
-    if (!leaf || held.focusedLeaf === leafId) return;
+    if (!leaf || held.focusedLeaf === leafId) {
+      return;
+    }
     held.focusedLeaf = leafId;
     save();
-    project(leaf.active, 'replace');
+    project(leaf.active, "replace");
   },
 
   /**
@@ -481,8 +574,11 @@ export const workspace = {
     ctx?: { machine?: string | null; cwd?: string; harness?: string }
   ): void {
     remember(sessionId, ctx);
-    if (ctx) workingSet.visit(sessionId, ctx);
-    else workingSet.visit(sessionId);
+    if (ctx) {
+      workingSet.visit(sessionId, ctx);
+    } else {
+      workingSet.visit(sessionId);
+    }
     this.activate(sessionId, leafHolding(sessionId)?.id);
   },
 
@@ -498,11 +594,16 @@ export const workspace = {
   ): void {
     if (sessionId) {
       remember(sessionId, ctx);
-      if (ctx) workingSet.visit(sessionId, ctx);
-      else workingSet.visit(sessionId);
+      if (ctx) {
+        workingSet.visit(sessionId, ctx);
+      } else {
+        workingSet.visit(sessionId);
+      }
     }
     const leaf = (sessionId ? leafHolding(sessionId) : null) ?? focused();
-    if (sessionId && !leaf.tabs.includes(sessionId)) leaf.tabs.push(sessionId);
+    if (sessionId && !leaf.tabs.includes(sessionId)) {
+      leaf.tabs.push(sessionId);
+    }
     leaf.active = sessionId;
     held.focusedLeaf = leaf.id;
     save();
@@ -515,11 +616,15 @@ export const workspace = {
    */
   close(sessionId: string): void {
     const leaf = leafHolding(sessionId);
-    if (!leaf) return;
+    if (!leaf) {
+      return;
+    }
     const at = leaf.tabs.indexOf(sessionId);
     leaf.tabs.splice(at, 1);
     workingSet.forget(sessionId);
-    if (held.ctx) delete held.ctx[sessionId];
+    if (held.ctx) {
+      delete held.ctx[sessionId];
+    }
     if (leaf.active === sessionId) {
       leaf.active = leaf.tabs[at] ?? leaf.tabs[at - 1] ?? null;
     }
@@ -528,7 +633,7 @@ export const workspace = {
     // state worth being able to reach.
     settle();
     if (leaf.id === held.focusedLeaf || !leafById(leaf.id)) {
-      project(this.activeSessionId, 'push');
+      project(this.activeSessionId, "push");
     }
   },
 
@@ -543,9 +648,13 @@ export const workspace = {
    */
   step(from: string | null, by: number, leafId?: string): string | null {
     const leaf = leafId ? leafById(leafId) : focused();
-    if (!leaf || leaf.tabs.length < 2) return null;
+    if (!leaf || leaf.tabs.length < 2) {
+      return null;
+    }
     const at = from ? leaf.tabs.indexOf(from) : -1;
-    if (at === -1) return leaf.tabs[0] ?? null;
+    if (at === -1) {
+      return leaf.tabs[0] ?? null;
+    }
     return leaf.tabs[(at + by + leaf.tabs.length) % leaf.tabs.length] ?? null;
   },
 
@@ -557,24 +666,39 @@ export const workspace = {
    * id alone — no pane owns a private copy of a scroll position or a draft,
    * because no conversation is ever in two places to disagree about.
    */
-  split(leafId: string, edge: 'left' | 'right' | 'top' | 'bottom', sessionId: string): void {
+  split(
+    leafId: string,
+    edge: "left" | "right" | "top" | "bottom",
+    sessionId: string
+  ): void {
     const target = leafById(leafId);
-    if (!target) return;
+    if (!target) {
+      return;
+    }
     const from = leafHolding(sessionId);
     // Splitting a group against its only tab would leave an empty half.
-    if (from === target && target.tabs.length < 2) return;
+    if (from === target && target.tabs.length < 2) {
+      return;
+    }
     if (from) {
       from.tabs.splice(from.tabs.indexOf(sessionId), 1);
-      if (from.active === sessionId) from.active = from.tabs[0] ?? null;
+      if (from.active === sessionId) {
+        from.active = from.tabs[0] ?? null;
+      }
     }
-    const fresh: LeafNode = { t: 'l', id: nodeId(), tabs: [sessionId], active: sessionId };
-    const dir = edge === 'left' || edge === 'right' ? 'h' : 'v';
-    const before = edge === 'left' || edge === 'top';
+    const fresh: LeafNode = {
+      t: "l",
+      id: nodeId(),
+      tabs: [sessionId],
+      active: sessionId,
+    };
+    const dir = edge === "left" || edge === "right" ? "h" : "v";
+    const before = edge === "left" || edge === "top";
     const kids = before ? [fresh, target] : [target, fresh];
-    replace(target, { t: 'b', id: nodeId(), dir, sizes: evenly(2), kids });
+    replace(target, { t: "b", id: nodeId(), dir, sizes: evenly(2), kids });
     held.focusedLeaf = fresh.id;
     settle();
-    project(sessionId, 'push');
+    project(sessionId, "push");
   },
 
   /**
@@ -583,44 +707,67 @@ export const workspace = {
    */
   move(sessionId: string, leafId: string, index?: number): void {
     const target = leafById(leafId);
-    if (!target) return;
+    if (!target) {
+      return;
+    }
     const from = leafHolding(sessionId);
     if (from) {
       from.tabs.splice(from.tabs.indexOf(sessionId), 1);
-      if (from.active === sessionId) from.active = from.tabs[0] ?? null;
+      if (from.active === sessionId) {
+        from.active = from.tabs[0] ?? null;
+      }
     }
-    const at = index === undefined ? target.tabs.length : Math.max(0, Math.min(index, target.tabs.length));
+    const at =
+      index === undefined
+        ? target.tabs.length
+        : Math.max(0, Math.min(index, target.tabs.length));
     target.tabs.splice(at, 0, sessionId);
     target.active = sessionId;
     held.focusedLeaf = target.id;
     settle();
-    project(sessionId, 'push');
+    project(sessionId, "push");
   },
 
   /** Reorder within one group's strip, for a drag that never left it. */
   reorder(leafId: string, sessionId: string, index: number): void {
     const leaf = leafById(leafId);
-    if (!leaf) return;
+    if (!leaf) {
+      return;
+    }
     const at = leaf.tabs.indexOf(sessionId);
-    if (at === -1) return;
+    if (at === -1) {
+      return;
+    }
     leaf.tabs.splice(at, 1);
-    leaf.tabs.splice(Math.max(0, Math.min(index, leaf.tabs.length)), 0, sessionId);
+    leaf.tabs.splice(
+      Math.max(0, Math.min(index, leaf.tabs.length)),
+      0,
+      sessionId
+    );
     save();
   },
 
   /** Record a resize. Written by paneforge as the divider moves. */
   resize(branchId: string, sizes: number[]): void {
     const walk = (node: PaneNode): BranchNode | null => {
-      if (node.t === 'l') return null;
-      if (node.id === branchId) return node;
+      if (node.t === "l") {
+        return null;
+      }
+      if (node.id === branchId) {
+        return node;
+      }
       for (const kid of node.kids) {
         const found = walk(kid);
-        if (found) return found;
+        if (found) {
+          return found;
+        }
       }
       return null;
     };
     const branch = walk(held.root);
-    if (!branch || branch.sizes.length !== sizes.length) return;
+    if (!branch || branch.sizes.length !== sizes.length) {
+      return;
+    }
     branch.sizes = sizes;
     save();
   },
@@ -628,17 +775,23 @@ export const workspace = {
   /** Close a whole group, and everything open in it. */
   closeLeaf(leafId: string): void {
     const leaf = leafById(leafId);
-    if (!leaf) return;
-    for (const id of [...leaf.tabs]) workingSet.forget(id);
+    if (!leaf) {
+      return;
+    }
+    for (const id of [...leaf.tabs]) {
+      workingSet.forget(id);
+    }
     leaf.tabs = [];
     leaf.active = null;
     settle();
-    project(this.activeSessionId, 'replace');
+    project(this.activeSessionId, "replace");
   },
 
   /** Server only: this request's tree, from its cookie. Reset every render, because the module is shared across requests. */
   serve(served: WorkspaceV1 | null): void {
-    if (browser) return;
+    if (browser) {
+      return;
+    }
     const next = served && validate(served.root) ? served : blank();
     held.root = next.root;
     held.focusedLeaf = next.focusedLeaf;

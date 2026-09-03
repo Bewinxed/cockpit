@@ -1,17 +1,36 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<!-- DW-8.4 row 9 — status bar colour, declared per colour scheme (two theme-color).
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+      name="viewport"
+    >
+    <!-- DW-8.4 row 9 — status bar colour, declared per colour scheme (two theme-color).
      These are platform metadata bound to the ramp's --neutral-1 (light #fcfdfd,
      dark #121313); the production bridge maps them to the same tokens. -->
-<meta name="theme-color" content="#fcfdfd" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#121313" media="(prefers-color-scheme: dark)">
-<title>Whiffle — Workspace surface (v5, Phase 8)</title>
-<link rel="preload" href="./fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="./fonts/geist.css">
-<link rel="stylesheet" href="./tokens.css">
-<style>
-/* =============================================================================
+    <meta
+      content="#fcfdfd"
+      media="(prefers-color-scheme: light)"
+      name="theme-color"
+    >
+    <meta
+      content="#121313"
+      media="(prefers-color-scheme: dark)"
+      name="theme-color"
+    >
+    <title>Whiffle — Workspace surface (v5, Phase 8)</title>
+    <link
+      as="font"
+      crossorigin
+      href="./fonts/geist-latin-wght-normal.woff2"
+      rel="preload"
+      type="font/woff2"
+    >
+    <link href="./fonts/geist.css" rel="stylesheet">
+    <link href="./tokens.css" rel="stylesheet">
+    <style>
+      /* =============================================================================
    WHIFFLE — PHASE 8 "WORKSPACE SURFACE" (tab strip · split view · gestures ·
    mobile shell)
 
@@ -76,339 +95,1125 @@
 
    ========================================================================== */
 
-:root{
-  /* ---- component dimension ramp — COMPACT (fine-pointer, Phase 5) --------- */
-  --w-tab-h:38px;          /* tab strip item height */
-  --w-pane-h:auto;
-  --w-row:26px;            /* transcript tool / step row pitch (compact) */
-  --w-card-pad:13px;       /* hitl card padding */
-  --w-btn-h:34px;          /* approve/deny / composer control height */
-  --w-input-h:34px;
-  --w-input-fs:16px;       /* >=16px so iOS never zooms (DW-8.4 row 4) */
-  --w-transcript-b:96px;   /* bottom clearance for the floating composer */
-  --w-toolbar-h:42px;
-  --w-grip:20px;
-}
+      :root {
+        /* ---- component dimension ramp — COMPACT (fine-pointer, Phase 5) --------- */
+        --w-tab-h: 38px; /* tab strip item height */
+        --w-pane-h: auto;
+        --w-row: 26px; /* transcript tool / step row pitch (compact) */
+        --w-card-pad: 13px; /* hitl card padding */
+        --w-btn-h: 34px; /* approve/deny / composer control height */
+        --w-input-h: 34px;
+        --w-input-fs: 16px; /* >=16px so iOS never zooms (DW-8.4 row 4) */
+        --w-transcript-b: 96px; /* bottom clearance for the floating composer */
+        --w-toolbar-h: 42px;
+        --w-grip: 20px;
+      }
 
-*{box-sizing:border-box;margin:0;padding:0}
-/* DW-8.4 row 3 — layout height: the APP SHELL is 100dvh (not bare vh). A
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      /* DW-8.4 row 3 — layout height: the APP SHELL is 100dvh (not bare vh). A
    full-bleed block that must fill the visible viewport despite mobile browser
    chrome takes 100svh. NO bare `vh` anywhere in this file — see the gate. */
-html{height:100%}
-body{
-  font-family:var(--font-body);
-  font-size:var(--text-base);
-  line-height:var(--leading-body);
-  color:var(--ink-strong);
-  background:var(--surface-field);
-  -webkit-font-smoothing:antialiased;
-  /* DW-8.4 row 2 — neutralise the grey/blue tap flash */
-  -webkit-tap-highlight-color:transparent;
-  display:grid;
-  grid-template-columns:228px minmax(0,1fr);
-  min-height:100dvh;
-  width:100%;
-}
-.mono{font-family:var(--font-mono);font-size:var(--text-sm)}
+      html {
+        height: 100%;
+      }
+      body {
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        color: var(--ink-strong);
+        background: var(--surface-field);
+        -webkit-font-smoothing: antialiased;
+        /* DW-8.4 row 2 — neutralise the grey/blue tap flash */
+        -webkit-tap-highlight-color: transparent;
+        display: grid;
+        grid-template-columns: 228px minmax(0, 1fr);
+        min-height: 100dvh;
+        width: 100%;
+      }
+      .mono {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+      }
 
-/* ============================== SIDEBAR ==================================
+      /* ============================== SIDEBAR ==================================
    The management chrome, shared across the whole surface (not duplicated per
    pane — DW-8.2). */
-aside{background:var(--surface-raised);border-right:1px solid var(--border-hairline);
-  display:flex;flex-direction:column;overflow:hidden}
-/* DW-8.4 row 6 — pull-to-refresh hijack: overscroll-behavior none on html AND
+      aside {
+        background: var(--surface-raised);
+        border-right: 1px solid var(--border-hairline);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      /* DW-8.4 row 6 — pull-to-refresh hijack: overscroll-behavior none on html AND
    body (declared on each selector explicitly so the gate counts both). */
-html{overscroll-behavior:none}
-body{overscroll-behavior:none}
-.brand{height:57px;display:flex;align-items:center;gap:9px;padding:0 14px;flex-shrink:0}
-.logo{width:26px;height:26px;border-radius:var(--radius-tile);background:var(--brand-solid);
-  background-image:var(--gradient-action);box-shadow:var(--shadow-action);color:var(--on-brand);
-  display:grid;place-items:center;font-size:var(--text-base);font-weight:var(--weight-strong)}
-.logo svg{width:15px;height:15px;display:block}
-.brand b{font-size:var(--text-md);font-weight:var(--weight-strong);letter-spacing:var(--track-display)}
-.brand .home{margin-left:auto;width:44px;height:44px;border:1px solid var(--border-control);
-  border-radius:var(--radius-control);background:var(--surface-raised);color:var(--ink-muted);
-  display:grid;place-items:center;cursor:pointer;flex:0 0 auto;user-select:none}
-.brand .home svg{width:18px;height:18px}
-@media (hover:hover) and (pointer:fine){.brand .home:hover{background:var(--surface-hover);color:var(--ink-body)}}
-.brand .home:active{background:var(--surface-active)}
-.brand .home:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      html {
+        overscroll-behavior: none;
+      }
+      body {
+        overscroll-behavior: none;
+      }
+      .brand {
+        height: 57px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 14px;
+        flex-shrink: 0;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: var(--radius-tile);
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        display: grid;
+        place-items: center;
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+      }
+      .logo svg {
+        width: 15px;
+        height: 15px;
+        display: block;
+      }
+      .brand b {
+        font-size: var(--text-md);
+        font-weight: var(--weight-strong);
+        letter-spacing: var(--track-display);
+      }
+      .brand .home {
+        margin-left: auto;
+        width: 44px;
+        height: 44px;
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-control);
+        background: var(--surface-raised);
+        color: var(--ink-muted);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        flex: 0 0 auto;
+        user-select: none;
+      }
+      .brand .home svg {
+        width: 18px;
+        height: 18px;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .brand .home:hover {
+          background: var(--surface-hover);
+          color: var(--ink-body);
+        }
+      }
+      .brand .home:active {
+        background: var(--surface-active);
+      }
+      .brand .home:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-.sec{font-size:var(--text-xs);color:var(--ink-muted);font-weight:var(--weight-strong);
-  text-transform:uppercase;letter-spacing:var(--track-caps);padding:0 20px;margin:16px 0 7px}
-nav{padding:0 10px;display:flex;flex-direction:column;gap:1px}
-.nav-i{height:30px;border-radius:var(--radius-control);display:flex;align-items:center;gap:10px;
-  padding:0 10px;font-size:var(--text-md);color:var(--ink-body);font-weight:var(--weight-medium);
-  user-select:none}
-.nav-i .ic{width:17px;text-align:center;color:var(--ink-muted);flex:0 0 auto}
-.nav-i .ic svg{width:16px;height:16px;display:block}
-.nav-i .cnt{margin-left:auto;font-size:var(--text-sm);font-weight:var(--weight-strong);line-height:1;
-  padding:3px 7px;border-radius:var(--radius-pill);background:var(--status-attn-bg);color:var(--status-attn-ink)}
-.nav-i.on{background:var(--surface-raised);color:var(--ink-strong);box-shadow:var(--shadow-tile);
-  font-weight:var(--weight-strong)}
-.nav-i.on .ic{color:var(--ink-body)}
-@media (hover:hover) and (pointer:fine){.nav-i:hover{background:var(--surface-hover)}}
-.nav-i:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:var(--radius-control)}
+      .sec {
+        font-size: var(--text-xs);
+        color: var(--ink-muted);
+        font-weight: var(--weight-strong);
+        text-transform: uppercase;
+        letter-spacing: var(--track-caps);
+        padding: 0 20px;
+        margin: 16px 0 7px;
+      }
+      nav {
+        padding: 0 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .nav-i {
+        height: 30px;
+        border-radius: var(--radius-control);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 10px;
+        font-size: var(--text-md);
+        color: var(--ink-body);
+        font-weight: var(--weight-medium);
+        user-select: none;
+      }
+      .nav-i .ic {
+        width: 17px;
+        text-align: center;
+        color: var(--ink-muted);
+        flex: 0 0 auto;
+      }
+      .nav-i .ic svg {
+        width: 16px;
+        height: 16px;
+        display: block;
+      }
+      .nav-i .cnt {
+        margin-left: auto;
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        line-height: 1;
+        padding: 3px 7px;
+        border-radius: var(--radius-pill);
+        background: var(--status-attn-bg);
+        color: var(--status-attn-ink);
+      }
+      .nav-i.on {
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        box-shadow: var(--shadow-tile);
+        font-weight: var(--weight-strong);
+      }
+      .nav-i.on .ic {
+        color: var(--ink-body);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .nav-i:hover {
+          background: var(--surface-hover);
+        }
+      }
+      .nav-i:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+        border-radius: var(--radius-control);
+      }
 
-.runs{padding:0 10px;display:flex;flex-direction:column;gap:1px}
-.run-i{height:26px;border-radius:var(--radius-tile);display:flex;align-items:center;gap:9px;
-  padding:0 10px;font-size:var(--text-base);color:var(--ink-body);font-weight:var(--weight-medium);
-  text-decoration:none;user-select:none}
-.run-i .mark{width:17px;height:17px;border-radius:var(--radius-mark);flex-shrink:0;display:grid;place-items:center;
-  background-image:var(--mark-overlay);background-color:var(--mark-1)}
-.run-i .mark svg{width:10px;height:10px;display:block;stroke:var(--mark-glyph);stroke-width:1.8}
-.run-i.on{background:var(--surface-raised);color:var(--ink-strong);font-weight:var(--weight-strong);box-shadow:var(--shadow-tile)}
-.run-i .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 auto}
-.run-i .st{font-size:var(--text-sm);color:var(--ink-muted);flex:0 0 auto}
-@media (hover:hover) and (pointer:fine){.run-i:hover{background:var(--surface-hover)}}
-.run-i:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      .runs {
+        padding: 0 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .run-i {
+        height: 26px;
+        border-radius: var(--radius-tile);
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 10px;
+        font-size: var(--text-base);
+        color: var(--ink-body);
+        font-weight: var(--weight-medium);
+        text-decoration: none;
+        user-select: none;
+      }
+      .run-i .mark {
+        width: 17px;
+        height: 17px;
+        border-radius: var(--radius-mark);
+        flex-shrink: 0;
+        display: grid;
+        place-items: center;
+        background-image: var(--mark-overlay);
+        background-color: var(--mark-1);
+      }
+      .run-i .mark svg {
+        width: 10px;
+        height: 10px;
+        display: block;
+        stroke: var(--mark-glyph);
+        stroke-width: 1.8;
+      }
+      .run-i.on {
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        font-weight: var(--weight-strong);
+        box-shadow: var(--shadow-tile);
+      }
+      .run-i .nm {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .run-i .st {
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        flex: 0 0 auto;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .run-i:hover {
+          background: var(--surface-hover);
+        }
+      }
+      .run-i:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-/* ============================== MAIN / WORKSPACE ========================= */
-main{display:flex;flex-direction:column;overflow:hidden;min-width:0;position:relative;height:100dvh}
+      /* ============================== MAIN / WORKSPACE ========================= */
+      main {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        min-width: 0;
+        position: relative;
+        height: 100dvh;
+      }
 
-/* session header — SHARED chrome (Home anchor lives here); rendered once for
+      /* session header — SHARED chrome (Home anchor lives here); rendered once for
    the whole workspace, never duplicated per pane (DW-8.2) */
-.shead{height:57px;border-bottom:1px solid var(--border-hairline);background:var(--surface-raised);
-  display:flex;align-items:center;gap:10px;padding:0 21px 0 25px;flex-shrink:0}
-.shead .back{width:44px;height:44px;border:1px solid var(--border-control);background:var(--surface-raised);
-  border-radius:var(--radius-control);display:grid;place-items:center;color:var(--ink-body);flex:0 0 auto;
-  cursor:pointer;user-select:none}
-.shead .back svg{width:18px;height:18px}
-@media (hover:hover) and (pointer:fine){.shead .back:hover{background:var(--surface-hover)}}
-.shead .back:active{background:var(--surface-active)}
-.shead .back:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-/* the nav burger is a mobile-only affordance; on desktop the sidebar is fixed
+      .shead {
+        height: 57px;
+        border-bottom: 1px solid var(--border-hairline);
+        background: var(--surface-raised);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 21px 0 25px;
+        flex-shrink: 0;
+      }
+      .shead .back {
+        width: 44px;
+        height: 44px;
+        border: 1px solid var(--border-control);
+        background: var(--surface-raised);
+        border-radius: var(--radius-control);
+        display: grid;
+        place-items: center;
+        color: var(--ink-body);
+        flex: 0 0 auto;
+        cursor: pointer;
+        user-select: none;
+      }
+      .shead .back svg {
+        width: 18px;
+        height: 18px;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .shead .back:hover {
+          background: var(--surface-hover);
+        }
+      }
+      .shead .back:active {
+        background: var(--surface-active);
+      }
+      .shead .back:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      /* the nav burger is a mobile-only affordance; on desktop the sidebar is fixed
    and visible, so the burger is hidden (not a stray 4px sliver in the header) */
-.burger{display:none}
-.shead .mark{width:17px;height:17px;border-radius:var(--radius-mark);flex:0 0 auto;display:grid;place-items:center;
-  background-image:var(--mark-overlay);background-color:var(--mark-1)}
-.shead .mark svg{width:10px;height:10px;display:block;stroke:var(--mark-glyph);stroke-width:1.8}
-.shead h1{font-size:var(--text-md);font-weight:var(--weight-strong);letter-spacing:var(--track-display);
-  white-space:nowrap}
-.shead .path{font-family:var(--font-mono);font-size:var(--text-sm);color:var(--ink-muted);white-space:nowrap}
-.shead .meta{margin-left:auto;display:flex;align-items:center;gap:14px;font-size:var(--text-sm);
-  color:var(--ink-muted);flex:0 0 auto}
-.shead .meta b{font-weight:var(--weight-strong);color:var(--ink-body);font-variant-numeric:tabular-nums}
+      .burger {
+        display: none;
+      }
+      .shead .mark {
+        width: 17px;
+        height: 17px;
+        border-radius: var(--radius-mark);
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        background-image: var(--mark-overlay);
+        background-color: var(--mark-1);
+      }
+      .shead .mark svg {
+        width: 10px;
+        height: 10px;
+        display: block;
+        stroke: var(--mark-glyph);
+        stroke-width: 1.8;
+      }
+      .shead h1 {
+        font-size: var(--text-md);
+        font-weight: var(--weight-strong);
+        letter-spacing: var(--track-display);
+        white-space: nowrap;
+      }
+      .shead .path {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        white-space: nowrap;
+      }
+      .shead .meta {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        flex: 0 0 auto;
+      }
+      .shead .meta b {
+        font-weight: var(--weight-strong);
+        color: var(--ink-body);
+        font-variant-numeric: tabular-nums;
+      }
 
-/* status pill — glyph-led, four functional hues + hueless idle */
-.pill{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 9px;border-radius:var(--radius-pill);
-  font-size:var(--text-sm);font-weight:var(--weight-strong);white-space:nowrap}
-.pill svg{width:9px;height:9px;flex:0 0 auto;display:block}
-.pill.live{background:var(--status-live-bg);color:var(--status-live-ink)}
-.pill.attn{background:var(--status-attn-bg);color:var(--status-attn-ink)}
-.pill.done{background:var(--status-done-bg);color:var(--status-done-ink)}
-.pill.fail{background:var(--status-fail-bg);color:var(--status-fail-ink)}
-.pill.idle{background:var(--status-idle-bg);color:var(--status-idle-ink);padding:0;font-weight:var(--weight-medium)}
+      /* status pill — glyph-led, four functional hues + hueless idle */
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 20px;
+        padding: 0 9px;
+        border-radius: var(--radius-pill);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        white-space: nowrap;
+      }
+      .pill svg {
+        width: 9px;
+        height: 9px;
+        flex: 0 0 auto;
+        display: block;
+      }
+      .pill.live {
+        background: var(--status-live-bg);
+        color: var(--status-live-ink);
+      }
+      .pill.attn {
+        background: var(--status-attn-bg);
+        color: var(--status-attn-ink);
+      }
+      .pill.done {
+        background: var(--status-done-bg);
+        color: var(--status-done-ink);
+      }
+      .pill.fail {
+        background: var(--status-fail-bg);
+        color: var(--status-fail-ink);
+      }
+      .pill.idle {
+        background: var(--status-idle-bg);
+        color: var(--status-idle-ink);
+        padding: 0;
+        font-weight: var(--weight-medium);
+      }
 
-/* ============================== TAB STRIP =================================
+      /* ============================== TAB STRIP =================================
    DW-8.1 / 8.9 — a single shared strip of OPEN tabs. DOM order is FIXED (the
    order the sessions opened); VISUAL order = `order: var(--tab-order)`, remapped
    by the data-order state entirely in CSS. The pane's scroll offset survives a
    reorder because no element is moved in the DOM. */
-.tabstrip{display:flex;align-items:stretch;gap:2px;padding:6px 21px 6px 25px;flex-shrink:0;
-  border-bottom:1px solid var(--border-hairline);background:var(--surface-raised);overflow-x:auto;
-  scrollbar-width:thin}
-.tab{position:relative;display:flex;align-items:center;gap:8px;flex:0 0 auto;
-  padding:0 10px;height:var(--w-tab-h);border:1px solid transparent;border-radius:var(--radius-control);
-  background:var(--surface-field);color:var(--ink-body);font-size:var(--text-base);
-  font-weight:var(--weight-medium);white-space:nowrap;order:var(--tab-order,0);cursor:pointer;
-  user-select:none;max-width:200px}
-/* default visual order = arrival order = DOM order, expressed as nth-child
+      .tabstrip {
+        display: flex;
+        align-items: stretch;
+        gap: 2px;
+        padding: 6px 21px 6px 25px;
+        flex-shrink: 0;
+        border-bottom: 1px solid var(--border-hairline);
+        background: var(--surface-raised);
+        overflow-x: auto;
+        scrollbar-width: thin;
+      }
+      .tab {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 auto;
+        padding: 0 10px;
+        height: var(--w-tab-h);
+        border: 1px solid transparent;
+        border-radius: var(--radius-control);
+        background: var(--surface-field);
+        color: var(--ink-body);
+        font-size: var(--text-base);
+        font-weight: var(--weight-medium);
+        white-space: nowrap;
+        order: var(--tab-order, 0);
+        cursor: pointer;
+        user-select: none;
+        max-width: 200px;
+      }
+      /* default visual order = arrival order = DOM order, expressed as nth-child
    custom properties. The reordered state above remaps these values entirely in
    CSS, so visual order changes while DOM order never does (DW-8.1). The inline
    style is deliberately NOT used: an inline custom property would outrank the
    [data-order] remap selector in the cascade and freeze the strip. */
-.tabstrip .tab:nth-child(1){--tab-order:1}
-.tabstrip .tab:nth-child(2){--tab-order:2}
-.tabstrip .tab:nth-child(3){--tab-order:3}
-.tabstrip .tab:nth-child(4){--tab-order:4}
-.tab .tm{width:14px;height:14px;border-radius:var(--radius-mark);flex:0 0 auto;display:grid;place-items:center;
-  background-image:var(--mark-overlay);background-color:var(--mark-1)}
-.tab .tm svg{width:8px;height:8px;display:block;stroke:var(--mark-glyph);stroke-width:1.8}
-.tab .tl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.tab .tclose{width:18px;height:18px;border:0;background:none;color:var(--ink-muted);border-radius:var(--radius-mark);
-  display:grid;place-items:center;cursor:pointer;flex:0 0 auto;padding:0;user-select:none}
-.tab .tclose svg{width:11px;height:11px;display:block}
-@media (hover:hover) and (pointer:fine){.tab .tclose:hover{background:var(--surface-active);color:var(--ink-strong)}}
-.tab .tclose:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-@media (hover:hover) and (pointer:fine){.tab:hover:not(.on){background:var(--surface-hover)}}
-.tab:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-/* ACTIVE tab — non-colour cues: raised surface + inset selection + weight.
+      .tabstrip .tab:nth-child(1) {
+        --tab-order: 1;
+      }
+      .tabstrip .tab:nth-child(2) {
+        --tab-order: 2;
+      }
+      .tabstrip .tab:nth-child(3) {
+        --tab-order: 3;
+      }
+      .tabstrip .tab:nth-child(4) {
+        --tab-order: 4;
+      }
+      .tab .tm {
+        width: 14px;
+        height: 14px;
+        border-radius: var(--radius-mark);
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        background-image: var(--mark-overlay);
+        background-color: var(--mark-1);
+      }
+      .tab .tm svg {
+        width: 8px;
+        height: 8px;
+        display: block;
+        stroke: var(--mark-glyph);
+        stroke-width: 1.8;
+      }
+      .tab .tl {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .tab .tclose {
+        width: 18px;
+        height: 18px;
+        border: 0;
+        background: none;
+        color: var(--ink-muted);
+        border-radius: var(--radius-mark);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        flex: 0 0 auto;
+        padding: 0;
+        user-select: none;
+      }
+      .tab .tclose svg {
+        width: 11px;
+        height: 11px;
+        display: block;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .tab .tclose:hover {
+          background: var(--surface-active);
+          color: var(--ink-strong);
+        }
+      }
+      .tab .tclose:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .tab:hover:not(.on) {
+          background: var(--surface-hover);
+        }
+      }
+      .tab:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      /* ACTIVE tab — non-colour cues: raised surface + inset selection + weight.
    Colour is not the sole channel (DW-8.2 / DESIGN.md Never #2). */
-.tab.on{background:var(--surface-raised);color:var(--ink-strong);font-weight:var(--weight-strong);
-  border-color:var(--border-hairline);box-shadow:var(--shadow-tile);border-bottom-color:transparent}
-/* DW-8.7 — reorder has a non-gesture equivalent: a visual grip is a hint; the
+      .tab.on {
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        font-weight: var(--weight-strong);
+        border-color: var(--border-hairline);
+        box-shadow: var(--shadow-tile);
+        border-bottom-color: transparent;
+      }
+      /* DW-8.7 — reorder has a non-gesture equivalent: a visual grip is a hint; the
    reorder is effected by an explicit affordance (the drag grip), and the pager
    plus every tab is a tappable control — nothing is gesture-only. */
-.tab .grip{width:14px;height:14px;flex:0 0 auto;color:var(--ink-muted);display:grid;place-items:center}
-.tab .grip svg{width:10px;height:10px;display:block}
-/* DW-8.7 non-gesture equivalents: the pager renders explicit prev/next buttons
+      .tab .grip {
+        width: 14px;
+        height: 14px;
+        flex: 0 0 auto;
+        color: var(--ink-muted);
+        display: grid;
+        place-items: center;
+      }
+      .tab .grip svg {
+        width: 10px;
+        height: 10px;
+        display: block;
+      }
+      /* DW-8.7 non-gesture equivalents: the pager renders explicit prev/next buttons
    so tab switching is never a swipe-only action. `order` places it AFTER the
    tabs (tabs carry --tab-order 1..4 from the reorder remap, so without an
    explicit order the pager would sort to 0 and render on the LEFT). */
-.pager{display:inline-flex;align-items:center;gap:2px;margin-left:auto;flex:0 0 auto;order:20}
-.pager button{width:var(--w-tab-h);height:var(--w-tab-h);border:1px solid var(--border-control);
-  border-radius:var(--radius-control);background:var(--surface-raised);color:var(--ink-body);
-  display:grid;place-items:center;cursor:pointer;user-select:none}
-.pager button svg{width:15px;height:15px;display:block}
-@media (hover:hover) and (pointer:fine){.pager button:hover{background:var(--surface-hover)}}
-.pager button:active{background:var(--surface-active)}
-.pager button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      .pager {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        margin-left: auto;
+        flex: 0 0 auto;
+        order: 20;
+      }
+      .pager button {
+        width: var(--w-tab-h);
+        height: var(--w-tab-h);
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-control);
+        background: var(--surface-raised);
+        color: var(--ink-body);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        user-select: none;
+      }
+      .pager button svg {
+        width: 15px;
+        height: 15px;
+        display: block;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .pager button:hover {
+          background: var(--surface-hover);
+        }
+      }
+      .pager button:active {
+        background: var(--surface-active);
+      }
+      .pager button:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-/* ---- data-order state remaps VISUAL order, not DOM order (DW-8.1) ---- */
-body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(1){--tab-order:3}
-body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(2){--tab-order:1}
-body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(3){--tab-order:4}
-body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(4){--tab-order:2}
+      /* ---- data-order state remaps VISUAL order, not DOM order (DW-8.1) ---- */
+      body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(1) {
+        --tab-order: 3;
+      }
+      body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(2) {
+        --tab-order: 1;
+      }
+      body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(3) {
+        --tab-order: 4;
+      }
+      body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(4) {
+        --tab-order: 2;
+      }
 
-/* ============================== SPLIT VIEW ===============================
+      /* ============================== SPLIT VIEW ===============================
    DW-8.2 — a paneforge-style two-pane layout, NOT canvas. Shared chrome is not
    duplicated: header, tab strip, composer each appear once. The ACTIVE pane is
    identified WITHOUT colour alone: a 2px graphite left rail (--brand-solid IS
    graphite, the non-status accent — not a hue), an "Active" word, aria-selected,
    and full ink weight; the inactive pane is dimmed. */
-.split{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:1fr 1fr;position:relative}
-/* the paneforge-style separator (drag to resize) — a grip gutter, not canvas */
-.pgutter{position:absolute;top:0;bottom:0;left:50%;width:6px;transform:translateX(-50%);z-index:5;
-  cursor:col-resize;display:grid;place-items:center}
-.pgutter .pgrip{width:2px;height:44px;border-radius:var(--radius-pill);background:var(--border-control)}
-/* DW-8.4 row 5 — the drag handle takes touch-action:none so iOS scrolls the
+      .split {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        position: relative;
+      }
+      /* the paneforge-style separator (drag to resize) — a grip gutter, not canvas */
+      .pgutter {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 50%;
+        width: 6px;
+        transform: translateX(-50%);
+        z-index: 5;
+        cursor: col-resize;
+        display: grid;
+        place-items: center;
+      }
+      .pgutter .pgrip {
+        width: 2px;
+        height: 44px;
+        border-radius: var(--radius-pill);
+        background: var(--border-control);
+      }
+      /* DW-8.4 row 5 — the drag handle takes touch-action:none so iOS scrolls the
    handle instead of dragging; and visual feedback on pointer-down. */
-.pgutter .pgrip:active{background:var(--ink-muted)}
-.ws-pane{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;position:relative}
-.ws-pane + .ws-pane{border-left:1px solid var(--border-hairline)}
-.pane-head{flex:0 0 auto;height:32px;display:flex;align-items:center;gap:8px;padding:0 14px;
-  font-size:var(--text-sm);color:var(--ink-muted);border-bottom:1px solid var(--border-hairline);
-  background:var(--surface-raised)}
-.pane-head .tm{width:14px;height:14px;border-radius:var(--radius-mark);flex:0 0 auto;display:grid;
-  place-items:center;background-image:var(--mark-overlay);background-color:var(--mark-1)}
-.pane-head .tm svg{width:8px;height:8px;display:block;stroke:var(--mark-glyph);stroke-width:1.8}
-.pane-head .pn{font-weight:var(--weight-medium);color:var(--ink-body);overflow:hidden;
-  text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.pane-head .ps{margin-left:auto;font-size:var(--text-xs);color:var(--ink-muted);flex:0 0 auto}
-/* THE ACTIVE-PANE NON-COLOUR CUE (DW-8.2) — a graphite left rail carried by an
+      .pgutter .pgrip:active {
+        background: var(--ink-muted);
+      }
+      .ws-pane {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        position: relative;
+      }
+      .ws-pane + .ws-pane {
+        border-left: 1px solid var(--border-hairline);
+      }
+      .pane-head {
+        flex: 0 0 auto;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 14px;
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        border-bottom: 1px solid var(--border-hairline);
+        background: var(--surface-raised);
+      }
+      .pane-head .tm {
+        width: 14px;
+        height: 14px;
+        border-radius: var(--radius-mark);
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        background-image: var(--mark-overlay);
+        background-color: var(--mark-1);
+      }
+      .pane-head .tm svg {
+        width: 8px;
+        height: 8px;
+        display: block;
+        stroke: var(--mark-glyph);
+        stroke-width: 1.8;
+      }
+      .pane-head .pn {
+        font-weight: var(--weight-medium);
+        color: var(--ink-body);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .pane-head .ps {
+        margin-left: auto;
+        font-size: var(--text-xs);
+        color: var(--ink-muted);
+        flex: 0 0 auto;
+      }
+      /* THE ACTIVE-PANE NON-COLOUR CUE (DW-8.2) — a graphite left rail carried by an
    element + the "Active" word + full ink weight + aria-selected. This specific
    cue is NOT colour-dependent: it is a positional rail + label + state. The
    INACTIVE pane recedes — its whole surface (header + transcript) is dimmed so
    the active pane reads clearly without hunting, in BOTH schemes. */
-.ws-pane .pane-rail{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--brand-solid);
-  opacity:0;transition:opacity var(--c-300) var(--e-toggle)}
-.ws-pane.active .pane-rail{opacity:1}
-.ws-pane.active .pane-head{color:var(--ink-strong)}
-.ws-pane.active .pane-head .pn{font-weight:var(--weight-strong);color:var(--ink-strong)}
-.ws-pane.active .pane-head .ps{color:var(--ink-body);font-weight:var(--weight-medium)}
-/* the visible "Active" word — a non-colour cue that a reader (and a screen
+      .ws-pane .pane-rail {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        background: var(--brand-solid);
+        opacity: 0;
+        transition: opacity var(--c-300) var(--e-toggle);
+      }
+      .ws-pane.active .pane-rail {
+        opacity: 1;
+      }
+      .ws-pane.active .pane-head {
+        color: var(--ink-strong);
+      }
+      .ws-pane.active .pane-head .pn {
+        font-weight: var(--weight-strong);
+        color: var(--ink-strong);
+      }
+      .ws-pane.active .pane-head .ps {
+        color: var(--ink-body);
+        font-weight: var(--weight-medium);
+      }
+      /* the visible "Active" word — a non-colour cue that a reader (and a screen
    reader) can identify the active pane without relying on hue (DW-8.2) */
-.ws-pane .pact{display:none;font-size:var(--text-xs);color:var(--ink-body);
-  font-weight:var(--weight-strong);text-transform:uppercase;letter-spacing:var(--track-caps);flex:0 0 auto}
-.ws-pane.active .pact{display:inline-flex}
-/* the inactive pane recedes: its whole surface (head + transcript) is dimmed */
-.ws-pane:not(.active) .pane-head{opacity:.78}
-.ws-pane:not(.active) .tr-pane{opacity:.7}
+      .ws-pane .pact {
+        display: none;
+        font-size: var(--text-xs);
+        color: var(--ink-body);
+        font-weight: var(--weight-strong);
+        text-transform: uppercase;
+        letter-spacing: var(--track-caps);
+        flex: 0 0 auto;
+      }
+      .ws-pane.active .pact {
+        display: inline-flex;
+      }
+      /* the inactive pane recedes: its whole surface (head + transcript) is dimmed */
+      .ws-pane:not(.active) .pane-head {
+        opacity: 0.78;
+      }
+      .ws-pane:not(.active) .tr-pane {
+        opacity: 0.7;
+      }
 
-/* the transcript pane — NOT pan-y (DW-8.5 deliberate deviation). It holds
+      /* the transcript pane — NOT pan-y (DW-8.5 deliberate deviation). It holds
    horizontally-scrolling code blocks / tool output (DW-8.8), so pan-y would
    forbid scrolling them at all. touch-action here is auto/manipulation only. */
-.tr-pane{flex:1 1 auto;overflow-y:auto;padding:14px 21px var(--w-transcript-b) 21px;min-height:0;
-  position:relative;touch-action:manipulation}
-.tr-pane h2,.who h3{font-size:var(--text-sm);font-weight:var(--weight-strong)}
-.who{display:flex;align-items:center;gap:7px;font-size:var(--text-sm);color:var(--ink-muted);
-  font-weight:var(--weight-medium);margin-bottom:4px}
-.who .dot{width:14px;height:14px;border-radius:var(--radius-mark);display:grid;place-items:center;flex:0 0 auto}
-.who .dot.u{background:var(--surface-sunken);color:var(--ink-body)}
-.who .dot.a{background:var(--brand-lo);color:var(--on-brand)}
-.who .dot svg{width:9px;height:9px}
-.role{font-size:var(--text-sm);font-weight:var(--weight-strong);color:var(--ink-strong)}
-.turn{margin-bottom:14px}
-.msg{font-size:var(--text-base);line-height:var(--leading-body);color:var(--ink-strong);max-width:74ch}
-.msg code{font-family:var(--font-mono);font-size:var(--text-sm);background:var(--surface-sunken);
-  padding:1px 4px;border-radius:var(--radius-mark)}
-.msg .vars{color:var(--ink-muted)}
+      .tr-pane {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding: 14px 21px var(--w-transcript-b) 21px;
+        min-height: 0;
+        position: relative;
+        touch-action: manipulation;
+      }
+      .tr-pane h2,
+      .who h3 {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+      }
+      .who {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        font-weight: var(--weight-medium);
+        margin-bottom: 4px;
+      }
+      .who .dot {
+        width: 14px;
+        height: 14px;
+        border-radius: var(--radius-mark);
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+      }
+      .who .dot.u {
+        background: var(--surface-sunken);
+        color: var(--ink-body);
+      }
+      .who .dot.a {
+        background: var(--brand-lo);
+        color: var(--on-brand);
+      }
+      .who .dot svg {
+        width: 9px;
+        height: 9px;
+      }
+      .role {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        color: var(--ink-strong);
+      }
+      .turn {
+        margin-bottom: 14px;
+      }
+      .msg {
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        color: var(--ink-strong);
+        max-width: 74ch;
+      }
+      .msg code {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        background: var(--surface-sunken);
+        padding: 1px 4px;
+        border-radius: var(--radius-mark);
+      }
+      .msg .vars {
+        color: var(--ink-muted);
+      }
 
-/* tool group: indent + rail, never a nested card */
-.tools{margin:6px 0 0 7px;padding-left:12px;background:var(--rail) left top/2px 100% no-repeat}
-.trow{height:var(--w-row);display:flex;align-items:center;gap:8px;font-size:var(--text-sm);color:var(--ink-body)}
-.trow .ic{width:15px;height:15px;flex:0 0 auto;display:grid;place-items:center;color:var(--ink-muted)}
-.trow .ic svg{width:15px;height:15px;display:block}
-.trow .tk{font-weight:var(--weight-strong);color:var(--ink-strong);font-size:var(--text-sm);flex:0 0 40px}
-.trow .arg{font-family:var(--font-mono);color:var(--ink-muted);overflow:hidden;text-overflow:ellipsis;
-  white-space:nowrap;min-width:0;flex:1 1 auto}
-.trow .t{margin-left:auto;color:var(--ink-muted);font-variant-numeric:tabular-nums;flex:0 0 auto}
-.trow .d{color:var(--data-ok);font-variant-numeric:tabular-nums;flex:0 0 auto}
-.trow .d.bad{color:var(--data-bad)}
+      /* tool group: indent + rail, never a nested card */
+      .tools {
+        margin: 6px 0 0 7px;
+        padding-left: 12px;
+        background: var(--rail) left top / 2px 100% no-repeat;
+      }
+      .trow {
+        height: var(--w-row);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: var(--text-sm);
+        color: var(--ink-body);
+      }
+      .trow .ic {
+        width: 15px;
+        height: 15px;
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        color: var(--ink-muted);
+      }
+      .trow .ic svg {
+        width: 15px;
+        height: 15px;
+        display: block;
+      }
+      .trow .tk {
+        font-weight: var(--weight-strong);
+        color: var(--ink-strong);
+        font-size: var(--text-sm);
+        flex: 0 0 40px;
+      }
+      .trow .arg {
+        font-family: var(--font-mono);
+        color: var(--ink-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .trow .t {
+        margin-left: auto;
+        color: var(--ink-muted);
+        font-variant-numeric: tabular-nums;
+        flex: 0 0 auto;
+      }
+      .trow .d {
+        color: var(--data-ok);
+        font-variant-numeric: tabular-nums;
+        flex: 0 0 auto;
+      }
+      .trow .d.bad {
+        color: var(--data-bad);
+      }
 
-/* ---- DW-8.5 / 8.8: a SIDEWAYS-SCROLLING DESCENDANT inside the transcript.
+      /* ---- DW-8.5 / 8.8: a SIDEWAYS-SCROLLING DESCENDANT inside the transcript.
    A horizontal swipe begun here never changes the tab (DW-8.8) because the pane
    does not claim horizontal movement (touch-action is not pan-y) and the tab
    switch is an explicit control, never an implicit pan of the pane. */
-.code-scroll{overflow-x:auto;overflow-y:hidden;border:1px solid var(--border-hairline);
-  border-radius:var(--radius-well);background:var(--surface-sunken);margin:6px 0;
-  -webkit-overflow-scrolling:touch}
-.code-scroll pre{font-family:var(--font-mono);font-size:var(--text-sm);line-height:var(--leading-ui);
-  color:var(--ink-body);padding:10px 12px;white-space:pre;width:max-content;min-width:100%}
+      .code-scroll {
+        overflow-x: auto;
+        overflow-y: hidden;
+        border: 1px solid var(--border-hairline);
+        border-radius: var(--radius-well);
+        background: var(--surface-sunken);
+        margin: 6px 0;
+        -webkit-overflow-scrolling: touch;
+      }
+      .code-scroll pre {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        line-height: var(--leading-ui);
+        color: var(--ink-body);
+        padding: 10px 12px;
+        white-space: pre;
+        width: max-content;
+        min-width: 100%;
+      }
 
-/* ============================ HUMAN-IN-THE-LOOP =========================== */
-.hitl{border:1px solid var(--border-control);border-radius:var(--radius-panel);
-  background:var(--surface-raised);margin:10px 7px 0 7px;padding:var(--w-card-pad);box-shadow:var(--shadow-hairline)}
-.hitl h2{font-size:var(--text-base);font-weight:var(--weight-strong);display:flex;align-items:center;
-  gap:8px;margin-bottom:7px}
-.hitl .lede{font-size:var(--text-base);line-height:var(--leading-body);color:var(--ink-body);margin-bottom:9px;
-  max-width:72ch}
-.cmd{font-family:var(--font-mono);font-size:var(--text-sm);color:var(--ink-strong);
-  border-left:2px solid var(--border-divider);padding:3px 0 3px 10px;margin-bottom:8px}
-.cmd .eff{display:block;font-family:var(--font-body);font-size:var(--text-sm);color:var(--ink-muted);margin-top:3px}
-.scope{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:var(--text-sm);margin-bottom:4px}
-.scope dt{color:var(--ink-muted)}
-.scope dd{color:var(--ink-body);min-width:0;overflow-wrap:anywhere}
-.scope dd .mono{word-break:break-all;font-size:var(--text-xs)}
-.scope dd .no{color:var(--ink-muted)}
-.choice{display:flex;gap:9px;margin-top:9px}
-.choice button{flex:1 1 0;min-width:0;height:var(--w-btn-h);padding:0 12px;border-radius:var(--radius-control);
-  display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font-body);
-  font-size:var(--text-base);font-weight:var(--weight-strong);line-height:var(--leading-ui);cursor:pointer;
-  background:var(--surface-raised);color:var(--ink-strong);border:1px solid var(--border-control);
-  user-select:none}
-.choice button svg{width:12px;height:12px;flex:0 0 auto}
-.choice button.grant{color:var(--ink-strong)}
-.choice button.refuse{color:var(--ink-body)}
-@media (hover:hover) and (pointer:fine){
-  .choice button:hover{background-color:var(--surface-hover)}
-  .choice button:active{background-color:var(--surface-active)}
-}
-.choice button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      /* ============================ HUMAN-IN-THE-LOOP =========================== */
+      .hitl {
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-panel);
+        background: var(--surface-raised);
+        margin: 10px 7px 0 7px;
+        padding: var(--w-card-pad);
+        box-shadow: var(--shadow-hairline);
+      }
+      .hitl h2 {
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 7px;
+      }
+      .hitl .lede {
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        color: var(--ink-body);
+        margin-bottom: 9px;
+        max-width: 72ch;
+      }
+      .cmd {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        color: var(--ink-strong);
+        border-left: 2px solid var(--border-divider);
+        padding: 3px 0 3px 10px;
+        margin-bottom: 8px;
+      }
+      .cmd .eff {
+        display: block;
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        margin-top: 3px;
+      }
+      .scope {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 3px 14px;
+        font-size: var(--text-sm);
+        margin-bottom: 4px;
+      }
+      .scope dt {
+        color: var(--ink-muted);
+      }
+      .scope dd {
+        color: var(--ink-body);
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .scope dd .mono {
+        word-break: break-all;
+        font-size: var(--text-xs);
+      }
+      .scope dd .no {
+        color: var(--ink-muted);
+      }
+      .choice {
+        display: flex;
+        gap: 9px;
+        margin-top: 9px;
+      }
+      .choice button {
+        flex: 1 1 0;
+        min-width: 0;
+        height: var(--w-btn-h);
+        padding: 0 12px;
+        border-radius: var(--radius-control);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+        line-height: var(--leading-ui);
+        cursor: pointer;
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        border: 1px solid var(--border-control);
+        user-select: none;
+      }
+      .choice button svg {
+        width: 12px;
+        height: 12px;
+        flex: 0 0 auto;
+      }
+      .choice button.grant {
+        color: var(--ink-strong);
+      }
+      .choice button.refuse {
+        color: var(--ink-body);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .choice button:hover {
+          background-color: var(--surface-hover);
+        }
+        .choice button:active {
+          background-color: var(--surface-active);
+        }
+      }
+      .choice button:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-/* ============================== COMPOSER / STOP =========================== */
-/* The floating composer — the fixed anchors of DW-8.3 (Home, composer input,
+      /* ============================== COMPOSER / STOP =========================== */
+      /* The floating composer — the fixed anchors of DW-8.3 (Home, composer input,
    Stop) live in chrome that does not move between ws states. */
-.fade{position:absolute;left:0;right:0;bottom:0;height:96px;pointer-events:none;z-index:19;
-  background:linear-gradient(to top,var(--surface-field) 22%,oklch(from var(--surface-field) l c h / 0))}
-.composer{position:absolute;left:50%;transform:translateX(-50%);z-index:20;
-  bottom:calc(16px + env(safe-area-inset-bottom));width:min(720px,calc(100% - 50px));pointer-events:none}
-.composer > *{pointer-events:auto}
-.cin{border:1px solid var(--border-control);background:oklch(from var(--surface-raised) l c h / 0.82);
-  -webkit-backdrop-filter:blur(16px) saturate(1.6);backdrop-filter:blur(16px) saturate(1.6);
-  border-radius:var(--radius-shell);padding:5px 5px 5px 15px;display:flex;align-items:center;gap:10px;
-  box-shadow:var(--shadow-lifted)}
-.cin textarea{flex:1 1 auto;border:0;outline:0;background:transparent;resize:none;font-family:var(--font-body);
-  font-size:var(--w-input-fs);line-height:var(--leading-ui);color:var(--ink-strong);height:34px;
-  padding:7px 0 0;min-width:0}
-.cin textarea::placeholder{color:var(--ink-muted)}
-/* the STOP anchor — reaches its maximal target under coarse pointer and stays put */
-.stop{width:44px;height:44px;min-width:44px;min-height:44px;border:0;border-radius:var(--radius-pill);flex:0 0 auto;
-  background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);
-  color:var(--on-brand);display:grid;place-items:center;cursor:pointer;user-select:none}
-.stop svg{width:15px;height:15px}
-.stop:active{filter:brightness(0.94)}
-.stop:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-.aff-row{display:grid;grid-template-rows:0fr;opacity:0;transform:translateY(-4px);pointer-events:none;
-  flex:0 1 0%;min-width:0;overflow:hidden;   /* collapsed = takes no horizontal room */
-  transition:opacity var(--c-300) var(--e-in),transform var(--c-300) var(--e-in)}
-.composer:focus-within .aff-row{grid-template-rows:1fr;opacity:1;transform:none;pointer-events:auto}
-.aff-row > .inner{overflow:hidden;display:flex;align-items:center;gap:12px;font-size:var(--text-sm);
-  color:var(--ink-muted);padding-top:8px;flex-wrap:wrap;row-gap:6px}
-.aff-row .hint{margin-left:auto}
+      .fade {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 96px;
+        pointer-events: none;
+        z-index: 19;
+        background: linear-gradient(
+          to top,
+          var(--surface-field) 22%,
+          oklch(from var(--surface-field) l c h / 0)
+        );
+      }
+      .composer {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 20;
+        bottom: calc(16px + env(safe-area-inset-bottom));
+        width: min(720px, calc(100% - 50px));
+        pointer-events: none;
+      }
+      .composer > * {
+        pointer-events: auto;
+      }
+      .cin {
+        border: 1px solid var(--border-control);
+        background: oklch(from var(--surface-raised) l c h / 0.82);
+        -webkit-backdrop-filter: blur(16px) saturate(1.6);
+        backdrop-filter: blur(16px) saturate(1.6);
+        border-radius: var(--radius-shell);
+        padding: 5px 5px 5px 15px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        box-shadow: var(--shadow-lifted);
+      }
+      .cin textarea {
+        flex: 1 1 auto;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        resize: none;
+        font-family: var(--font-body);
+        font-size: var(--w-input-fs);
+        line-height: var(--leading-ui);
+        color: var(--ink-strong);
+        height: 34px;
+        padding: 7px 0 0;
+        min-width: 0;
+      }
+      .cin textarea::placeholder {
+        color: var(--ink-muted);
+      }
+      /* the STOP anchor — reaches its maximal target under coarse pointer and stays put */
+      .stop {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+        border: 0;
+        border-radius: var(--radius-pill);
+        flex: 0 0 auto;
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        user-select: none;
+      }
+      .stop svg {
+        width: 15px;
+        height: 15px;
+      }
+      .stop:active {
+        filter: brightness(0.94);
+      }
+      .stop:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      .aff-row {
+        display: grid;
+        grid-template-rows: 0fr;
+        opacity: 0;
+        transform: translateY(-4px);
+        pointer-events: none;
+        flex: 0 1 0%;
+        min-width: 0;
+        overflow: hidden; /* collapsed = takes no horizontal room */
+        transition:
+          opacity var(--c-300) var(--e-in),
+          transform var(--c-300) var(--e-in);
+      }
+      .composer:focus-within .aff-row {
+        grid-template-rows: 1fr;
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+      }
+      .aff-row > .inner {
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        padding-top: 8px;
+        flex-wrap: wrap;
+        row-gap: 6px;
+      }
+      .aff-row .hint {
+        margin-left: auto;
+      }
 
-/* ---- ws state switcher (screenshot / gate affordance, not the product) ----
+      /* ---- ws state switcher (screenshot / gate affordance, not the product) ----
    The three ws states — split (two panes) · tabbed (single pane, tab switch) ·
    reordered (tab reorder via CSS order) — only swap the transcript panes and the
    strip's active highlight. The fixed anchors (Home, composer, Stop) live in
@@ -416,15 +1221,26 @@ body[data-ws] .tabstrip[data-order="reordered"] .tab:nth-child(4){--tab-order:2}
    Default (no data-ws) = SPLIT = the two-pane grid. The single-pane states hide
    the split grid and reveal the lone pane; the reorder state additionally
    remaps the tab strip's visual order (see the data-order rules above). */
-.ws-tabbed{flex:1 1 auto;min-height:0;overflow:hidden;display:none}
-.ws-tabbed .ws-pane{height:100%}
-body[data-ws="tabbed"] .split,
-body[data-ws="reordered"] .split{display:none}
-body[data-ws="tabbed"] .ws-tabbed,
-body[data-ws="reordered"] .ws-tabbed{display:block}
+      .ws-tabbed {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+        display: none;
+      }
+      .ws-tabbed .ws-pane {
+        height: 100%;
+      }
+      body[data-ws="tabbed"] .split,
+      body[data-ws="reordered"] .split {
+        display: none;
+      }
+      body[data-ws="tabbed"] .ws-tabbed,
+      body[data-ws="reordered"] .ws-tabbed {
+        display: block;
+      }
 
-/* ---- flux toolbar -------------------------------------------------------- */
-/* NOTE: this segmented control is a GATE / SCREENSHOT affordance (selecting
+      /* ---- flux toolbar -------------------------------------------------------- */
+      /* NOTE: this segmented control is a GATE / SCREENSHOT affordance (selecting
    the split / tabbed / reordered ws states), NOT product UI. It must never
    overlap a FIXED chrome band (the header or the composer):
    - wide: docks BOTTOM-right, clear of the bottom-centre composer (which is
@@ -433,32 +1249,66 @@ body[data-ws="reordered"] .ws-tabbed{display:block}
    - narrow: the composer docks full-width flush to the bottom, so the toggle
      floats bottom-centre JUST ABOVE it (clear of both header and composer).
    On both it floats over scrollable content only, like a floating control. */
-.wsbar{position:fixed;bottom:14px;right:12px;z-index:110;display:flex;gap:4px;
-  align-items:center;padding:4px;border:1px solid var(--border-control);background:var(--surface-raised);
-  border-radius:var(--radius-control);box-shadow:var(--shadow-lifted)}
-.wsbar button{height:30px;padding:0 10px;border:1px solid transparent;border-radius:var(--radius-control);
-  background:none;color:var(--ink-muted);font-family:var(--font-body);font-size:var(--text-sm);cursor:pointer}
-.wsbar button.on{background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);
-  color:var(--on-brand);font-weight:var(--weight-strong)}
-@media (max-width:900px){
-  /* the header's title/status fill the top on a phone and the composer docks
+      .wsbar {
+        position: fixed;
+        bottom: 14px;
+        right: 12px;
+        z-index: 110;
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        padding: 4px;
+        border: 1px solid var(--border-control);
+        background: var(--surface-raised);
+        border-radius: var(--radius-control);
+        box-shadow: var(--shadow-lifted);
+      }
+      .wsbar button {
+        height: 30px;
+        padding: 0 10px;
+        border: 1px solid transparent;
+        border-radius: var(--radius-control);
+        background: none;
+        color: var(--ink-muted);
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        cursor: pointer;
+      }
+      .wsbar button.on {
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        font-weight: var(--weight-strong);
+      }
+      @media (max-width: 900px) {
+        /* the header's title/status fill the top on a phone and the composer docks
      full-width flush to the bottom, so float the toggle bottom-centre JUST
      ABOVE the composer (its top is ~66px up + safe-area; 78px clears it). */
-  .wsbar{bottom:calc(78px + env(safe-area-inset-bottom));left:50%;
-    right:auto;transform:translateX(-50%)}
-}
+        .wsbar {
+          bottom: calc(78px + env(safe-area-inset-bottom));
+          left: 50%;
+          right: auto;
+          transform: translateX(-50%);
+        }
+      }
 
-/* ============================== MOTION =================================== */
-/* Durations map to the 100 / 300 / 500ms tiers ONLY. Easings are limited to the
+      /* ============================== MOTION =================================== */
+      /* Durations map to the 100 / 300 / 500ms tiers ONLY. Easings are limited to the
    three canonical curves. ONLY transform and opacity animate (the paneforge-style
    continuous pane resize is a pointer-driven LAYOUT change, not an animation —
    DW-4.7 carve-out). Reduced-motion precedes. */
-@media (prefers-reduced-motion: reduce){
-  *,*::before,*::after{transition-duration:1ms !important;animation-duration:1ms !important;
-    animation-iteration-count:1 !important}
-}
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition-duration: 1ms !important;
+          animation-duration: 1ms !important;
+          animation-iteration-count: 1 !important;
+        }
+      }
 
-/* ================== COMPACT IS FINE-POINTER ONLY (DW-4.10) =================
+      /* ================== COMPACT IS FINE-POINTER ONLY (DW-4.10) =================
    Under a coarse pointer every control on this compact surface relaxes to
    >=44x44; text inputs stay >=16px. Targets are keyed to POINTER TYPE, not width,
    so a touch tablet at any width gets the full target.
@@ -474,60 +1324,168 @@ body[data-ws="reordered"] .ws-tabbed{display:block}
      8 long-press text ......... user-select: none on controls
      9 status bar colour ....... two theme-color metas (light + dark)
    ========================================================================== */
-@media (pointer:coarse){
-  body{grid-template-columns:1fr}
-  aside{position:fixed;inset:0 auto 0 0;width:284px;z-index:40;transform:translateX(-100%);
-    box-shadow:var(--shadow-drawer);transition:transform var(--c-300) var(--e-out)}
-  .nav-i,.run-i{min-height:44px}
-  .tab{height:44px;min-height:44px}
-  .pager button{width:44px;height:44px}
-  .trow{min-height:44px}
-  .choice button{min-height:44px}
-  .tab .tclose{width:44px;height:44px;min-width:44px;min-height:44px}
-  .shead .back,.brand .home{min-width:44px;min-height:44px}
-  .stop{min-width:44px;min-height:44px}
-  .cin textarea{font-size:16px}
-  .composer{width:calc(100% - 24px)}
-  .code-scroll pre{font-size:16px}
-  /* full tap feedback on every pointer-down (row 5) */
-  .tab:active,.pager button:active,.shead .back:active,.brand .home:active{background:var(--surface-active)}
-}
-@media (max-width:900px){
-  body{grid-template-columns:1fr}
-  aside{position:fixed;inset:0 auto 0 0;width:284px;z-index:40;transform:translateX(-100%);
-    box-shadow:var(--shadow-drawer);transition:transform var(--c-300) var(--e-out)}
-  .nav-open aside{transform:none}
-  .burger{display:grid;place-items:center;width:44px;height:44px;flex:0 0 auto;border-radius:var(--radius-control);
-    color:var(--ink-body);background:none;border:0;cursor:pointer;user-select:none}
-  .burger svg{width:19px;height:19px}
-  .shead{padding-left:16px;padding-right:16px}
-  .shead .meta{display:none}
-  .tabstrip{padding-left:16px;padding-right:16px}
-  /* the composer STAYS A FIXED ANCHOR on a phone: it docks flush to the bottom
+      @media (pointer: coarse) {
+        body {
+          grid-template-columns: 1fr;
+        }
+        aside {
+          position: fixed;
+          inset: 0 auto 0 0;
+          width: 284px;
+          z-index: 40;
+          transform: translateX(-100%);
+          box-shadow: var(--shadow-drawer);
+          transition: transform var(--c-300) var(--e-out);
+        }
+        .nav-i,
+        .run-i {
+          min-height: 44px;
+        }
+        .tab {
+          height: 44px;
+          min-height: 44px;
+        }
+        .pager button {
+          width: 44px;
+          height: 44px;
+        }
+        .trow {
+          min-height: 44px;
+        }
+        .choice button {
+          min-height: 44px;
+        }
+        .tab .tclose {
+          width: 44px;
+          height: 44px;
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .shead .back,
+        .brand .home {
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .stop {
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .cin textarea {
+          font-size: 16px;
+        }
+        .composer {
+          width: calc(100% - 24px);
+        }
+        .code-scroll pre {
+          font-size: 16px;
+        }
+        /* full tap feedback on every pointer-down (row 5) */
+        .tab:active,
+        .pager button:active,
+        .shead .back:active,
+        .brand .home:active {
+          background: var(--surface-active);
+        }
+      }
+      @media (max-width: 900px) {
+        body {
+          grid-template-columns: 1fr;
+        }
+        aside {
+          position: fixed;
+          inset: 0 auto 0 0;
+          width: 284px;
+          z-index: 40;
+          transform: translateX(-100%);
+          box-shadow: var(--shadow-drawer);
+          transition: transform var(--c-300) var(--e-out);
+        }
+        .nav-open aside {
+          transform: none;
+        }
+        .burger {
+          display: grid;
+          place-items: center;
+          width: 44px;
+          height: 44px;
+          flex: 0 0 auto;
+          border-radius: var(--radius-control);
+          color: var(--ink-body);
+          background: none;
+          border: 0;
+          cursor: pointer;
+          user-select: none;
+        }
+        .burger svg {
+          width: 19px;
+          height: 19px;
+        }
+        .shead {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+        .shead .meta {
+          display: none;
+        }
+        .tabstrip {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+        /* the composer STAYS A FIXED ANCHOR on a phone: it docks flush to the bottom
      of the viewport (above the safe-area), so Home / composer / Stop hold
      identical positions in every ws state (DW-8.3). */
-  .composer{position:fixed;left:12px;right:12px;width:auto;transform:none;
-    bottom:calc(10px + env(safe-area-inset-bottom));z-index:21}
-  .tr-pane{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
-  .scope{grid-template-columns:1fr;gap:1px 0}
-  .scope dt{margin-top:7px}
-  /* a phone renders ONE pane at a time (drill-down stack degrades the split,
+        .composer {
+          position: fixed;
+          left: 12px;
+          right: 12px;
+          width: auto;
+          transform: none;
+          bottom: calc(10px + env(safe-area-inset-bottom));
+          z-index: 21;
+        }
+        .tr-pane {
+          padding-bottom: calc(84px + env(safe-area-inset-bottom));
+        }
+        .scope {
+          grid-template-columns: 1fr;
+          gap: 1px 0;
+        }
+        .scope dt {
+          margin-top: 7px;
+        }
+        /* a phone renders ONE pane at a time (drill-down stack degrades the split,
      per surfaces.md — split-view multitasking is a tablet/desktop pattern) */
-  .split{grid-template-columns:1fr;display:flex;flex-direction:column}
-  .pgutter{display:none}
-  /* only the ACTIVE pane is shown on a phone; the background pane is reached by
+        .split {
+          grid-template-columns: 1fr;
+          display: flex;
+          flex-direction: column;
+        }
+        .pgutter {
+          display: none;
+        }
+        /* only the ACTIVE pane is shown on a phone; the background pane is reached by
      switching (pager / tap), never by peeking beside the active one */
-  .split .ws-pane:last-child{display:none}
-  body[data-ws="split"] .ws-pane:first-child{display:flex}
-  .split .ws-pane:first-child{display:flex}
-  /* DW-8.4 row 3 — a FULL-BLEED block fills the visible viewport despite the
+        .split .ws-pane:last-child {
+          display: none;
+        }
+        body[data-ws="split"] .ws-pane:first-child {
+          display: flex;
+        }
+        .split .ws-pane:first-child {
+          display: flex;
+        }
+        /* DW-8.4 row 3 — a FULL-BLEED block fills the visible viewport despite the
      mobile browser chrome (safe-area + toolbar), so it takes 100svh. The
      single-pane full-bleed transcript is exactly that block. */
-  .ws-tabbed .ws-pane{min-height:100svh}
-  .split .ws-pane:first-child{min-height:100svh}
-}
+        .ws-tabbed .ws-pane {
+          min-height: 100svh;
+        }
+        .split .ws-pane:first-child {
+          min-height: 100svh;
+        }
+      }
 
-/* ============================================================================
+      /* ============================================================================
    DESIGN-DELIVERABLE NOTES (not rendered) — part of the Phase 8 spec.
 
    ---- GESTURE OWNERSHIP (DW-8.7 / 8.8 / 8.9) -------------------------------
@@ -553,231 +1511,597 @@ body[data-ws="reordered"] .ws-tabbed{display:block}
    pan-y would forbid the browser from scrolling at all. Ownership stays with
    "what actually moved". Recorded here so a later reviewer does not reverse it.
    ============================================================================ */
-</style></head><body aria-label="Workspace">
+    </style>
+  </head>
+  <body aria-label="Workspace">
+    <aside aria-label="Fleet navigation">
+      <div class="brand">
+        <div class="logo">
+          <svg
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.7"
+            viewBox="0 0 24 24"
+          >
+            <path d="M4 4h16v16H4z" />
+            <path d="M4 4h8v16H4z" fill="currentColor" />
+          </svg>
+        </div>
+        <b>Whiffle</b>
+        <button aria-label="Home (fleet board)" class="home" type="button">
+          {{solar:widget-5}}
+        </button>
+      </div>
 
-<aside aria-label="Fleet navigation">
-  <div class="brand"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></div><b>Whiffle</b>
-    <button type="button" class="home" aria-label="Home (fleet board)">{{solar:widget-5}}</button>
-  </div>
+      <div class="sec">Fleet</div>
+      <nav>
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:widget-5}}</span>Fleet<span class="cnt"
+            >6</span
+          ></a
+        >
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:tuning-4}}</span>Tools</a
+        >
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:checklist-minimalistic}}</span>Rules</a
+        >
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:chart-2}}</span>Usage</a
+        >
+      </nav>
 
-  <div class="sec">Fleet</div>
-  <nav>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:widget-5}}</span>Fleet<span class="cnt">6</span></a>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:tuning-4}}</span>Tools</a>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:checklist-minimalistic}}</span>Rules</a>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:chart-2}}</span>Usage</a>
-  </nav>
-
-  <div class="sec">Running now</div>
-  <div class="runs">
-    <!-- open tabs live in the strip below; these sidebar rows are the SESSIONS
+      <div class="sec">Running now</div>
+      <div class="runs">
+        <!-- open tabs live in the strip below; these sidebar rows are the SESSIONS
          THAT EXIST but are NOT open, to prove the gesture reachable set is the
          open strip, never every session (DW-8.9). -->
-    <a class="run-i" href="#session"><span class="mark" style="background-color:var(--mark-2)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg></span><span class="nm">table system spike</span><span class="st">2</span></a>
-    <a class="run-i" href="#session"><span class="mark" style="background-color:var(--mark-5)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span><span class="nm">flaky ws reconnect</span></a>
-  </div>
+        <a class="run-i" href="#session"
+          ><span class="mark" style="background-color:var(--mark-2)"
+            ><svg
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M9 8l-4 4 4 4M15 8l4 4-4 4" />
+            </svg></span
+          ><span class="nm">table system spike</span
+          ><span class="st">2</span></a
+        >
+        <a class="run-i" href="#session"
+          ><span class="mark" style="background-color:var(--mark-5)"
+            ><svg
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+            </svg></span
+          ><span class="nm">flaky ws reconnect</span></a
+        >
+      </div>
 
-  <div class="quota" style="margin-top:auto;margin:auto 10px 12px;background:var(--surface-field);border:1px solid var(--border-hairline);border-radius:var(--radius-panel);padding:13px">
-    <div class="n" style="font-size:var(--text-md);font-weight:var(--weight-strong);display:flex;align-items:center;gap:6px">{{solar:bolt}}18.40 / 50.00</div>
-    <div class="s" style="font-size:var(--text-sm);color:var(--ink-muted);margin:2px 0 8px">Spend today across the fleet</div>
-    <button type="button" style="width:100%;height:var(--w-btn-h);border:0;border-radius:var(--radius-control);background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);color:var(--on-brand);font-family:var(--font-body);font-size:var(--text-base);font-weight:var(--weight-strong);cursor:pointer">View usage</button>
-  </div>
-</aside>
+      <div
+        class="quota"
+        style="margin-top:auto;margin:auto 10px 12px;background:var(--surface-field);border:1px solid var(--border-hairline);border-radius:var(--radius-panel);padding:13px"
+      >
+        <div
+          class="n"
+          style="font-size:var(--text-md);font-weight:var(--weight-strong);display:flex;align-items:center;gap:6px"
+        >
+          {{solar:bolt}}18.40 / 50.00
+        </div>
+        <div
+          class="s"
+          style="font-size:var(--text-sm);color:var(--ink-muted);margin:2px 0 8px"
+        >
+          Spend today across the fleet
+        </div>
+        <button
+          style="width:100%;height:var(--w-btn-h);border:0;border-radius:var(--radius-control);background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);color:var(--on-brand);font-family:var(--font-body);font-size:var(--text-base);font-weight:var(--weight-strong);cursor:pointer"
+          type="button"
+        >
+          View usage
+        </button>
+      </div>
+    </aside>
 
-<main id="workspace">
-  <header class="shead">
-    <button type="button" class="burger" aria-label="Open navigation">{{solar:hamburger-menu}}</button>
-    <button type="button" class="back" aria-label="Home (back to fleet board)" id="ws-home">{{solar:alt-arrow-left}}</button>
-    <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span>
-    <h1>wire delegate row outcomes</h1>
-    <span class="path">nixbox : ~/whiffle</span>
-    <span class="pill fs-pill live">
-      <svg class="g-live" viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="6" r="3.1"/></svg>
-      <span class="fs-label">running</span>
-    </span>
-    <div class="meta"><span>Claude Code</span><span><b>3</b> tabs</span><span><b>$4.12</b></span></div>
-  </header>
+    <main id="workspace">
+      <header class="shead">
+        <button aria-label="Open navigation" class="burger" type="button">
+          {{solar:hamburger-menu}}
+        </button>
+        <button
+          aria-label="Home (back to fleet board)"
+          class="back"
+          id="ws-home"
+          type="button"
+        >
+          {{solar:alt-arrow-left}}
+        </button>
+        <span class="mark"
+          ><svg
+            fill="none"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            viewBox="0 0 24 24"
+          >
+            <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+          </svg></span
+        >
+        <h1>wire delegate row outcomes</h1>
+        <span class="path">nixbox : ~/whiffle</span>
+        <span class="pill fs-pill live">
+          <svg class="g-live" fill="currentColor" viewBox="0 0 12 12">
+            <circle cx="6" cy="6" r="3.1" />
+          </svg>
+          <span class="fs-label">running</span>
+        </span>
+        <div class="meta">
+          <span>Claude Code</span><span><b>3</b> tabs</span
+          ><span><b>$4.12</b></span>
+        </div>
+      </header>
 
-  <!-- ================= TAB STRIP (DW-8.1 / 8.9) ================= -->
-  <!-- data-open-tabs enumerates the OPEN sessions = the gesture reachable set.
+      <!-- ================= TAB STRIP (DW-8.1 / 8.9) ================= -->
+      <!-- data-open-tabs enumerates the OPEN sessions = the gesture reachable set.
        The sidebar "Running now" shows sessions that EXIST but are not open here. -->
-  <div class="tabstrip" role="tablist" aria-label="Open sessions" data-order="default" data-open-tabs="sess-a,sess-b,sess-c,sess-d">
-    <div role="tab" tabindex="0" id="tab-a" class="tab on" aria-selected="true">
-      <span class="grip">{{solar:tuning-2}}</span>
-      <span class="tm"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span>
-      <span class="tl">wire delegate row outc…</span>
-      <button type="button" class="tclose" aria-label="Close tab wire delegate row outcomes">{{solar:close-circle}}</button>
-    </div>
-    <div role="tab" tabindex="0" id="tab-b" class="tab" aria-selected="false">
-      <span class="grip">{{solar:tuning-2}}</span>
-      <span class="tm"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg></span>
-      <span class="tl">landing copy pass</span>
-      <button type="button" class="tclose" aria-label="Close tab landing copy pass">{{solar:close-circle}}</button>
-    </div>
-    <div role="tab" tabindex="0" id="tab-c" class="tab" aria-selected="false">
-      <span class="grip">{{solar:tuning-2}}</span>
-      <span class="tm"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5h14M9 7.5v9M15 7.5v6.5a2.5 2.5 0 0 0 4 0"/></svg></span>
-      <span class="tl">table system spike</span>
-      <button type="button" class="tclose" aria-label="Close tab table system spike">{{solar:close-circle}}</button>
-    </div>
-    <div role="tab" tabindex="0" id="tab-d" class="tab" aria-selected="false">
-      <span class="grip">{{solar:tuning-2}}</span>
-      <span class="tm"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span>
-      <span class="tl">flaky ws reconnect</span>
-      <button type="button" class="tclose" aria-label="Close tab flaky ws reconnect">{{solar:close-circle}}</button>
-    </div>
-    <!-- DW-8.7: the pager is the NON-GESTURE equivalent of a swipe — explicit
+      <div
+        aria-label="Open sessions"
+        class="tabstrip"
+        data-open-tabs="sess-a,sess-b,sess-c,sess-d"
+        data-order="default"
+        role="tablist"
+      >
+        <div
+          aria-selected="true"
+          class="tab on"
+          id="tab-a"
+          role="tab"
+          tabindex="0"
+        >
+          <span class="grip">{{solar:tuning-2}}</span>
+          <span class="tm"
+            ><svg
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+            </svg></span
+          >
+          <span class="tl">wire delegate row outc…</span>
+          <button
+            aria-label="Close tab wire delegate row outcomes"
+            class="tclose"
+            type="button"
+          >
+            {{solar:close-circle}}
+          </button>
+        </div>
+        <div
+          aria-selected="false"
+          class="tab"
+          id="tab-b"
+          role="tab"
+          tabindex="0"
+        >
+          <span class="grip">{{solar:tuning-2}}</span>
+          <span class="tm"
+            ><svg
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M9 8l-4 4 4 4M15 8l4 4-4 4" />
+            </svg></span
+          >
+          <span class="tl">landing copy pass</span>
+          <button
+            aria-label="Close tab landing copy pass"
+            class="tclose"
+            type="button"
+          >
+            {{solar:close-circle}}
+          </button>
+        </div>
+        <div
+          aria-selected="false"
+          class="tab"
+          id="tab-c"
+          role="tab"
+          tabindex="0"
+        >
+          <span class="grip">{{solar:tuning-2}}</span>
+          <span class="tm"
+            ><svg
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M5 7.5h14M9 7.5v9M15 7.5v6.5a2.5 2.5 0 0 0 4 0" />
+            </svg></span
+          >
+          <span class="tl">table system spike</span>
+          <button
+            aria-label="Close tab table system spike"
+            class="tclose"
+            type="button"
+          >
+            {{solar:close-circle}}
+          </button>
+        </div>
+        <div
+          aria-selected="false"
+          class="tab"
+          id="tab-d"
+          role="tab"
+          tabindex="0"
+        >
+          <span class="grip">{{solar:tuning-2}}</span>
+          <span class="tm"
+            ><svg
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+            </svg></span
+          >
+          <span class="tl">flaky ws reconnect</span>
+          <button
+            aria-label="Close tab flaky ws reconnect"
+            class="tclose"
+            type="button"
+          >
+            {{solar:close-circle}}
+          </button>
+        </div>
+        <!-- DW-8.7: the pager is the NON-GESTURE equivalent of a swipe — explicit
          prev/next buttons so tab switching is never gesture-only. -->
-    <div class="pager" aria-label="Switch session with buttons (non-gesture equivalent)">
-      <button type="button" aria-label="Previous open session">{{solar:alt-arrow-left}}</button>
-      <button type="button" aria-label="Next open session">{{solar:alt-arrow-right}}</button>
-    </div>
-  </div>
+        <div
+          aria-label="Switch session with buttons (non-gesture equivalent)"
+          class="pager"
+        >
+          <button aria-label="Previous open session" type="button">
+            {{solar:alt-arrow-left}}
+          </button>
+          <button aria-label="Next open session" type="button">
+            {{solar:alt-arrow-right}}
+          </button>
+        </div>
+      </div>
 
-  <!-- ================= SPLIT VIEW (DW-8.2) =================
+      <!-- ================= SPLIT VIEW (DW-8.2) =================
        One .split region, two panes. Shared chrome (shead, tabstrip, composer) is
        NOT duplicated — it appears once above. Active pane identified without
        colour: graphite left rail + "Active" word + aria-selected + ink weight. -->
-  <div class="split" role="group" aria-label="Session split view">
-    <!-- PANE 1 — the ACTIVE pane -->
-    <section class="ws-pane active" role="tabpanel" id="pane-a" aria-labelledby="tab-a" aria-selected="true">
-      <span class="pane-rail" aria-hidden="true"></span>
-      <header class="pane-head">
-        <span class="tm"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span>
-        <span class="pn">wire delegate row outcomes</span>
-        <span class="pact">Active</span>
-        <span class="ps" aria-label="status: active">28 turns</span>
-      </header>
-      <div class="tr-pane" id="tr-a" role="log" aria-live="polite" aria-relevant="additions text"
-           aria-label="Session transcript — wire delegate row outcomes">
-        <section class="turn">
-          <h2 class="who"><span class="dot u">{{solar:user}}</span><span class="role">You</span></h2>
-          <div class="msg">The delegate rows and the fleet board disagree on how they order equal-age items. Make them consistent.</div>
-        </section>
-        <section class="turn">
-          <h2 class="who"><span class="dot a">{{solar:atom}}</span><span class="role">Claude Code</span></h2>
-          <div class="msg">Three call sites use the age comparator: <code>FleetBoard.svelte</code>, <code>SessionPane.svelte</code>, <code>fleet-memory.ts</code>.</div>
-          <div class="tools">
-            <div class="trow"><span class="ic">{{solar:magnifer}}</span><span class="tk">Grep</span><span class="arg">outcomeLabel\( — 4 files</span><span class="t">0.4s</span></div>
-            <div class="trow"><span class="ic">{{solar:document-text}}</span><span class="tk">Read</span><span class="arg">lib/state/delegates.svelte.ts</span><span class="t">0.2s</span></div>
-          </div>
-        </section>
-        <!-- DW-8.5 / 8.8: a horizontally-scrolling code block inside the pane.
+      <div aria-label="Session split view" class="split" role="group">
+        <!-- PANE 1 — the ACTIVE pane -->
+        <section
+          aria-labelledby="tab-a"
+          aria-selected="true"
+          class="ws-pane active"
+          id="pane-a"
+          role="tabpanel"
+        >
+          <span aria-hidden="true" class="pane-rail"></span>
+          <header class="pane-head">
+            <span class="tm"
+              ><svg
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                viewBox="0 0 24 24"
+              >
+                <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+              </svg></span
+            >
+            <span class="pn">wire delegate row outcomes</span>
+            <span class="pact">Active</span>
+            <span aria-label="status: active" class="ps">28 turns</span>
+          </header>
+          <div
+            aria-label="Session transcript — wire delegate row outcomes"
+            aria-live="polite"
+            aria-relevant="additions text"
+            class="tr-pane"
+            id="tr-a"
+            role="log"
+          >
+            <section class="turn">
+              <h2 class="who">
+                <span class="dot u">{{solar:user}}</span
+                ><span class="role">You</span>
+              </h2>
+              <div class="msg">
+                The delegate rows and the fleet board disagree on how they order
+                equal-age items. Make them consistent.
+              </div>
+            </section>
+            <section class="turn">
+              <h2 class="who">
+                <span class="dot a">{{solar:atom}}</span
+                ><span class="role">Claude Code</span>
+              </h2>
+              <div class="msg">
+                Three call sites use the age comparator:
+                <code>FleetBoard.svelte</code>, <code>SessionPane.svelte</code>,
+                <code>fleet-memory.ts</code>.
+              </div>
+              <div class="tools">
+                <div class="trow">
+                  <span class="ic">{{solar:magnifer}}</span
+                  ><span class="tk">Grep</span
+                  ><span class="arg">outcomeLabel\( — 4 files</span
+                  ><span class="t">0.4s</span>
+                </div>
+                <div class="trow">
+                  <span class="ic">{{solar:document-text}}</span
+                  ><span class="tk">Read</span
+                  ><span class="arg">lib/state/delegates.svelte.ts</span
+                  ><span class="t">0.2s</span>
+                </div>
+              </div>
+            </section>
+            <!-- DW-8.5 / 8.8: a horizontally-scrolling code block inside the pane.
              A swipe begun here never changes the tab. -->
-        <section class="turn">
-          <h2 class="who"><span class="dot a">{{solar:atom}}</span><span class="role">Claude Code</span></h2>
-          <div class="msg">The token rename landed in the same branch, so the build cache holds the old CSS custom properties:</div>
-          <div class="code-scroll" data-sideways="1" aria-label="horizontally scrollable build output">
-<pre>--neutral-12:#2c2e31  --status-attn-bg:color-mix(in oklab,var(--warning-3) 76%,var(--warning-9))  --rail:linear-gradient(...)  [long tool output line that overflows the pane width]</pre>
+            <section class="turn">
+              <h2 class="who">
+                <span class="dot a">{{solar:atom}}</span
+                ><span class="role">Claude Code</span>
+              </h2>
+              <div class="msg">
+                The token rename landed in the same branch, so the build cache
+                holds the old CSS custom properties:
+              </div>
+              <div
+                aria-label="horizontally scrollable build output"
+                class="code-scroll"
+                data-sideways="1"
+              >
+                <pre
+                >--neutral-12:#2c2e31  --status-attn-bg:color-mix(in oklab,var(--warning-3) 76%,var(--warning-9))  --rail:linear-gradient(...)  [long tool output line that overflows the pane width]</pre>
+              </div>
+            </section>
+            <section aria-labelledby="p1-a" class="hitl">
+              <h2 id="p1-a">
+                <span class="pill attn">{{solar:alt-arrow-up}}needs you</span
+                >Permission — run a shell command
+              </h2>
+              <p class="lede">
+                This rebuilds the SvelteKit cache so the next build picks up the
+                renamed tokens. The change is reversible; nothing outside
+                <code>apps/dashboard</code> is touched.
+              </p>
+              <div class="cmd">
+                rm -rf apps/dashboard/.svelte-kit<span class="eff"
+                  >Removes a generated build-cache folder inside apps/dashboard
+                  only; recreated by the next build.</span
+                >
+              </div>
+              <dl class="scope">
+                <dt>Machine</dt>
+                <dd>
+                  nixbox <span class="no">— other machines not affected</span>
+                </dd>
+                <dt>Path</dt>
+                <dd class="mono">
+                  /home/bewinxed/whiffle/apps/dashboard/.svelte-kit
+                </dd>
+                <dt>Network</dt>
+                <dd>No network access requested.</dd>
+                <dt>Future</dt>
+                <dd>
+                  Approving covers this one command; it does not widen what the
+                  agent may run later.
+                </dd>
+              </dl>
+              <div class="choice">
+                <button class="grant" type="button">
+                  {{solar:check-circle}}Approve
+                </button>
+                <button class="refuse" type="button">
+                  {{solar:close-circle}}Deny
+                </button>
+              </div>
+            </section>
           </div>
         </section>
-        <section class="hitl" aria-labelledby="p1-a">
-          <h2 id="p1-a"><span class="pill attn">{{solar:alt-arrow-up}}needs you</span>Permission — run a shell command</h2>
-          <p class="lede">This rebuilds the SvelteKit cache so the next build picks up the renamed tokens. The change is reversible; nothing outside <code>apps/dashboard</code> is touched.</p>
-          <div class="cmd">rm -rf apps/dashboard/.svelte-kit<span class="eff">Removes a generated build-cache folder inside apps/dashboard only; recreated by the next build.</span></div>
-          <dl class="scope">
-            <dt>Machine</dt><dd>nixbox <span class="no">— other machines not affected</span></dd>
-            <dt>Path</dt><dd class="mono">/home/bewinxed/whiffle/apps/dashboard/.svelte-kit</dd>
-            <dt>Network</dt><dd>No network access requested.</dd>
-            <dt>Future</dt><dd>Approving covers this one command; it does not widen what the agent may run later.</dd>
-          </dl>
-          <div class="choice">
-            <button type="button" class="grant">{{solar:check-circle}}Approve</button>
-            <button type="button" class="refuse">{{solar:close-circle}}Deny</button>
+
+        <!-- PANE 2 — the BACKGROUND pane (dimmed, not active) -->
+        <section
+          aria-labelledby="tab-b"
+          aria-selected="false"
+          class="ws-pane"
+          id="pane-b"
+          role="tabpanel"
+        >
+          <header class="pane-head">
+            <span class="tm"
+              ><svg
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                viewBox="0 0 24 24"
+              >
+                <path d="M9 8l-4 4 4 4M15 8l4 4-4 4" />
+              </svg></span
+            >
+            <span class="pn">landing copy pass</span>
+            <span aria-label="status: idle" class="ps">14 turns</span>
+          </header>
+          <div
+            aria-label="Session transcript — landing copy pass"
+            aria-live="polite"
+            aria-relevant="additions text"
+            class="tr-pane"
+            id="tr-b"
+            role="log"
+          >
+            <section class="turn">
+              <h2 class="who">
+                <span class="dot u">{{solar:user}}</span
+                ><span class="role">You</span>
+              </h2>
+              <div class="msg">
+                Tighten the landing hero. It reads like a template sentence.
+              </div>
+            </section>
+            <section class="turn">
+              <h2 class="who">
+                <span class="dot a">{{solar:atom}}</span
+                ><span class="role">Claude Code</span>
+              </h2>
+              <div class="msg">
+                Two candidates — a concrete outcome line and a held-back claim:
+              </div>
+              <div class="tools">
+                <div class="trow">
+                  <span class="ic">{{solar:pen}}</span
+                  ><span class="tk">Edit</span
+                  ><span class="arg">routes/+page.svelte</span
+                  ><span class="d">+12 −7</span>
+                </div>
+              </div>
+            </section>
           </div>
         </section>
       </div>
-    </section>
 
-    <!-- PANE 2 — the BACKGROUND pane (dimmed, not active) -->
-    <section class="ws-pane" role="tabpanel" id="pane-b" aria-labelledby="tab-b" aria-selected="false">
-      <header class="pane-head">
-        <span class="tm"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg></span>
-        <span class="pn">landing copy pass</span>
-        <span class="ps" aria-label="status: idle">14 turns</span>
-      </header>
-      <div class="tr-pane" id="tr-b" role="log" aria-live="polite" aria-relevant="additions text"
-           aria-label="Session transcript — landing copy pass">
-        <section class="turn">
-          <h2 class="who"><span class="dot u">{{solar:user}}</span><span class="role">You</span></h2>
-          <div class="msg">Tighten the landing hero. It reads like a template sentence.</div>
-        </section>
-        <section class="turn">
-          <h2 class="who"><span class="dot a">{{solar:atom}}</span><span class="role">Claude Code</span></h2>
-          <div class="msg">Two candidates — a concrete outcome line and a held-back claim:</div>
-          <div class="tools">
-            <div class="trow"><span class="ic">{{solar:pen}}</span><span class="tk">Edit</span><span class="arg">routes/+page.svelte</span><span class="d">+12 −7</span></div>
+      <!-- single-pane tabbed view (used by the tabbed / reordered ws states) -->
+      <div class="ws-tabbed">
+        <section
+          aria-labelledby="tab-a"
+          aria-selected="true"
+          class="ws-pane active"
+          id="pane-a-lone"
+          role="tabpanel"
+        >
+          <span aria-hidden="true" class="pane-rail"></span>
+          <header class="pane-head">
+            <span class="tm"
+              ><svg
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                viewBox="0 0 24 24"
+              >
+                <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+              </svg></span
+            >
+            <span class="pn">wire delegate row outcomes</span>
+            <span class="pact">Active</span>
+            <span aria-label="status: active" class="ps">28 turns</span>
+          </header>
+          <div
+            aria-label="Session transcript — wire delegate row outcomes (single pane)"
+            aria-live="polite"
+            aria-relevant="additions text"
+            class="tr-pane"
+            role="log"
+          >
+            <section class="turn">
+              <h2 class="who">
+                <span class="dot u">{{solar:user}}</span
+                ><span class="role">You</span>
+              </h2>
+              <div class="msg">
+                The delegate rows and the fleet board disagree on how they order
+                equal-age items. Make them consistent.
+              </div>
+            </section>
+            <section class="turn">
+              <h2 class="who">
+                <span class="dot a">{{solar:atom}}</span
+                ><span class="role">Claude Code</span>
+              </h2>
+              <div class="msg">
+                Three call sites use the age comparator. A fourth hit is a test
+                fixture asserting the old shape deliberately.
+              </div>
+            </section>
           </div>
         </section>
       </div>
-    </section>
-  </div>
 
-  <!-- single-pane tabbed view (used by the tabbed / reordered ws states) -->
-  <div class="ws-tabbed">
-    <section class="ws-pane active" role="tabpanel" id="pane-a-lone" aria-labelledby="tab-a" aria-selected="true">
-      <span class="pane-rail" aria-hidden="true"></span>
-      <header class="pane-head">
-        <span class="tm"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span>
-        <span class="pn">wire delegate row outcomes</span>
-        <span class="pact">Active</span>
-        <span class="ps" aria-label="status: active">28 turns</span>
-      </header>
-      <div class="tr-pane" role="log" aria-live="polite" aria-relevant="additions text"
-           aria-label="Session transcript — wire delegate row outcomes (single pane)">
-        <section class="turn">
-          <h2 class="who"><span class="dot u">{{solar:user}}</span><span class="role">You</span></h2>
-          <div class="msg">The delegate rows and the fleet board disagree on how they order equal-age items. Make them consistent.</div>
-        </section>
-        <section class="turn">
-          <h2 class="who"><span class="dot a">{{solar:atom}}</span><span class="role">Claude Code</span></h2>
-          <div class="msg">Three call sites use the age comparator. A fourth hit is a test fixture asserting the old shape deliberately.</div>
-        </section>
+      <div class="fade"></div>
+      <div class="composer" id="comp">
+        <form
+          aria-label="Message the agent"
+          class="cin"
+          onsubmit="return false"
+        >
+          <textarea
+            aria-label="Message the agent"
+            id="ws-input"
+            placeholder="Message the agent…"
+          ></textarea>
+          <div class="aff-row">
+            <div class="inner">
+              <span>/ commands</span><span>@ mention</span
+              ><span>＋ attach</span>
+              <span class="hint">Enter sends · Shift+Enter for a new line</span>
+            </div>
+          </div>
+          <button
+            aria-label="Stop the agent"
+            class="stop"
+            id="ws-stop"
+            type="button"
+          >
+            {{solar:pause}}
+          </button>
+        </form>
       </div>
-    </section>
-  </div>
+    </main>
 
-  <div class="fade"></div>
-  <div class="composer" id="comp">
-    <form class="cin" onsubmit="return false" aria-label="Message the agent">
-      <textarea placeholder="Message the agent…" aria-label="Message the agent" id="ws-input"></textarea>
-      <div class="aff-row"><div class="inner">
-        <span>/ commands</span><span>@ mention</span><span>＋ attach</span>
-        <span class="hint">Enter sends · Shift+Enter for a new line</span>
-      </div></div>
-      <button class="stop" type="button" aria-label="Stop the agent" id="ws-stop">{{solar:pause}}</button>
-    </form>
-  </div>
-</main>
-
-<!-- ws state switcher: split / tabbed / reordered (gate + screenshot affordance) -->
-<div class="wsbar" role="toolbar" aria-label="Workspace state">
-  <button type="button" data-ws-btn="split" class="on">split</button>
-  <button type="button" data-ws-btn="tabbed">tabbed</button>
-  <button type="button" data-ws-btn="reordered">reordered</button>
-</div>
-<script>
-/* ws-state switcher (screenshot / gate affordance; not the product). Only the
+    <!-- ws state switcher: split / tabbed / reordered (gate + screenshot affordance) -->
+    <div aria-label="Workspace state" class="wsbar" role="toolbar">
+      <button class="on" data-ws-btn="split" type="button">split</button>
+      <button data-ws-btn="tabbed" type="button">tabbed</button>
+      <button data-ws-btn="reordered" type="button">reordered</button>
+    </div>
+    <script>
+      "use strict";
+      /* ws-state switcher (screenshot / gate affordance; not the product). Only the
    transcript panes and the tab strip's active highlight change. The fixed
    anchors — Home, composer input, Stop — live in chrome that does not move
    between these states (DW-8.3). */
-(function () {
-  var bar = document.querySelector('.wsbar');
-  if (!bar) return;
-  bar.addEventListener('click', function (e) {
-    var b = e.target.closest('button[data-ws-btn]');
-    if (!b) return;
-    var ws = b.getAttribute('data-ws-btn');
-    document.body.setAttribute('data-ws', ws);
-    Array.prototype.forEach.call(bar.querySelectorAll('button'), function (x) {
-      x.classList.toggle('on', x === b);
-    });
-    if (ws === 'reordered') {
-      document.querySelector('.tabstrip').setAttribute('data-order', 'reordered');
-    } else {
-      document.querySelector('.tabstrip').setAttribute('data-order', 'default');
-    }
-  });
-})();
-</script>
-</body></html>
+      (() => {
+        var bar = document.querySelector(".wsbar");
+        if (!bar) {
+          return;
+        }
+        bar.addEventListener("click", (e) => {
+          var b = e.target.closest("button[data-ws-btn]");
+          if (!b) {
+            return;
+          }
+          var ws = b.getAttribute("data-ws-btn");
+          document.body.setAttribute("data-ws", ws);
+          Array.prototype.forEach.call(bar.querySelectorAll("button"), (x) => {
+            x.classList.toggle("on", x === b);
+          });
+          if (ws === "reordered") {
+            document
+              .querySelector(".tabstrip")
+              .setAttribute("data-order", "reordered");
+          } else {
+            document
+              .querySelector(".tabstrip")
+              .setAttribute("data-order", "default");
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

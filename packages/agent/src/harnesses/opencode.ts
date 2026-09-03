@@ -21,14 +21,17 @@
  * closes on `session.idle` or on `session.error` (`aborted` /
  * `error_during_execution`), so a busy session is never left hung.
  */
+
+import { homedir } from "node:os";
+import { join } from "node:path";
 import {
-  createOpencodeClient,
-  type OpencodeClient,
   type AssistantMessage,
   type Command,
+  createOpencodeClient,
   type Event,
   type McpStatus,
   type Message,
+  type OpencodeClient,
   type Part,
   type Permission,
   type Project,
@@ -36,7 +39,7 @@ import {
   type Session,
   type TextPart,
   type Todo,
-} from '@opencode-ai/sdk';
+} from "@opencode-ai/sdk";
 import type {
   FleetConfig,
   FleetItemState,
@@ -47,7 +50,6 @@ import type {
   McpServerStatus,
   ModelInfo,
   NeutralAssistantBlock,
-  NeutralMessage,
   NeutralSessionInfo,
   NeutralUserMessage,
   PermissionResult,
@@ -57,7 +59,7 @@ import type {
   UserAnswers,
   UserQuestion,
   UserQuestionResult,
-} from '@whiffle/core';
+} from "@whiffle/core";
 import {
   ASK_USER_QUESTION,
   CONTROL_CONTEXT_USAGE,
@@ -70,27 +72,32 @@ import {
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
-  isInjected,} from '@whiffle/core';
-import { resolveBin } from '../tools';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+  isInjected,
+} from "@whiffle/core";
 // The protocol subpath, never the `@whiffle/core` barrel: `sessiond.ts` reaches
 // for `node:os` and the barrel is imported by the browser bundle (see f2e1c4c).
-import { sessiondEndpoint, type ProcSpec } from '@whiffle/core/sessiond';
-import { ensureSessiond, SessiondClient } from '../sessiond-client';
-import { readJson, readSidecar, syncMemory, syncSkillFiles, writeJson } from './fleet-common';
-import { fetchDelegateTypes } from './handoff-shared';
-import type { Harness, HarnessContext, HarnessSession } from '../harness';
+import { type ProcSpec, sessiondEndpoint } from "@whiffle/core/sessiond";
+import type { Harness, HarnessContext, HarnessSession } from "../harness";
+import { ensureSessiond, SessiondClient } from "../sessiond-client";
+import { resolveBin } from "../tools";
+import {
+  readJson,
+  readSidecar,
+  syncMemory,
+  syncSkillFiles,
+  writeJson,
+} from "./fleet-common";
+import { fetchDelegateTypes } from "./handoff-shared";
 
 /** opencode's own config files — the machine profile the fleet sync converges. */
-const OPENCODE_DIR = join(homedir(), '.config', 'opencode');
-const OPENCODE_SKILLS = join(OPENCODE_DIR, 'skills');
-const OPENCODE_MEMORY = join(OPENCODE_DIR, 'AGENTS.md');
-const OPENCODE_CONFIG = join(OPENCODE_DIR, 'opencode.json');
-const OPENCODE_SIDECAR = join(OPENCODE_DIR, 'whiffle-fleet.json');
-const OPENCODE_PLUGINS = join(OPENCODE_DIR, 'plugins');
-const OPENCODE_PACKAGE = join(OPENCODE_DIR, 'package.json');
-const OPENCODE_HANDOFF_PLUGIN = join(OPENCODE_PLUGINS, 'whiffle-handoff.js');
+const OPENCODE_DIR = join(homedir(), ".config", "opencode");
+const OPENCODE_SKILLS = join(OPENCODE_DIR, "skills");
+const OPENCODE_MEMORY = join(OPENCODE_DIR, "AGENTS.md");
+const OPENCODE_CONFIG = join(OPENCODE_DIR, "opencode.json");
+const OPENCODE_SIDECAR = join(OPENCODE_DIR, "whiffle-fleet.json");
+const OPENCODE_PLUGINS = join(OPENCODE_DIR, "plugins");
+const OPENCODE_PACKAGE = join(OPENCODE_DIR, "package.json");
+const OPENCODE_HANDOFF_PLUGIN = join(OPENCODE_PLUGINS, "whiffle-handoff.js");
 
 /**
  * The server's identity under sessiond. One headless server per machine owns
@@ -98,7 +105,7 @@ const OPENCODE_HANDOFF_PLUGIN = join(OPENCODE_PLUGINS, 'whiffle-handoff.js');
  * which is exactly what lets a returning agent find the server it left running
  * instead of starting a second one.
  */
-export const OPENCODE_SERVER_PROC_ID = 'opencode-server';
+export const OPENCODE_SERVER_PROC_ID = "opencode-server";
 
 /**
  * How long the announce line may take to reach the ring. Our choice: the SDK's
@@ -124,7 +131,9 @@ export const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
  * — hence a per-line scan rather than a read of the first line.
  */
 export const parseServerAnnouncement = (line: string): string | undefined => {
-  if (!line.startsWith('opencode server listening')) return undefined;
+  if (!line.startsWith("opencode server listening")) {
+    return undefined;
+  }
   return line.match(/on\s+(https?:\/\/[^\s]+)/)?.[1];
 };
 
@@ -156,13 +165,19 @@ export const attachOpencodeServer = async (options: {
 
   // Fresh, not the connect-time welcome: this client is long-lived and the
   // server may have exited since.
-  const held = (await client.list()).procs.find((proc) => proc.procId === procId);
-  if (!held?.alive) await client.spawnProc(procId, options.spec);
+  const held = (await client.list()).procs.find(
+    (proc) => proc.procId === procId
+  );
+  if (!held?.alive) {
+    await client.spawnProc(procId, options.spec);
+  }
 
   return await new Promise<string>((resolve, reject) => {
     let settled = false;
     const settle = (finish: () => void): void => {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
       settled = true;
       clearTimeout(timer);
       client.unsubscribe(procId);
@@ -187,11 +202,17 @@ export const attachOpencodeServer = async (options: {
       {
         line: (event) => {
           const url = parseServerAnnouncement(event.data);
-          if (url) settle(() => resolve(url));
+          if (url) {
+            settle(() => resolve(url));
+          }
         },
         exit: (exitCode) =>
           settle(() =>
-            reject(new Error(`[opencode] serve exited (code ${exitCode}) before announcing a port`))
+            reject(
+              new Error(
+                `[opencode] serve exited (code ${exitCode}) before announcing a port`
+              )
+            )
           ),
         // The ring outran the announce line. Honest refusal rather than a guess:
         // the URL is unrecoverable from here, and inventing one would attach the
@@ -227,7 +248,9 @@ export const attachOpencodeServer = async (options: {
  * until the next sync; `type`'s own hub-side resolution (`/api/relay/spawn`)
  * still refuses an unknown name with the current list regardless.
  */
-const buildHandoffPluginSource = (typeLine: string): string => `import { tool } from "@opencode-ai/plugin";
+const buildHandoffPluginSource = (
+  typeLine: string
+): string => `import { tool } from "@opencode-ai/plugin";
 
 const ws = process.env.WHIFFLE_HUB_URL ?? "ws://localhost:3456/ws";
 const HUB = ws.replace(/^ws/, "http").replace(/\\/ws$/, "");
@@ -708,33 +731,50 @@ export const WhiffleHandoff = async () => {
  * `acceptEdits` is left to the caller: granting edits alone needs the
  * permission's own type, which this decision does not see.
  */
-export function autoAllows(permissionMode: string | undefined, kind: 'question' | 'tool'): boolean {
-  if (kind === 'question') return false;
-  return permissionMode === 'bypassPermissions';
+export function autoAllows(
+  permissionMode: string | undefined,
+  kind: "question" | "tool"
+): boolean {
+  if (kind === "question") {
+    return false;
+  }
+  return permissionMode === "bypassPermissions";
 }
 
 /** opencode's own name for the tool a question rides on. */
-const QUESTION_TOOL = 'question';
+const QUESTION_TOOL = "question";
 
 /**
  * What a question part is written down as. opencode calls the tool `question`;
  * the rest of the fleet calls it {@link ASK_USER_QUESTION}, and the renderer
  * keys off that name, so the rename happens here rather than in the dashboard.
  */
-const toolNameOf = (tool: string): string => (tool === QUESTION_TOOL ? ASK_USER_QUESTION : tool);
+const toolNameOf = (tool: string): string =>
+  tool === QUESTION_TOOL ? ASK_USER_QUESTION : tool;
 
 /** opencode's question shape, which says `multiple` where the fleet says `multiSelect`. */
 const questionsOf = (raw: unknown): UserQuestion[] | null => {
-  if (!Array.isArray(raw)) return null;
+  if (!Array.isArray(raw)) {
+    return null;
+  }
   const questions: UserQuestion[] = [];
   for (const item of raw) {
-    if (!item || typeof item !== 'object') return null;
-    const q = item as { question?: unknown; header?: unknown; options?: unknown; multiple?: unknown };
-    if (typeof q.question !== 'string' || !Array.isArray(q.options)) return null;
+    if (!item || typeof item !== "object") {
+      return null;
+    }
+    const q = item as {
+      question?: unknown;
+      header?: unknown;
+      options?: unknown;
+      multiple?: unknown;
+    };
+    if (typeof q.question !== "string" || !Array.isArray(q.options)) {
+      return null;
+    }
     questions.push({
       question: q.question,
-      header: typeof q.header === 'string' ? q.header : q.question,
-      options: q.options as UserQuestion['options'],
+      header: typeof q.header === "string" ? q.header : q.question,
+      options: q.options as UserQuestion["options"],
       multiSelect: q.multiple === true,
     });
   }
@@ -759,32 +799,55 @@ function questionResultOf(part: {
   tool: string;
   state: { status: string; input?: unknown; metadata?: unknown };
 }): UserQuestionResult | null {
-  if (part.tool !== QUESTION_TOOL) return null;
-  const questions = questionsOf((part.state.input as { questions?: unknown } | undefined)?.questions);
-  if (!questions) return null;
-  const raw = (part.state.metadata as { answers?: unknown } | undefined)?.answers;
+  if (part.tool !== QUESTION_TOOL) {
+    return null;
+  }
+  const questions = questionsOf(
+    (part.state.input as { questions?: unknown } | undefined)?.questions
+  );
+  if (!questions) {
+    return null;
+  }
+  const raw = (part.state.metadata as { answers?: unknown } | undefined)
+    ?.answers;
   // A question that completed carrying no answers is one the reader walked away
   // from; it is not an answered question with an empty map, and saying so is the
   // whole reason the outcome is a union.
-  if (!Array.isArray(raw)) return { outcome: 'dismissed', questions };
+  if (!Array.isArray(raw)) {
+    return { outcome: "dismissed", questions };
+  }
   const answers: UserAnswers = {};
   questions.forEach((question, i) => {
     const picked = Array.isArray(raw[i]) ? (raw[i] as string[]) : [];
     // opencode answers uniformly in arrays. The array is kept only where the
     // question allowed several — a lone choice stored as a one-element array
     // would draw as a list of one.
-    answers[question.question] = question.multiSelect ? picked : (picked[0] ?? '');
+    answers[question.question] = question.multiSelect
+      ? picked
+      : (picked[0] ?? "");
   });
-  return { outcome: 'answered', questions, answers };
+  return { outcome: "answered", questions, answers };
 }
 
 /** A fleet MCP definition, in opencode's `opencode.json` `mcp` shape. */
-const toOpencodeMcp = (config: FleetMcpConfig): { type: 'local' | 'remote'; command?: string[]; url?: string; environment?: Record<string, string>; headers?: Record<string, string> } => {
-  if ('url' in config) {
-    return { type: 'remote', url: config.url, ...(config.headers ? { headers: config.headers } : {}) };
+const toOpencodeMcp = (
+  config: FleetMcpConfig
+): {
+  type: "local" | "remote";
+  command?: string[];
+  url?: string;
+  environment?: Record<string, string>;
+  headers?: Record<string, string>;
+} => {
+  if ("url" in config) {
+    return {
+      type: "remote",
+      url: config.url,
+      ...(config.headers ? { headers: config.headers } : {}),
+    };
   }
   return {
-    type: 'local',
+    type: "local",
     command: [config.command, ...(config.args ?? [])],
     ...(config.env ? { environment: config.env } : {}),
   };
@@ -797,18 +860,21 @@ const syncOpencodeMcp = async (
   report: Record<string, FleetItemState>
 ): Promise<string[]> => {
   const wanted = desired.filter((server) => server.enabled);
-  const stored = (await readJson<Record<string, unknown>>(OPENCODE_CONFIG)) ?? {};
+  const stored =
+    (await readJson<Record<string, unknown>>(OPENCODE_CONFIG)) ?? {};
   const mcp = (stored.mcp as Record<string, unknown> | undefined) ?? {};
 
   for (const server of wanted) {
     mcp[server.name] = toOpencodeMcp(server.config);
-    report[server.name] = { state: 'applied' };
+    report[server.name] = { state: "applied" };
   }
   const names = wanted.map((server) => server.name);
   for (const name of managed) {
-    if (names.includes(name)) continue;
+    if (names.includes(name)) {
+      continue;
+    }
     delete mcp[name];
-    report[name] = { state: 'removed' };
+    report[name] = { state: "removed" };
   }
 
   await writeJson(OPENCODE_CONFIG, { ...stored, mcp });
@@ -817,7 +883,7 @@ const syncOpencodeMcp = async (
 
 export const OPENCODE_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,
-  permissionModes: ['default', 'acceptEdits', 'plan', 'bypassPermissions'],
+  permissionModes: ["default", "acceptEdits", "plan", "bypassPermissions"],
   setModel: true,
   // No effort scale anywhere in opencode's API: a model is chosen and that is
   // the whole of it. Nothing here emulates one — a slider that moved and
@@ -849,11 +915,13 @@ export const OPENCODE_CAPABILITIES: HarnessCapabilities = {
 };
 
 /** The scratch tag sidecar — opencode sessions have no tag, so whiffle keeps its own. */
-const TAGS_PATH = join(homedir(), '.config', 'opencode', 'whiffle-tags.json');
+const TAGS_PATH = join(homedir(), ".config", "opencode", "whiffle-tags.json");
 
 const readTags = async (): Promise<Record<string, string>> => {
   const file = Bun.file(TAGS_PATH);
-  if (!(await file.exists())) return {};
+  if (!(await file.exists())) {
+    return {};
+  }
   try {
     return (await file.json()) as Record<string, string>;
   } catch {
@@ -861,16 +929,22 @@ const readTags = async (): Promise<Record<string, string>> => {
   }
 };
 
-const writeTag = async (sessionId: string, tag: string | null): Promise<void> => {
+const writeTag = async (
+  sessionId: string,
+  tag: string | null
+): Promise<void> => {
   const tags = await readTags();
-  if (tag === null) delete tags[sessionId];
-  else tags[sessionId] = tag;
+  if (tag === null) {
+    delete tags[sessionId];
+  } else {
+    tags[sessionId] = tag;
+  }
   await Bun.write(TAGS_PATH, JSON.stringify(tags));
 };
 
 const sessionToInfo = (session: Session, tag?: string): NeutralSessionInfo => ({
   sessionId: session.id,
-  harness: 'opencode',
+  harness: "opencode",
   ...(session.title ? { customTitle: session.title } : {}),
   lastModified: session.time.updated,
   ...(session.time.created ? { createdAt: session.time.created } : {}),
@@ -880,32 +954,44 @@ const sessionToInfo = (session: Session, tag?: string): NeutralSessionInfo => ({
 
 /** A provider error's own words, kept whole: name, status and message ride together. */
 const errorText = (error: unknown): string => {
-  const e = error as { name?: string; data?: { message?: string; statusCode?: number } } | undefined;
-  const name = e?.name ?? 'error';
+  const e = error as
+    | { name?: string; data?: { message?: string; statusCode?: number } }
+    | undefined;
+  const name = e?.name ?? "error";
   const status = e?.data?.statusCode;
-  const message = e?.data?.message ?? 'opencode session failed';
-  return `${name}${status ? ` ${status}` : ''}: ${message}`;
+  const message = e?.data?.message ?? "opencode session failed";
+  return `${name}${status ? ` ${status}` : ""}: ${message}`;
 };
 
 /** `provider/model` or a bare model id, into opencode's two-part model reference. */
-const splitModel = (model: string): { providerID?: string; modelID?: string } => {
-  const slash = model.indexOf('/');
-  if (slash < 0) return { modelID: model };
+const splitModel = (
+  model: string
+): { providerID?: string; modelID?: string } => {
+  const slash = model.indexOf("/");
+  if (slash < 0) {
+    return { modelID: model };
+  }
   return { providerID: model.slice(0, slash), modelID: model.slice(slash + 1) };
 };
 
 /** `/name rest` → its parts; undefined for anything that is not a slash command. */
-const parseCommand = (text: string): { name: string; args: string } | undefined => {
-  if (!text.startsWith('/') || text.length === 1) return undefined;
+const parseCommand = (
+  text: string
+): { name: string; args: string } | undefined => {
+  if (!text.startsWith("/") || text.length === 1) {
+    return undefined;
+  }
   const rest = text.slice(1);
-  const sp = rest.indexOf(' ');
-  if (sp === -1) return { name: rest, args: '' };
+  const sp = rest.indexOf(" ");
+  if (sp === -1) {
+    return { name: rest, args: "" };
+  }
   return { name: rest.slice(0, sp), args: rest.slice(sp + 1) };
 };
 
 /** A message's final content, keyed by part id in arrival order, for its closing frame. */
 interface PendingMessage {
-  parts: Map<string, { kind: 'text' | 'thinking'; text: string }>;
+  parts: Map<string, { kind: "text" | "thinking"; text: string }>;
 }
 
 /**
@@ -916,43 +1002,57 @@ interface PendingMessage {
  * rather than sent loosely.
  */
 interface ThinkingStreamFrame {
-  type: 'stream_event';
-  session_id?: string;
   event:
-    | { type: 'content_block_start'; content_block: { type: 'thinking'; thinking: string } }
-    | { type: 'content_block_delta'; delta: { type: 'thinking_delta'; thinking: string } }
-    | { type: 'content_block_stop' };
+    | {
+        type: "content_block_start";
+        content_block: { type: "thinking"; thinking: string };
+      }
+    | {
+        type: "content_block_delta";
+        delta: { type: "thinking_delta"; thinking: string };
+      }
+    | { type: "content_block_stop" };
+  session_id?: string;
+  type: "stream_event";
 }
 
 /** A child (subagent) session's own pipeline state, kept apart from the parent's. */
 interface ChildState {
-  roles: Map<string, 'user' | 'assistant'>;
   pending: Map<string, PendingMessage>;
-  toolsEmitted: Map<string, 'called' | 'resolved'>;
+  roles: Map<string, "user" | "assistant">;
+  toolsEmitted: Map<string, "called" | "resolved">;
 }
 
-const EMPTY_TOKENS = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } };
+const EMPTY_TOKENS = {
+  input: 0,
+  output: 0,
+  reasoning: 0,
+  cache: { read: 0, write: 0 },
+};
 
 export class OpencodeSession implements HarnessSession {
-  readonly harness = 'opencode' as const;
+  readonly harness = "opencode" as const;
   sessionId: string | null;
   readonly #ctx: HarnessContext;
   readonly #client: OpencodeClient;
   readonly #directory: string;
   #model: string | undefined;
   #lastTokens = EMPTY_TOKENS;
-  #roles = new Map<string, 'user' | 'assistant'>();
+  #roles = new Map<string, "user" | "assistant">();
   #costs = new Map<string, number>();
   #costBase = 0;
   #pending = new Map<string, PendingMessage>();
   /** The reasoning part whose live block is open, so it is closed exactly once. */
   #openThinking: string | null = null;
-  #toolsEmitted = new Map<string, 'called' | 'resolved'>();
+  #toolsEmitted = new Map<string, "called" | "resolved">();
   #busy = false;
   /** The last provider-retry note surfaced, so a repeating retry says it once. */
-  #lastRetryNote = '';
+  #lastRetryNote = "";
   #turnOpen = false;
-  #queue: { parts: unknown[]; model?: { providerID?: string; modelID?: string } }[] = [];
+  #queue: {
+    parts: unknown[];
+    model?: { providerID?: string; modelID?: string };
+  }[] = [];
   #permissionMode: string | undefined;
   #providersCache: Promise<{ providers?: Provider[] } | undefined> | undefined;
   #commandNames: Promise<Set<string>> | null = null;
@@ -990,35 +1090,47 @@ export class OpencodeSession implements HarnessSession {
 
   /** Routes one opencode event into neutral frames for this session. */
   handle(event: Event): void {
-    const p = event.properties as Record<string, unknown> & { sessionID?: string };
+    const p = event.properties as Record<string, unknown> & {
+      sessionID?: string;
+    };
     const sid = p.sessionID;
-    if (sid !== undefined && sid !== this.sessionId) return;
+    if (sid !== undefined && sid !== this.sessionId) {
+      return;
+    }
 
     // `message.part.delta` is a real event the SDK's generated union omits, so
     // switch on the string form rather than the nominal `Event` union.
     const type = event.type as string;
     switch (type) {
-      case 'message.updated': {
+      case "message.updated": {
         const info = (p as { info?: Message }).info;
-        if (!info) return;
+        if (!info) {
+          return;
+        }
         this.#roles.set(info.id, info.role);
-        if (info.role === 'assistant') {
+        if (info.role === "assistant") {
           this.#costs.set(info.id, info.cost);
           this.#lastTokens = info.tokens;
         }
         break;
       }
-      case 'message.part.updated': {
+      case "message.part.updated": {
         const part = (p as { part?: Part }).part;
-        if (!part) return;
+        if (!part) {
+          return;
+        }
         const messageID = part.messageID;
-        if (messageID !== undefined && part.sessionID !== undefined && part.sessionID !== this.sessionId) {
+        if (
+          messageID !== undefined &&
+          part.sessionID !== undefined &&
+          part.sessionID !== this.sessionId
+        ) {
           return;
         }
         this.#part(part);
         break;
       }
-      case 'message.part.delta': {
+      case "message.part.delta": {
         const props = event.properties as unknown as {
           sessionID?: string;
           messageID?: string;
@@ -1026,51 +1138,71 @@ export class OpencodeSession implements HarnessSession {
           field?: string;
           delta?: string;
         };
-        if (props.field !== 'text') break;
-        if (this.#roles.get(props.messageID ?? '') !== 'assistant') break;
-        if (!props.delta) break;
+        if (props.field !== "text") {
+          break;
+        }
+        if (this.#roles.get(props.messageID ?? "") !== "assistant") {
+          break;
+        }
+        if (!props.delta) {
+          break;
+        }
         this.#closeThinking();
         this.#ctx.frame({
-          type: 'stream_event',
+          type: "stream_event",
           session_id: this.sessionId ?? undefined,
-          event: { type: 'content_block_delta', delta: { type: 'text_delta', text: props.delta } },
+          event: {
+            type: "content_block_delta",
+            delta: { type: "text_delta", text: props.delta },
+          },
         });
         // `message.part.delta` is the streaming chunks, and the full stream they
         // carry is the authoritative text — `part.text` on `message.part.updated`
         // is capped at 4000 chars, and a part longer than the transport's buffer
         // never lands at all. The accumulated deltas are the truth either way.
         if (props.partID) {
-          const pending = this.#pendingOf(props.messageID ?? '');
+          const pending = this.#pendingOf(props.messageID ?? "");
           const existing = pending.parts.get(props.partID);
-          const acc = (existing?.kind === 'text' ? existing.text : '') + props.delta;
-          pending.parts.set(props.partID, { kind: 'text', text: acc });
+          const acc =
+            (existing?.kind === "text" ? existing.text : "") + props.delta;
+          pending.parts.set(props.partID, { kind: "text", text: acc });
         }
         break;
       }
-      case 'permission.updated': {
-        if (sid !== this.sessionId) return;
+      case "permission.updated": {
+        if (sid !== this.sessionId) {
+          return;
+        }
         const permission = event.properties as Permission;
         const input = (permission.metadata ?? {}) as Record<string, unknown>;
-        const kind = permission.type === 'question' ? 'question' : 'tool';
+        const kind = permission.type === "question" ? "question" : "tool";
         // opencode's permission system publishes events and never consults a
         // plugin, so the daemon is where a session's mode is enforced.
         if (
           autoAllows(this.#permissionMode, kind) ||
-          (this.#permissionMode === 'acceptEdits' && permission.type === 'edit')
+          (this.#permissionMode === "acceptEdits" && permission.type === "edit")
         ) {
-          this.#replyPermission(permission.id, 'once');
+          this.#replyPermission(permission.id, "once");
           break;
         }
         this.#ctx.permission({
           requestId: permission.id,
-          toolName: permission.type === 'question' ? 'AskUserQuestion' : permission.type,
-          input: kind === 'question' ? { questions: input.questions ?? [input] } : input,
+          toolName:
+            permission.type === "question"
+              ? "AskUserQuestion"
+              : permission.type,
+          input:
+            kind === "question"
+              ? { questions: input.questions ?? [input] }
+              : input,
           requestKind: kind,
         });
         break;
       }
-      case 'permission.asked': {
-        if (sid !== this.sessionId) return;
+      case "permission.asked": {
+        if (sid !== this.sessionId) {
+          return;
+        }
         const asked = event.properties as unknown as {
           id: string;
           sessionID: string;
@@ -1078,17 +1210,18 @@ export class OpencodeSession implements HarnessSession {
           metadata?: Record<string, unknown>;
         };
         if (
-          autoAllows(this.#permissionMode, 'tool') ||
-          (this.#permissionMode === 'acceptEdits' && asked.permission === 'edit')
+          autoAllows(this.#permissionMode, "tool") ||
+          (this.#permissionMode === "acceptEdits" &&
+            asked.permission === "edit")
         ) {
-          this.#replyPermission(asked.id, 'once');
+          this.#replyPermission(asked.id, "once");
           break;
         }
         this.#ctx.permission({
           requestId: asked.id,
           toolName: asked.permission,
           input: asked.metadata ?? {},
-          requestKind: 'tool',
+          requestKind: "tool",
         });
         break;
       }
@@ -1096,9 +1229,11 @@ export class OpencodeSession implements HarnessSession {
       // payloads, and the server's own spec publishes both. Naming only the
       // older one is a silent failure waiting for the day it stops firing:
       // questions would simply stop appearing, with nothing raised anywhere.
-      case 'question.asked':
-      case 'question.v2.asked': {
-        if (sid !== this.sessionId) return;
+      case "question.asked":
+      case "question.v2.asked": {
+        if (sid !== this.sessionId) {
+          return;
+        }
         const asked = event.properties as unknown as {
           id: string;
           sessionID: string;
@@ -1125,7 +1260,7 @@ export class OpencodeSession implements HarnessSession {
           requestId: asked.id,
           toolName: ASK_USER_QUESTION,
           input: { questions },
-          requestKind: 'question',
+          requestKind: "question",
         });
         break;
       }
@@ -1144,34 +1279,44 @@ export class OpencodeSession implements HarnessSession {
       // `question` tool part completes on every route and carries the answers
       // with it; this only lets go of the parked request so a later
       // `resolvePermission` for the same id cannot reply to a closed question.
-      case 'question.replied':
-      case 'question.v2.replied':
-      case 'question.rejected':
-      case 'question.v2.rejected': {
-        if (sid !== this.sessionId) return;
+      case "question.replied":
+      case "question.v2.replied":
+      case "question.rejected":
+      case "question.v2.rejected": {
+        if (sid !== this.sessionId) {
+          return;
+        }
         const settled = event.properties as unknown as { requestID: string };
         this.#questions.delete(settled.requestID);
         this.#questionData.delete(settled.requestID);
         break;
       }
-      case 'session.status': {
-        if (sid !== this.sessionId) return;
-        const status = p.status as { type?: string; message?: string; next?: number };
+      case "session.status": {
+        if (sid !== this.sessionId) {
+          return;
+        }
+        const status = p.status as {
+          type?: string;
+          message?: string;
+          next?: number;
+        };
         // A retrying turn is still a turn in flight — and the provider's own
         // words go straight to the transcript. A quota notice that only ever
         // lived in this event once hid as a silent hang for an hour.
-        this.#busy = status.type === 'busy' || status.type === 'retry';
-        if (this.#busy) this.#turnOpen = true;
-        if (status.type === 'retry' && status.message) {
+        this.#busy = status.type === "busy" || status.type === "retry";
+        if (this.#busy) {
+          this.#turnOpen = true;
+        }
+        if (status.type === "retry" && status.message) {
           const wait = status.next
             ? ` — next attempt in ${Math.max(0, Math.round((status.next - Date.now()) / 1000))}s`
-            : '';
+            : "";
           const note = `${status.message}${wait}`;
           if (note !== this.#lastRetryNote) {
             this.#lastRetryNote = note;
             this.#ctx.frame({
-              type: 'system',
-              subtype: 'provider_retry',
+              type: "system",
+              subtype: "provider_retry",
               session_id: this.sessionId ?? undefined,
               content: note,
             });
@@ -1180,8 +1325,10 @@ export class OpencodeSession implements HarnessSession {
         this.#ctx.busy(this.#busy);
         break;
       }
-      case 'session.idle': {
-        if (sid !== this.sessionId) return;
+      case "session.idle": {
+        if (sid !== this.sessionId) {
+          return;
+        }
         this.#ctx.busy(false);
         this.#busy = false;
         this.#flushResult();
@@ -1189,15 +1336,17 @@ export class OpencodeSession implements HarnessSession {
         this.#drainQueue();
         break;
       }
-      case 'session.error': {
-        if (sid !== undefined && sid !== this.sessionId) return;
+      case "session.error": {
+        if (sid !== undefined && sid !== this.sessionId) {
+          return;
+        }
         const error = p.error as { name?: string; data?: { message?: string } };
         this.#ctx.busy(false);
-        if (error?.name === 'MessageAbortedError') {
-          this.#flushResult({ subtype: 'aborted', is_error: false });
+        if (error?.name === "MessageAbortedError") {
+          this.#flushResult({ subtype: "aborted", is_error: false });
         } else {
           this.#flushResult({
-            subtype: 'error_during_execution',
+            subtype: "error_during_execution",
             is_error: true,
             errors: [errorText(error)],
           });
@@ -1212,8 +1361,10 @@ export class OpencodeSession implements HarnessSession {
   #part(part: Part): void {
     const role = this.#roles.get(part.messageID);
     switch (part.type) {
-      case 'text': {
-        if (part.synthetic || part.ignored) return;
+      case "text": {
+        if (part.synthetic || part.ignored) {
+          return;
+        }
         // Captured even before the message's role is known — a part can arrive
         // ahead of its `message.updated`, and dropping it is what left a
         // delegate's report empty. `#flushResult` filters by role at flush time,
@@ -1223,85 +1374,113 @@ export class OpencodeSession implements HarnessSession {
         this.#closeThinking();
         const pending = this.#pendingOf(part.messageID);
         const existing = pending.parts.get(part.id);
-        const acc = existing?.kind === 'text' ? existing.text : '';
+        const acc = existing?.kind === "text" ? existing.text : "";
         const text = acc.length >= part.text.length ? acc : part.text;
-        pending.parts.set(part.id, { kind: 'text', text });
+        pending.parts.set(part.id, { kind: "text", text });
         break;
       }
-      case 'reasoning': {
-        if (role !== 'assistant') return;
+      case "reasoning": {
+        if (role !== "assistant") {
+          return;
+        }
         const pending = this.#pendingOf(part.messageID);
         const stored = pending.parts.get(part.id);
         // A reasoning update carries the whole text again, so what streams is
         // what grew past the last one. A rewrite that does not extend it says
         // nothing rather than replaying the block.
-        const sent = stored?.kind === 'thinking' ? stored.text : '';
+        const sent = stored?.kind === "thinking" ? stored.text : "";
         if (this.#openThinking !== part.id) {
           this.#closeThinking();
           this.#openThinking = part.id;
           this.#thinkingFrame({
-            type: 'content_block_start',
-            content_block: { type: 'thinking', thinking: '' },
+            type: "content_block_start",
+            content_block: { type: "thinking", thinking: "" },
           });
         }
         if (part.text.length > sent.length && part.text.startsWith(sent)) {
           this.#thinkingFrame({
-            type: 'content_block_delta',
-            delta: { type: 'thinking_delta', thinking: part.text.slice(sent.length) },
+            type: "content_block_delta",
+            delta: {
+              type: "thinking_delta",
+              thinking: part.text.slice(sent.length),
+            },
           });
         }
-        pending.parts.set(part.id, { kind: 'thinking', text: part.text });
+        pending.parts.set(part.id, { kind: "thinking", text: part.text });
         break;
       }
-      case 'tool': {
+      case "tool": {
         this.#closeThinking();
         // A `task` tool spawns a child session; its metadata carries the child id
         // (verified: `state.metadata.sessionId`), so bind it to this callID.
-        if (part.tool === 'task') {
-          const meta = (part.state as { metadata?: { sessionId?: string }; input?: { subagent_type?: string }; title?: string });
-          if (typeof meta.metadata?.sessionId === 'string') {
-            this.#bindChild(part.callID, meta.metadata.sessionId, meta.input?.subagent_type, meta.title);
+        if (part.tool === "task") {
+          const meta = part.state as {
+            metadata?: { sessionId?: string };
+            input?: { subagent_type?: string };
+            title?: string;
+          };
+          if (typeof meta.metadata?.sessionId === "string") {
+            this.#bindChild(
+              part.callID,
+              meta.metadata.sessionId,
+              meta.input?.subagent_type,
+              meta.title
+            );
           }
         }
         const status = part.state.status;
         const emitted = this.#toolsEmitted.get(part.callID);
         // One tool_use per call, on the first part that carries usable input.
-        if (!emitted && (status === 'running' || status === 'completed' || status === 'error')) {
+        if (
+          !emitted &&
+          (status === "running" || status === "completed" || status === "error")
+        ) {
           this.#ctx.frame({
-            type: 'assistant',
+            type: "assistant",
             message: {
               content: [
-                { type: 'tool_use', id: part.callID, name: toolNameOf(part.tool), input: part.state.input },
+                {
+                  type: "tool_use",
+                  id: part.callID,
+                  name: toolNameOf(part.tool),
+                  input: part.state.input,
+                },
               ],
             },
           });
-          this.#toolsEmitted.set(part.callID, 'called');
+          this.#toolsEmitted.set(part.callID, "called");
         }
         // One tool_result per call, once it completes or errors.
-        if ((status === 'completed' || status === 'error') && emitted !== 'resolved') {
-          const output = status === 'completed' ? part.state.output : part.state.error;
-          const metadata = status === 'completed'
-            ? (part.state as { metadata?: Record<string, unknown> }).metadata
-            : undefined;
-          const structuredContent = metadata && Object.keys(metadata).length > 0 ? metadata : undefined;
+        if (
+          (status === "completed" || status === "error") &&
+          emitted !== "resolved"
+        ) {
+          const output =
+            status === "completed" ? part.state.output : part.state.error;
+          const metadata =
+            status === "completed"
+              ? (part.state as { metadata?: Record<string, unknown> }).metadata
+              : undefined;
+          const structuredContent =
+            metadata && Object.keys(metadata).length > 0 ? metadata : undefined;
           const questionResult = questionResultOf(part);
           this.#ctx.frame({
-            type: 'user',
+            type: "user",
             message: {
-              role: 'user',
+              role: "user",
               content: [
                 {
-                  type: 'tool_result',
+                  type: "tool_result",
                   tool_use_id: part.callID,
                   content: output,
-                  is_error: status === 'error',
+                  is_error: status === "error",
                   ...(structuredContent ? { structuredContent } : {}),
                   ...(questionResult ? { questionResult } : {}),
                 },
               ],
             },
           });
-          this.#toolsEmitted.set(part.callID, 'resolved');
+          this.#toolsEmitted.set(part.callID, "resolved");
         }
         break;
       }
@@ -1324,9 +1503,9 @@ export class OpencodeSession implements HarnessSession {
    * thinking events itself (harness.ts widened 2026-08-16), so this is a plain
    * frame — no widening, the literals stay checked end to end.
    */
-  #thinkingFrame(event: ThinkingStreamFrame['event']): void {
+  #thinkingFrame(event: ThinkingStreamFrame["event"]): void {
     const frame: ThinkingStreamFrame = {
-      type: 'stream_event',
+      type: "stream_event",
       session_id: this.sessionId ?? undefined,
       event,
     };
@@ -1335,29 +1514,42 @@ export class OpencodeSession implements HarnessSession {
 
   /** Closes the live thinking block, if one is open. */
   #closeThinking(): void {
-    if (this.#openThinking === null) return;
+    if (this.#openThinking === null) {
+      return;
+    }
     this.#openThinking = null;
-    this.#thinkingFrame({ type: 'content_block_stop' });
+    this.#thinkingFrame({ type: "content_block_stop" });
   }
 
   /** A `session.created` event named a child; remember its info for the bind. */
-  handleChildCreated(childId: string, agent: string | undefined, title: string | undefined): void {
+  handleChildCreated(
+    childId: string,
+    agent: string | undefined,
+    title: string | undefined
+  ): void {
     this.#childInfo.set(childId, { agent, title });
   }
 
   /** Links a task call to its child session; emits the branch-opening frame once. */
-  #bindChild(callID: string, childId: string, fallbackAgent: string | undefined, fallbackTitle: string | undefined): void {
-    if (this.#boundCalls.has(callID)) return;
+  #bindChild(
+    callID: string,
+    childId: string,
+    fallbackAgent: string | undefined,
+    fallbackTitle: string | undefined
+  ): void {
+    if (this.#boundCalls.has(callID)) {
+      return;
+    }
     this.#boundCalls.add(callID);
     const info = this.#childInfo.get(childId);
     this.#ctx.frame({
-      type: 'system',
-      subtype: 'task_started',
+      type: "system",
+      subtype: "task_started",
       session_id: this.sessionId ?? undefined,
       tool_use_id: callID,
       task_id: childId,
-      subagent_type: info?.agent ?? fallbackAgent ?? 'subagent',
-      description: info?.title ?? fallbackTitle ?? '',
+      subagent_type: info?.agent ?? fallbackAgent ?? "subagent",
+      description: info?.title ?? fallbackTitle ?? "",
     });
     this.#registerChild(childId, callID);
   }
@@ -1368,37 +1560,50 @@ export class OpencodeSession implements HarnessSession {
     const type = event.type as string;
     const p = event.properties as Record<string, unknown>;
     switch (type) {
-      case 'message.updated': {
+      case "message.updated": {
         const info = (p as { info?: Message }).info;
-        if (!info) return;
+        if (!info) {
+          return;
+        }
         state.roles.set(info.id, info.role);
         break;
       }
-      case 'message.part.updated': {
+      case "message.part.updated": {
         const part = (p as { part?: Part }).part;
-        if (!part) return;
+        if (!part) {
+          return;
+        }
         this.#partChild(state, part, undefined, callID);
         break;
       }
-      case 'message.part.delta': {
+      case "message.part.delta": {
         const props = event.properties as unknown as {
           field?: string;
           messageID?: string;
           delta?: string;
         };
-        if (props.field !== 'text') break;
-        if (state.roles.get(props.messageID ?? '') !== 'assistant') break;
-        if (!props.delta) break;
+        if (props.field !== "text") {
+          break;
+        }
+        if (state.roles.get(props.messageID ?? "") !== "assistant") {
+          break;
+        }
+        if (!props.delta) {
+          break;
+        }
         this.#ctx.frame({
-          type: 'stream_event',
+          type: "stream_event",
           session_id: this.sessionId ?? undefined,
           parent_tool_use_id: callID,
-          event: { type: 'content_block_delta', delta: { type: 'text_delta', text: props.delta } },
+          event: {
+            type: "content_block_delta",
+            delta: { type: "text_delta", text: props.delta },
+          },
         });
         break;
       }
-      case 'session.idle':
-      case 'session.error':
+      case "session.idle":
+      case "session.error":
         // The child's turn ended; replay its accumulated blocks as its branch's
         // final frames. No result frame — the parent's task tool_result closes it.
         this.#flushChild(state, callID);
@@ -1426,57 +1631,93 @@ export class OpencodeSession implements HarnessSession {
     return pending;
   }
 
-  #partChild(state: ChildState, part: Part, delta: string | undefined, callID: string): void {
+  #partChild(
+    state: ChildState,
+    part: Part,
+    delta: string | undefined,
+    callID: string
+  ): void {
     const role = state.roles.get(part.messageID);
     switch (part.type) {
-      case 'text': {
-        if (part.synthetic || part.ignored) return;
-        if (role !== 'assistant') return;
+      case "text": {
+        if (part.synthetic || part.ignored) {
+          return;
+        }
+        if (role !== "assistant") {
+          return;
+        }
         if (delta) {
           this.#ctx.frame({
-            type: 'stream_event',
+            type: "stream_event",
             session_id: this.sessionId ?? undefined,
             parent_tool_use_id: callID,
-            event: { type: 'content_block_delta', delta: { type: 'text_delta', text: delta } },
-          });
-        }
-        this.#pendingChild(state, part.messageID).parts.set(part.id, { kind: 'text', text: part.text });
-        break;
-      }
-      case 'reasoning':
-        if (role !== 'assistant') return;
-        this.#pendingChild(state, part.messageID).parts.set(part.id, { kind: 'thinking', text: part.text });
-        break;
-      case 'tool': {
-        const status = part.state.status;
-        const emitted = state.toolsEmitted.get(part.callID);
-        if (!emitted && (status === 'running' || status === 'completed' || status === 'error')) {
-          this.#ctx.frame({
-            type: 'assistant',
-            parent_tool_use_id: callID,
-            message: {
-              content: [{ type: 'tool_use', id: part.callID, name: part.tool, input: part.state.input }],
+            event: {
+              type: "content_block_delta",
+              delta: { type: "text_delta", text: delta },
             },
           });
-          state.toolsEmitted.set(part.callID, 'called');
         }
-        if ((status === 'completed' || status === 'error') && emitted !== 'resolved') {
+        this.#pendingChild(state, part.messageID).parts.set(part.id, {
+          kind: "text",
+          text: part.text,
+        });
+        break;
+      }
+      case "reasoning":
+        if (role !== "assistant") {
+          return;
+        }
+        this.#pendingChild(state, part.messageID).parts.set(part.id, {
+          kind: "thinking",
+          text: part.text,
+        });
+        break;
+      case "tool": {
+        const status = part.state.status;
+        const emitted = state.toolsEmitted.get(part.callID);
+        if (
+          !emitted &&
+          (status === "running" || status === "completed" || status === "error")
+        ) {
           this.#ctx.frame({
-            type: 'user',
+            type: "assistant",
             parent_tool_use_id: callID,
             message: {
-              role: 'user',
               content: [
                 {
-                  type: 'tool_result',
-                  tool_use_id: part.callID,
-                  content: status === 'completed' ? part.state.output : part.state.error,
-                  is_error: status === 'error',
+                  type: "tool_use",
+                  id: part.callID,
+                  name: part.tool,
+                  input: part.state.input,
                 },
               ],
             },
           });
-          state.toolsEmitted.set(part.callID, 'resolved');
+          state.toolsEmitted.set(part.callID, "called");
+        }
+        if (
+          (status === "completed" || status === "error") &&
+          emitted !== "resolved"
+        ) {
+          this.#ctx.frame({
+            type: "user",
+            parent_tool_use_id: callID,
+            message: {
+              role: "user",
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: part.callID,
+                  content:
+                    status === "completed"
+                      ? part.state.output
+                      : part.state.error,
+                  is_error: status === "error",
+                },
+              ],
+            },
+          });
+          state.toolsEmitted.set(part.callID, "resolved");
         }
         break;
       }
@@ -1487,15 +1728,22 @@ export class OpencodeSession implements HarnessSession {
 
   #flushChild(state: ChildState, callID: string): void {
     for (const [messageID, pending] of state.pending) {
-      if (state.roles.get(messageID) !== 'assistant') continue;
+      if (state.roles.get(messageID) !== "assistant") {
+        continue;
+      }
       const blocks: NeutralAssistantBlock[] = [];
       for (const part of pending.parts.values()) {
-        if (part.kind === 'text') blocks.push({ type: 'text', text: part.text });
-        else blocks.push({ type: 'thinking', thinking: part.text });
+        if (part.kind === "text") {
+          blocks.push({ type: "text", text: part.text });
+        } else {
+          blocks.push({ type: "thinking", thinking: part.text });
+        }
       }
-      if (blocks.length === 0) continue;
+      if (blocks.length === 0) {
+        continue;
+      }
       this.#ctx.frame({
-        type: 'assistant',
+        type: "assistant",
         uuid: messageID,
         parent_tool_use_id: callID,
         message: { content: blocks },
@@ -1509,68 +1757,114 @@ export class OpencodeSession implements HarnessSession {
    * final frame, then a result. `result` overrides the default `success` result
    * for the abort/error paths, which also close a turn.
    */
-  #flushResult(result?: { subtype: string; is_error: boolean; errors?: string[] }): void {
+  #flushResult(result?: {
+    subtype: string;
+    is_error: boolean;
+    errors?: string[];
+  }): void {
     // The live trace ends before the settled blocks replace it.
     this.#closeThinking();
     for (const [messageID, pending] of this.#pending) {
-      if (this.#roles.get(messageID) !== 'assistant') continue;
+      if (this.#roles.get(messageID) !== "assistant") {
+        continue;
+      }
       const blocks: NeutralAssistantBlock[] = [];
       for (const part of pending.parts.values()) {
-        if (part.kind === 'text') blocks.push({ type: 'text', text: part.text });
-        else blocks.push({ type: 'thinking', thinking: part.text });
+        if (part.kind === "text") {
+          blocks.push({ type: "text", text: part.text });
+        } else {
+          blocks.push({ type: "thinking", thinking: part.text });
+        }
       }
-      if (blocks.length === 0) continue;
-      this.#ctx.frame({ type: 'assistant', uuid: messageID, message: { content: blocks } });
+      if (blocks.length === 0) {
+        continue;
+      }
+      this.#ctx.frame({
+        type: "assistant",
+        uuid: messageID,
+        message: { content: blocks },
+      });
     }
     const flushed = [...this.#pending.keys()];
     this.#pending.clear();
     // A ghost idle (e.g. the idle that trails an abort) has no open turn and must
     // not emit a result frame; only a real turn close or an explicit abort/error
     // does. Assistant-block replay above is unaffected.
-    if (!this.#turnOpen && !result) return;
+    if (!(this.#turnOpen || result)) {
+      return;
+    }
     const turnCost = [...this.#costs.values()].reduce((a, b) => a + b, 0);
     this.#ctx.frame({
-      type: 'result',
-      subtype: result?.subtype ?? 'success',
+      type: "result",
+      subtype: result?.subtype ?? "success",
       is_error: result?.is_error ?? false,
       ...(result?.errors ? { errors: result.errors } : {}),
       total_cost_usd: this.#costBase + turnCost,
-      cache: { read: this.#lastTokens.cache.read, write: this.#lastTokens.cache.write },
+      cache: {
+        read: this.#lastTokens.cache.read,
+        write: this.#lastTokens.cache.write,
+      },
     });
     this.#costBase += turnCost;
     this.#costs.clear();
-    for (const messageID of flushed) this.#roles.delete(messageID);
+    for (const messageID of flushed) {
+      this.#roles.delete(messageID);
+    }
     for (const [callID, state] of this.#toolsEmitted) {
-      if (state === 'resolved') this.#toolsEmitted.delete(callID);
+      if (state === "resolved") {
+        this.#toolsEmitted.delete(callID);
+      }
     }
     this.#turnOpen = false;
   }
 
-  send(message: NeutralUserMessage, extras: { attachments?: { name: string; content: string }[]; images?: { mediaType: string; data: string }[]; urgent?: boolean }): void {
+  send(
+    message: NeutralUserMessage,
+    extras: {
+      attachments?: { name: string; content: string }[];
+      images?: { mediaType: string; data: string }[];
+      urgent?: boolean;
+    }
+  ): void {
     const content = message.message.content;
     let text =
-      typeof content === 'string'
+      typeof content === "string"
         ? content
         : content
-            .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+            .filter(
+              (block): block is { type: "text"; text: string } =>
+                block.type === "text"
+            )
             .map((block) => block.text)
-            .join('\n');
+            .join("\n");
 
     // Urgent delivery: start a turn NOW, busy or not. Busy: interrupt the
     // running turn first, with a factual note. Idle: prompt directly — urgent
     // to an idle session degrading to a silent append left delegates holding
     // unread briefs forever, since drained appends never wake a session.
     const urgent = Boolean(extras.urgent);
-    if (urgent && this.#busy) text = `[Urgent — your previous turn was interrupted to deliver this]\n\n${text}`;
+    if (urgent && this.#busy) {
+      text = `[Urgent — your previous turn was interrupted to deliver this]\n\n${text}`;
+    }
 
-    const parts: ({ type: 'text'; text: string } | { type: 'file'; mime: string; filename: string; url: string })[] = [];
-    if (text) parts.push({ type: 'text', text });
+    const parts: (
+      | { type: "text"; text: string }
+      | { type: "file"; mime: string; filename: string; url: string }
+    )[] = [];
+    if (text) {
+      parts.push({ type: "text", text });
+    }
     for (const image of extras.images ?? []) {
-      parts.push({ type: 'file', mime: image.mediaType, filename: 'image', url: 'data:' + image.mediaType + ';base64,' + image.data });
+      parts.push({
+        type: "file",
+        mime: image.mediaType,
+        filename: "image",
+        url: "data:" + image.mediaType + ";base64," + image.data,
+      });
     }
     for (const attachment of extras.attachments ?? []) {
       parts.push({
-        type: 'text',
+        type: "text",
         text: `\n\n<pasted-text name="${attachment.name}">\n${attachment.content}\n</pasted-text>`,
       });
     }
@@ -1579,7 +1873,10 @@ export class OpencodeSession implements HarnessSession {
 
     if (urgent) {
       void this.#client.session
-        .abort({ path: { id: this.sessionId! }, query: { directory: this.#directory } })
+        .abort({
+          path: { id: this.sessionId! },
+          query: { directory: this.#directory },
+        })
         .catch(() => {})
         .then(() => this.#prompt(parts, model));
     } else if ((message as { shouldQuery?: boolean }).shouldQuery === false) {
@@ -1611,7 +1908,10 @@ export class OpencodeSession implements HarnessSession {
   }
 
   /** Starts one prompt turn with the given parts and optional model. */
-  #prompt(parts: unknown[], model?: { providerID?: string; modelID?: string }): void {
+  #prompt(
+    parts: unknown[],
+    model?: { providerID?: string; modelID?: string }
+  ): void {
     this.#turnOpen = true;
     void this.#client.session
       .promptAsync({
@@ -1621,13 +1921,17 @@ export class OpencodeSession implements HarnessSession {
           parts: parts as never,
           // A bare model id (no provider) is left to opencode's default; never send `providerID: ''`.
           ...(model && model.providerID && model.modelID
-            ? { model: { providerID: model.providerID, modelID: model.modelID } }
+            ? {
+                model: { providerID: model.providerID, modelID: model.modelID },
+              }
             : {}),
-          ...(this.#permissionMode === 'plan' ? { agent: 'plan' } : {}),
+          ...(this.#permissionMode === "plan" ? { agent: "plan" } : {}),
         },
       })
       .then((res) => {
-        if (res.error) this.#ctx.failed(new Error(errorText(res.error)));
+        if (res.error) {
+          this.#ctx.failed(new Error(errorText(res.error)));
+        }
       });
   }
 
@@ -1639,7 +1943,9 @@ export class OpencodeSession implements HarnessSession {
    * delivered work from sitting unread forever.
    */
   #drainQueue(): void {
-    if (this.#queue.length === 0) return;
+    if (this.#queue.length === 0) {
+      return;
+    }
     const queued = this.#queue.splice(0);
     const parts = queued.flatMap((next) => next.parts);
     const model = queued.find((next) => next.model)?.model;
@@ -1652,7 +1958,14 @@ export class OpencodeSession implements HarnessSession {
     if (!this.#commandNames) {
       this.#commandNames = this.#client.command
         .list({ query: { directory: this.#directory } })
-        .then((res) => new Set((res.error ? [] : (res.data as Command[])).map((command) => command.name)));
+        .then(
+          (res) =>
+            new Set(
+              (res.error ? [] : (res.data as Command[])).map(
+                (command) => command.name
+              )
+            )
+        );
     }
     return this.#commandNames;
   }
@@ -1678,35 +1991,48 @@ export class OpencodeSession implements HarnessSession {
           command: name,
           arguments: args,
           ...(this.#model ? { model: this.#model } : {}),
-          ...(this.#permissionMode === 'plan' ? { agent: 'plan' } : {}),
+          ...(this.#permissionMode === "plan" ? { agent: "plan" } : {}),
         },
       })
       .then((res) => {
-        if (res.error) this.#ctx.failed(new Error(errorText(res.error)));
+        if (res.error) {
+          this.#ctx.failed(new Error(errorText(res.error)));
+        }
       });
   }
 
   /** The current model's context window, from a lazily-cached provider list. */
   async #contextLimit(): Promise<number> {
-    if (!this.#model) return 200000;
+    if (!this.#model) {
+      return 200_000;
+    }
     this.#providersCache ??= this.#client.config
       .providers({ query: { directory: this.#directory } })
-      .then((result) => (result.error ? undefined : (result.data as { providers?: Provider[] })));
+      .then((result) =>
+        result.error ? undefined : (result.data as { providers?: Provider[] })
+      );
     const data = await this.#providersCache;
     const providers = data?.providers ?? [];
     const ref = splitModel(this.#model);
     for (const provider of providers) {
-      if (ref.providerID && provider.id !== ref.providerID) continue;
+      if (ref.providerID && provider.id !== ref.providerID) {
+        continue;
+      }
       const model = ref.modelID ? provider.models?.[ref.modelID] : undefined;
-      if (model) return model.limit.context;
+      if (model) {
+        return model.limit.context;
+      }
     }
-    return 200000;
+    return 200_000;
   }
 
   async control(method: string, args: unknown[]): Promise<unknown> {
     switch (method) {
       case CONTROL_INTERRUPT:
-        await this.#client.session.abort({ path: { id: this.sessionId! }, query: { directory: this.#directory } });
+        await this.#client.session.abort({
+          path: { id: this.sessionId! },
+          query: { directory: this.#directory },
+        });
         return undefined;
       case CONTROL_SET_MODEL:
         this.#model = args[0] as string;
@@ -1716,26 +2042,50 @@ export class OpencodeSession implements HarnessSession {
         return undefined;
       case CONTROL_CONTEXT_USAGE: {
         const tokens = this.#lastTokens;
-        const total = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write;
+        const total =
+          tokens.input +
+          tokens.output +
+          tokens.reasoning +
+          tokens.cache.read +
+          tokens.cache.write;
         const maxTokens = await this.#contextLimit();
         return {
           totalTokens: total,
           maxTokens,
           percentage: Math.min(100, Math.round((total / maxTokens) * 100)),
           categories: [
-            { name: 'Input', tokens: tokens.input, color: 'var(--flexoki-blue)' },
-            { name: 'Output', tokens: tokens.output, color: 'var(--flexoki-green)' },
-            { name: 'Reasoning', tokens: tokens.reasoning, color: 'var(--flexoki-orange)' },
+            {
+              name: "Input",
+              tokens: tokens.input,
+              color: "var(--flexoki-blue)",
+            },
+            {
+              name: "Output",
+              tokens: tokens.output,
+              color: "var(--flexoki-green)",
+            },
+            {
+              name: "Reasoning",
+              tokens: tokens.reasoning,
+              color: "var(--flexoki-orange)",
+            },
           ],
         };
       }
       case CONTROL_SUPPORTED_MODELS: {
-        const result = await this.#client.config.providers({ query: { directory: this.#directory } });
-        if (result.error) return [];
-        const providers = (result.data as { providers?: Provider[] }).providers ?? [];
+        const result = await this.#client.config.providers({
+          query: { directory: this.#directory },
+        });
+        if (result.error) {
+          return [];
+        }
+        const providers =
+          (result.data as { providers?: Provider[] }).providers ?? [];
         const models: ModelInfo[] = [];
         for (const provider of providers) {
-          for (const [modelID, model] of Object.entries(provider.models ?? {})) {
+          for (const [modelID, model] of Object.entries(
+            provider.models ?? {}
+          )) {
             models.push({
               value: `${provider.id}/${modelID}`,
               displayName: `${model.name ?? modelID}`,
@@ -1745,35 +2095,55 @@ export class OpencodeSession implements HarnessSession {
         return models;
       }
       case CONTROL_SUPPORTED_COMMANDS: {
-        const result = await this.#client.command.list({ query: { directory: this.#directory } });
-        if (result.error) return [];
+        const result = await this.#client.command.list({
+          query: { directory: this.#directory },
+        });
+        if (result.error) {
+          return [];
+        }
         return (result.data as Command[]).map(
           (command): SlashCommand => ({
             name: command.name,
-            description: command.description ?? '',
-            argumentHint: '',
+            description: command.description ?? "",
+            argumentHint: "",
           })
         );
       }
       case CONTROL_MCP_STATUS: {
-        const result = await this.#client.mcp.status({ query: { directory: this.#directory } });
-        if (result.error) return [];
+        const result = await this.#client.mcp.status({
+          query: { directory: this.#directory },
+        });
+        if (result.error) {
+          return [];
+        }
         const statuses = (result.data ?? {}) as Record<string, McpStatus>;
         return Object.entries(statuses).map(
           ([name, status]): McpServerStatus => ({
             name,
-            status: typeof status === 'string' ? status : 'connected',
+            status: typeof status === "string" ? status : "connected",
           })
         );
       }
       case CONTROL_MCP_RECONNECT:
-        await this.#client.mcp.connect({ path: { name: args[0] as string }, query: { directory: this.#directory } });
+        await this.#client.mcp.connect({
+          path: { name: args[0] as string },
+          query: { directory: this.#directory },
+        });
         return undefined;
       case CONTROL_MCP_TOGGLE: {
         const name = args[0] as string;
         const enabled = args[1] as boolean;
-        if (enabled) await this.#client.mcp.connect({ path: { name }, query: { directory: this.#directory } });
-        else await this.#client.mcp.disconnect({ path: { name }, query: { directory: this.#directory } });
+        if (enabled) {
+          await this.#client.mcp.connect({
+            path: { name },
+            query: { directory: this.#directory },
+          });
+        } else {
+          await this.#client.mcp.disconnect({
+            path: { name },
+            query: { directory: this.#directory },
+          });
+        }
         return undefined;
       }
       default:
@@ -1794,7 +2164,7 @@ export class OpencodeSession implements HarnessSession {
       // tool part, and that part is what writes the row. Framing here as well
       // drew the answer twice, once under the request id and once under the
       // tool's own call id.
-      if (result.behavior === 'deny') {
+      if (result.behavior === "deny") {
         void this.#rejectQuestion(requestId);
         return;
       }
@@ -1803,11 +2173,16 @@ export class OpencodeSession implements HarnessSession {
       // question, in the order `question.asked` published them — so the join is
       // the question text on both sides.
       const answersByQuestion =
-        (result as { updatedInput?: { answers?: UserAnswers } }).updatedInput?.answers ?? {};
+        (result as { updatedInput?: { answers?: UserAnswers } }).updatedInput
+          ?.answers ?? {};
       const answers = questions.map((q) => {
         const raw = answersByQuestion[q.question];
-        if (Array.isArray(raw)) return raw;
-        if (typeof raw === 'string') return [raw];
+        if (Array.isArray(raw)) {
+          return raw;
+        }
+        if (typeof raw === "string") {
+          return [raw];
+        }
         return [] as string[];
       });
       void this.#replyQuestion(requestId, answers);
@@ -1815,12 +2190,19 @@ export class OpencodeSession implements HarnessSession {
     }
     this.#replyPermission(
       requestId,
-      result.behavior === 'deny' ? 'reject' : result.remember ? 'always' : 'once'
+      result.behavior === "deny"
+        ? "reject"
+        : result.remember
+          ? "always"
+          : "once"
     );
   }
 
   /** The one answer path for a tool permission — the auto-allow shares it. */
-  #replyPermission(requestId: string, response: 'once' | 'always' | 'reject'): void {
+  #replyPermission(
+    requestId: string,
+    response: "once" | "always" | "reject"
+  ): void {
     void this.#client.postSessionIdPermissionsPermissionId({
       path: { id: this.sessionId!, permissionID: requestId },
       query: { directory: this.#directory },
@@ -1829,34 +2211,56 @@ export class OpencodeSession implements HarnessSession {
   }
 
   #replyQuestion(id: string, answers: string[][]): Promise<void> {
-    return fetch(`${this.#serverUrl}/question/${id}/reply?directory=${encodeURIComponent(this.#directory)}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ answers }),
-    })
+    return fetch(
+      `${this.#serverUrl}/question/${id}/reply?directory=${encodeURIComponent(this.#directory)}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ answers }),
+      }
+    )
       .then((res) => {
-        if (!res.ok) this.#ctx.failed(new Error(`opencode question reply failed: ${res.status}`));
+        if (!res.ok) {
+          this.#ctx.failed(
+            new Error(`opencode question reply failed: ${res.status}`)
+          );
+        }
       })
       .catch(() => {});
   }
 
   #rejectQuestion(id: string): Promise<void> {
-    return fetch(`${this.#serverUrl}/question/${id}/reject?directory=${encodeURIComponent(this.#directory)}`, {
-      method: 'POST',
-    })
+    return fetch(
+      `${this.#serverUrl}/question/${id}/reject?directory=${encodeURIComponent(this.#directory)}`,
+      {
+        method: "POST",
+      }
+    )
       .then((res) => {
-        if (!res.ok) this.#ctx.failed(new Error(`opencode question reject failed: ${res.status}`));
+        if (!res.ok) {
+          this.#ctx.failed(
+            new Error(`opencode question reject failed: ${res.status}`)
+          );
+        }
       })
       .catch(() => {});
   }
 
   async interrupt(): Promise<void> {
-    await this.#client.session.abort({ path: { id: this.sessionId! }, query: { directory: this.#directory } });
+    await this.#client.session.abort({
+      path: { id: this.sessionId! },
+      query: { directory: this.#directory },
+    });
   }
 
   async stop(): Promise<void> {
     this.#onRelease();
-    await this.#client.session.abort({ path: { id: this.sessionId! }, query: { directory: this.#directory } }).catch(() => {});
+    await this.#client.session
+      .abort({
+        path: { id: this.sessionId! },
+        query: { directory: this.#directory },
+      })
+      .catch(() => {});
   }
 
   async dispose(): Promise<void> {
@@ -1865,9 +2269,9 @@ export class OpencodeSession implements HarnessSession {
 }
 
 export class OpencodeHarness implements Harness {
-  readonly kind = 'opencode' as const;
+  readonly kind = "opencode" as const;
   readonly capabilities = OPENCODE_CAPABILITIES;
-  auth: import('@whiffle/core').AuthState = 'authenticated';
+  auth: import("@whiffle/core").AuthState = "authenticated";
 
   #client: OpencodeClient | null = null;
   /** The URL the sessiond-held server announced; the sessions' `fetch` base. */
@@ -1886,18 +2290,20 @@ export class OpencodeHarness implements Harness {
   #pumpDirs = new Set<string>();
 
   async detect(): Promise<HarnessReport> {
-    const installed = resolveBin('opencode') !== undefined;
+    const installed = resolveBin("opencode") !== undefined;
     let version: string | undefined;
     if (installed) {
       const ran = await Bun.$`opencode --version`.quiet().nothrow();
       const said = ran.stdout.toString().trim();
-      if (ran.exitCode === 0 && said) version = said;
+      if (ran.exitCode === 0 && said) {
+        version = said;
+      }
     }
     return {
-      harness: 'opencode',
+      harness: "opencode",
       installed,
       ...(version ? { version } : {}),
-      auth: installed ? 'authenticated' : 'unauthenticated',
+      auth: installed ? "authenticated" : "unauthenticated",
       capabilities: OPENCODE_CAPABILITIES,
     };
   }
@@ -1911,10 +2317,13 @@ export class OpencodeHarness implements Harness {
     // `WHIFFLE_SESSIOND_ENDPOINT` is sessiond's own override
     // (`sessiond/src/main.ts`), honoured here too so a dev run — or a test —
     // points both halves at a scratch socket instead of the real one.
-    endpoint: string = process.env.WHIFFLE_SESSIOND_ENDPOINT ?? sessiondEndpoint()
+    endpoint: string = process.env.WHIFFLE_SESSIOND_ENDPOINT ??
+      sessiondEndpoint()
   ): Promise<SessiondClient> {
     const existing = await this.#sessiond?.catch(() => undefined);
-    if (existing && !existing.closed) return existing;
+    if (existing && !existing.closed) {
+      return existing;
+    }
     this.#sessiond = (async () => {
       await ensureSessiond(endpoint);
       return SessiondClient.connect(endpoint);
@@ -1923,7 +2332,9 @@ export class OpencodeHarness implements Harness {
   }
 
   #ensure(): Promise<OpencodeClient> {
-    if (this.#client) return Promise.resolve(this.#client);
+    if (this.#client) {
+      return Promise.resolve(this.#client);
+    }
     if (!this.#ready) {
       // A spawn after a dispose is a revival, not a leak: the adapter is a
       // module singleton, the server it attaches to outlived the teardown, and
@@ -1938,7 +2349,7 @@ export class OpencodeHarness implements Harness {
         // exception: fleet policy is the firecrawl MCP, and a `deny` publishes
         // no permission event at all, so it never reaches {@link autoAllows}.
         const config = {
-          permission: { edit: 'ask', bash: 'ask', webfetch: 'deny' },
+          permission: { edit: "ask", bash: "ask", webfetch: "deny" },
           // Fleet policy: search is the Exa MCP. `webfetch: 'deny'` above
           // removes the fetch built-in; `websearch` has no permission key,
           // so the tool itself is switched off.
@@ -1955,8 +2366,8 @@ export class OpencodeHarness implements Harness {
             // The SDK builds this exact command line
             // (`@opencode-ai/sdk/dist/server.js`); we build it here because the
             // spawn is sessiond's now, not `cross-spawn`'s.
-            command: resolveBin('opencode') ?? 'opencode',
-            args: ['serve', '--hostname=127.0.0.1', '--port=0'],
+            command: resolveBin("opencode") ?? "opencode",
+            args: ["serve", "--hostname=127.0.0.1", "--port=0"],
             env: { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) },
           },
         });
@@ -1975,11 +2386,17 @@ export class OpencodeHarness implements Harness {
   /** Writes the hand-off plugin into opencode's global plugin dir before the server boots. */
   async #writePlugin(): Promise<void> {
     await Bun.$`mkdir -p ${OPENCODE_PLUGINS}`.quiet();
-    const pkg = (await readJson<{ dependencies?: Record<string, string> }>(OPENCODE_PACKAGE)) ?? {};
-    if (!pkg.dependencies?.['@opencode-ai/plugin']) {
+    const pkg =
+      (await readJson<{ dependencies?: Record<string, string> }>(
+        OPENCODE_PACKAGE
+      )) ?? {};
+    if (!pkg.dependencies?.["@opencode-ai/plugin"]) {
       await writeJson(OPENCODE_PACKAGE, {
         ...pkg,
-        dependencies: { ...(pkg.dependencies ?? {}), '@opencode-ai/plugin': '1.18.18' },
+        dependencies: {
+          ...(pkg.dependencies ?? {}),
+          "@opencode-ai/plugin": "1.18.18",
+        },
       });
     }
     // Same "Available types" sentence claude's and pi's own `delegateTypeLine`
@@ -1987,11 +2404,11 @@ export class OpencodeHarness implements Harness {
     // read once here rather than kept live.
     const types = await fetchDelegateTypes();
     const typeLine = types.length
-      ? ` Available types: ${types.map((type) => `'${type.name}' (${type.description}${type.canDelegate ? '; may delegate by default' : ''})`).join('; ')}.`
-      : '';
+      ? ` Available types: ${types.map((type) => `'${type.name}' (${type.description}${type.canDelegate ? "; may delegate by default" : ""})`).join("; ")}.`
+      : "";
     const source = buildHandoffPluginSource(typeLine);
     const existing = Bun.file(OPENCODE_HANDOFF_PLUGIN);
-    const current = (await existing.exists()) ? await existing.text() : '';
+    const current = (await existing.exists()) ? await existing.text() : "";
     if (current !== source) {
       await Bun.write(OPENCODE_HANDOFF_PLUGIN, source);
     }
@@ -1999,19 +2416,25 @@ export class OpencodeHarness implements Harness {
 
   /** Starts the directory-scoped subscription for a directory, once per unique cwd. */
   #ensurePump(client: OpencodeClient, directory: string): void {
-    if (this.#disposed || this.#pumpDirs.has(directory)) return;
+    if (this.#disposed || this.#pumpDirs.has(directory)) {
+      return;
+    }
     this.#pumpDirs.add(directory);
     void this.#pumpDirectory(client, directory).catch(() => {});
   }
 
-  async #pumpDirectory(client: OpencodeClient, directory: string): Promise<void> {
+  async #pumpDirectory(
+    client: OpencodeClient,
+    directory: string
+  ): Promise<void> {
     let delay = 1000;
     while (!this.#disposed) {
       try {
-        const stream = (await client.event.subscribe({ query: { directory } })).stream;
+        const stream = (await client.event.subscribe({ query: { directory } }))
+          .stream;
         for await (const event of stream) {
           delay = 1000;
-          if (event.type === 'session.created') {
+          if (event.type === "session.created") {
             this.#routeChildCreated(event);
             continue;
           }
@@ -2021,15 +2444,19 @@ export class OpencodeHarness implements Harness {
             session.handle(event);
           } else if (sid) {
             const child = this.#children.get(sid);
-            if (child) child.parent.handleChild(event, child.callID);
+            if (child) {
+              child.parent.handleChild(event, child.callID);
+            }
           }
         }
       } catch {
         // The stream ended or dropped; reconnect below unless disposed.
       }
-      if (this.#disposed) break;
+      if (this.#disposed) {
+        break;
+      }
       await Bun.sleep(delay);
-      delay = Math.min(delay * 2, 30000);
+      delay = Math.min(delay * 2, 30_000);
     }
   }
 
@@ -2041,9 +2468,13 @@ export class OpencodeHarness implements Harness {
     };
     const childId = props.info?.id ?? props.sessionID;
     const parentId = props.info?.parentID;
-    if (!childId || !parentId) return;
+    if (!(childId && parentId)) {
+      return;
+    }
     const parent = this.#sessionForSid(parentId);
-    if (parent) parent.handleChildCreated(childId, props.info?.agent, props.info?.title);
+    if (parent) {
+      parent.handleChildCreated(childId, props.info?.agent, props.info?.title);
+    }
   }
 
   #eventSession(event: Event): string | undefined {
@@ -2067,12 +2498,17 @@ export class OpencodeHarness implements Harness {
   #sessionForSid(sid: string): OpencodeSession | undefined {
     let found: OpencodeSession | undefined;
     for (const session of this.#sessions.values()) {
-      if (session.sessionId === sid) found = session;
+      if (session.sessionId === sid) {
+        found = session;
+      }
     }
     return found;
   }
 
-  async spawn(spec: SpawnPayload, ctx: HarnessContext): Promise<HarnessSession> {
+  async spawn(
+    spec: SpawnPayload,
+    ctx: HarnessContext
+  ): Promise<HarnessSession> {
     const client = await this.#ensure();
     this.#ensurePump(client, ctx.cwd);
     let sessionId: string;
@@ -2083,7 +2519,9 @@ export class OpencodeHarness implements Harness {
         query: { directory: ctx.cwd },
         body: spec.resume.atMessage ? { messageID: spec.resume.atMessage } : {},
       });
-      if (fork.error || !fork.data) throw new Error('opencode could not fork the session');
+      if (fork.error || !fork.data) {
+        throw new Error("opencode could not fork the session");
+      }
       sessionId = (fork.data as Session).id;
     } else if (spec.resume) {
       // Re-open: opencode sessions persist in the server's DB, so resuming is
@@ -2096,11 +2534,17 @@ export class OpencodeHarness implements Harness {
           query: { directory: ctx.cwd },
           body: { messageID: spec.resume.atMessage },
         });
-        if (reverted.error) throw new Error('opencode could not rewind to that message');
+        if (reverted.error) {
+          throw new Error("opencode could not rewind to that message");
+        }
       }
     } else {
-      const created = await client.session.create({ query: { directory: ctx.cwd } });
-      if (created.error || !created.data) throw new Error('opencode could not create the session');
+      const created = await client.session.create({
+        query: { directory: ctx.cwd },
+      });
+      if (created.error || !created.data) {
+        throw new Error("opencode could not create the session");
+      }
       sessionId = (created.data as Session).id;
     }
 
@@ -2114,11 +2558,14 @@ export class OpencodeHarness implements Harness {
       spec.model,
       spec.permissionMode,
       this.#serverUrl!,
-      (childId, callID) => this.#children.set(childId, { parent: session, callID }),
+      (childId, callID) =>
+        this.#children.set(childId, { parent: session, callID }),
       () => {
         this.#sessions.delete(ctx.instanceId);
         for (const [childId, entry] of this.#children) {
-          if (entry.parent === session) this.#children.delete(childId);
+          if (entry.parent === session) {
+            this.#children.delete(childId);
+          }
         }
       }
     );
@@ -2126,8 +2573,8 @@ export class OpencodeHarness implements Harness {
     ctx.session(sessionId);
     // The init frame the dashboard reads the model / cwd / commands off.
     ctx.frame({
-      type: 'system',
-      subtype: 'init',
+      type: "system",
+      subtype: "init",
       session_id: sessionId,
       cwd: ctx.cwd,
       ...(spec.model ? { model: spec.model } : {}),
@@ -2141,7 +2588,7 @@ export class OpencodeHarness implements Harness {
         await client.session.command({
           path: { id: sessionId },
           query: { directory: ctx.cwd },
-          body: { command: skill, arguments: '' },
+          body: { command: skill, arguments: "" },
         });
       }
     }
@@ -2150,13 +2597,17 @@ export class OpencodeHarness implements Harness {
   }
 
   async listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
-    if (resolveBin('opencode') === undefined) return [];
+    if (resolveBin("opencode") === undefined) {
+      return [];
+    }
     const client = await this.#ensure();
     const tags = await readTags();
 
     if (dir) {
       const result = await client.session.list({ query: { directory: dir } });
-      if (result.error || !result.data) return [];
+      if (result.error || !result.data) {
+        return [];
+      }
       // Subagent children do not belong in the rail.
       return (result.data as Session[])
         .filter((session) => !session.parentID)
@@ -2167,12 +2618,16 @@ export class OpencodeHarness implements Harness {
     // unscoped `session.list` only covers the server's current project, so ask
     // per project worktree.
     const projects = await client.project.list();
-    if (projects.error || !projects.data) return [];
+    if (projects.error || !projects.data) {
+      return [];
+    }
     const lists = await Promise.all(
       (projects.data as Project[]).map((project) =>
         client.session
           .list({ query: { directory: project.worktree } })
-          .then((res) => (res.error || !res.data ? [] : (res.data as Session[])))
+          .then((res) =>
+            res.error || !res.data ? [] : (res.data as Session[])
+          )
           .catch(() => [] as Session[])
       )
     );
@@ -2180,7 +2635,9 @@ export class OpencodeHarness implements Harness {
     const merged: Session[] = [];
     for (const list of lists) {
       for (const session of list) {
-        if (session.parentID || seen.has(session.id)) continue;
+        if (session.parentID || seen.has(session.id)) {
+          continue;
+        }
         seen.add(session.id);
         merged.push(session);
       }
@@ -2188,76 +2645,145 @@ export class OpencodeHarness implements Harness {
     return merged.map((session) => sessionToInfo(session, tags[session.id]));
   }
 
-  async getSessionInfo(sessionKey: string, dir?: string): Promise<NeutralSessionInfo | undefined> {
-    if (resolveBin('opencode') === undefined) return undefined;
+  async getSessionInfo(
+    sessionKey: string,
+    dir?: string
+  ): Promise<NeutralSessionInfo | undefined> {
+    if (resolveBin("opencode") === undefined) {
+      return undefined;
+    }
     const client = await this.#ensure();
-    const result = await client.session.get({ path: { id: sessionKey }, query: { directory: dir } });
-    if (result.error || !result.data) return undefined;
+    const result = await client.session.get({
+      path: { id: sessionKey },
+      query: { directory: dir },
+    });
+    if (result.error || !result.data) {
+      return undefined;
+    }
     const tags = await readTags();
     return sessionToInfo(result.data as Session, tags[sessionKey]);
   }
 
-  async getSessionMessages(sessionKey: string, dir?: string): Promise<SessionMessage[]> {
-    if (resolveBin('opencode') === undefined) return [];
+  async getSessionMessages(
+    sessionKey: string,
+    dir?: string
+  ): Promise<SessionMessage[]> {
+    if (resolveBin("opencode") === undefined) {
+      return [];
+    }
     const client = await this.#ensure();
-    const result = await client.session.messages({ path: { id: sessionKey }, query: { directory: dir } });
-    if (result.error || !result.data) return [];
+    const result = await client.session.messages({
+      path: { id: sessionKey },
+      query: { directory: dir },
+    });
+    if (result.error || !result.data) {
+      return [];
+    }
     let rows = result.data as { info: Message; parts: Part[] }[];
 
     // opencode keeps the full history even after a rewind; reflect the session's
     // `revert` point by dropping it and everything after.
-    const sessionRes = await client.session.get({ path: { id: sessionKey }, query: { directory: dir } });
+    const sessionRes = await client.session.get({
+      path: { id: sessionKey },
+      query: { directory: dir },
+    });
     const revertID = (sessionRes.data as Session).revert?.messageID;
     if (revertID) {
       const idx = rows.findIndex((row) => row.info.id === revertID);
-      if (idx >= 0) rows = rows.slice(0, idx);
+      if (idx >= 0) {
+        rows = rows.slice(0, idx);
+      }
     }
 
     const entries = toTranscript(sessionKey, rows);
 
     // Subagents: children of this session, linked to their parent's task tool
     // call by the task ToolPart's `state.metadata.sessionId` (verified capture).
-    const childrenRes = await client.session.children({ path: { id: sessionKey } });
-    if (childrenRes.error || !childrenRes.data) return entries;
+    const childrenRes = await client.session.children({
+      path: { id: sessionKey },
+    });
+    if (childrenRes.error || !childrenRes.data) {
+      return entries;
+    }
 
     const callByChild = new Map<string, string>();
     for (const row of rows) {
       for (const part of row.parts) {
-        if (part.type !== 'tool' || part.tool !== 'task') continue;
-        const childId = (part.state as { metadata?: { sessionId?: string } }).metadata?.sessionId;
-        if (typeof childId === 'string') callByChild.set(childId, part.callID);
+        if (part.type !== "tool" || part.tool !== "task") {
+          continue;
+        }
+        const childId = (part.state as { metadata?: { sessionId?: string } })
+          .metadata?.sessionId;
+        if (typeof childId === "string") {
+          callByChild.set(childId, part.callID);
+        }
       }
     }
 
     for (const child of childrenRes.data as Session[]) {
       const callID = callByChild.get(child.id);
-      if (!callID) continue;
-      const childRes = await client.session.messages({ path: { id: child.id }, query: { directory: dir } });
-      if (childRes.error || !childRes.data) continue;
-      const childEntries = toTranscript(child.id, childRes.data as { info: Message; parts: Part[] }[]);
-      for (const entry of childEntries) entry.parent_tool_use_id = callID;
+      if (!callID) {
+        continue;
+      }
+      const childRes = await client.session.messages({
+        path: { id: child.id },
+        query: { directory: dir },
+      });
+      if (childRes.error || !childRes.data) {
+        continue;
+      }
+      const childEntries = toTranscript(
+        child.id,
+        childRes.data as { info: Message; parts: Part[] }[]
+      );
+      for (const entry of childEntries) {
+        entry.parent_tool_use_id = callID;
+      }
       entries.push(...childEntries);
     }
 
     return entries;
   }
 
-  renameSession(sessionKey: string, title: string, dir?: string): Promise<void> {
-    if (resolveBin('opencode') === undefined) return Promise.resolve(undefined);
-    return this.#ensure().then((client) =>
-      client.session.update({ path: { id: sessionKey }, query: { directory: dir }, body: { title } })
-    ).then(() => undefined);
+  renameSession(
+    sessionKey: string,
+    title: string,
+    dir?: string
+  ): Promise<void> {
+    if (resolveBin("opencode") === undefined) {
+      return Promise.resolve(undefined);
+    }
+    return this.#ensure()
+      .then((client) =>
+        client.session.update({
+          path: { id: sessionKey },
+          query: { directory: dir },
+          body: { title },
+        })
+      )
+      .then(() => undefined);
   }
 
-  async tagSession(sessionKey: string, tag: string | null, dir?: string): Promise<void> {
+  async tagSession(
+    sessionKey: string,
+    tag: string | null,
+    dir?: string
+  ): Promise<void> {
     await writeTag(sessionKey, tag);
   }
 
   deleteSession(sessionKey: string, dir?: string): Promise<void> {
-    if (resolveBin('opencode') === undefined) return Promise.resolve(undefined);
-    return this.#ensure().then((client) =>
-      client.session.delete({ path: { id: sessionKey }, query: { directory: dir } })
-    ).then(() => undefined);
+    if (resolveBin("opencode") === undefined) {
+      return Promise.resolve(undefined);
+    }
+    return this.#ensure()
+      .then((client) =>
+        client.session.delete({
+          path: { id: sessionKey },
+          query: { directory: dir },
+        })
+      )
+      .then(() => undefined);
   }
 
   async machine(method: string, args: unknown[]): Promise<unknown> {
@@ -2268,19 +2794,21 @@ export class OpencodeHarness implements Harness {
           path: { id: args[0] as string },
           ...(args[1] ? { query: { directory: args[1] as string } } : {}),
         });
-        if (result.error || !result.data) return [];
+        if (result.error || !result.data) {
+          return [];
+        }
         return (result.data as Todo[])
-          .filter((todo) => todo.status !== 'cancelled')
-          .map(
-            (todo): import('@whiffle/core').NeutralTask => ({
-              id: todo.id,
-              subject: todo.content,
-              status:
-                todo.status === 'in_progress' || todo.status === 'completed' ? todo.status : 'pending',
-              blocks: [],
-              blockedBy: [],
-            })
-          );
+          .filter((todo) => todo.status !== "cancelled")
+          .map((todo): import("@whiffle/core").NeutralTask => ({
+            id: todo.id,
+            subject: todo.content,
+            status:
+              todo.status === "in_progress" || todo.status === "completed"
+                ? todo.status
+                : "pending",
+            blocks: [],
+            blockedBy: [],
+          }));
       }
       default:
         return undefined;
@@ -2317,7 +2845,11 @@ export class OpencodeHarness implements Harness {
       at: Date.now(),
     };
 
-    const mcp = await syncOpencodeMcp(config.mcp, sidecar.mcp ?? [], report.mcp);
+    const mcp = await syncOpencodeMcp(
+      config.mcp,
+      sidecar.mcp ?? [],
+      report.mcp
+    );
     // Remove the skills/memory the pre-2026-08-14 sync wrote; opencode reads
     // ~/.claude/skills/ and its own memory file, so whiffle no longer owns these.
     if (Object.keys(sidecar.skills).length > 0) {
@@ -2340,9 +2872,13 @@ export class OpencodeHarness implements Harness {
       at: Date.now(),
     };
 
-    const stored = (await readJson<{ mcp?: Record<string, unknown> }>(OPENCODE_CONFIG)) ?? {};
+    const stored =
+      (await readJson<{ mcp?: Record<string, unknown> }>(OPENCODE_CONFIG)) ??
+      {};
     for (const name of sidecar.mcp ?? []) {
-      report.mcp[name] = stored.mcp?.[name] ? { state: 'applied' } : { state: 'failed', detail: 'not in opencode.json' };
+      report.mcp[name] = stored.mcp?.[name]
+        ? { state: "applied" }
+        : { state: "failed", detail: "not in opencode.json" };
     }
     return report;
   }
@@ -2360,17 +2896,17 @@ export function toTranscript(
 ): SessionMessage[] {
   const entries: SessionMessage[] = [];
   for (const { info, parts } of rows) {
-    if (info.role === 'user') {
+    if (info.role === "user") {
       const text = parts
-        .filter((part): part is TextPart => part.type === 'text')
+        .filter((part): part is TextPart => part.type === "text")
         .map((part) => part.text)
-        .join('\n');
+        .join("\n");
       if (text) {
         entries.push({
-          type: 'user',
+          type: "user",
           uuid: info.id,
           session_id: sessionKey,
-          message: { role: 'user', content: text },
+          message: { role: "user", content: text },
           parent_tool_use_id: null,
           parent_agent_id: null,
         });
@@ -2382,50 +2918,68 @@ export function toTranscript(
     // become a tool_use entry, and each tool result a user entry.
     const blocks: NeutralAssistantBlock[] = [];
     for (const part of parts) {
-      if (part.type === 'text' && !part.synthetic && !part.ignored) {
-        blocks.push({ type: 'text', text: part.text });
-      } else if (part.type === 'reasoning') {
-        blocks.push({ type: 'thinking', thinking: part.text });
-      } else if (part.type === 'tool') {
-        blocks.push({ type: 'tool_use', id: part.callID, name: toolNameOf(part.tool), input: part.state.input });
+      if (part.type === "text" && !part.synthetic && !part.ignored) {
+        blocks.push({ type: "text", text: part.text });
+      } else if (part.type === "reasoning") {
+        blocks.push({ type: "thinking", thinking: part.text });
+      } else if (part.type === "tool") {
+        blocks.push({
+          type: "tool_use",
+          id: part.callID,
+          name: toolNameOf(part.tool),
+          input: part.state.input,
+        });
       }
     }
     if (blocks.length) {
       entries.push({
-        type: 'assistant',
+        type: "assistant",
         uuid: info.id,
         session_id: sessionKey,
-        message: { role: 'assistant', model: `${(info as AssistantMessage).providerID}/${(info as AssistantMessage).modelID}`, content: blocks },
+        message: {
+          role: "assistant",
+          model: `${(info as AssistantMessage).providerID}/${(info as AssistantMessage).modelID}`,
+          content: blocks,
+        },
         parent_tool_use_id: null,
         parent_agent_id: null,
       });
     }
     for (const part of parts) {
-      if (part.type !== 'tool') continue;
-      if (part.state.status === 'completed' || part.state.status === 'error') {
-        const output = part.state.status === 'completed' ? part.state.output : part.state.error;
-        const metadata = part.state.status === 'completed'
-          ? (part.state as { metadata?: Record<string, unknown> }).metadata
-          : undefined;
-        const structuredContent = metadata && Object.keys(metadata).length > 0 ? metadata : undefined;
+      if (part.type !== "tool") {
+        continue;
+      }
+      if (part.state.status === "completed" || part.state.status === "error") {
+        const output =
+          part.state.status === "completed"
+            ? part.state.output
+            : part.state.error;
+        const metadata =
+          part.state.status === "completed"
+            ? (part.state as { metadata?: Record<string, unknown> }).metadata
+            : undefined;
+        const structuredContent =
+          metadata && Object.keys(metadata).length > 0 ? metadata : undefined;
         entries.push({
-          type: 'user',
+          type: "user",
           uuid: `${info.id}:${part.id}`,
           session_id: sessionKey,
           message: {
-            role: 'user',
+            role: "user",
             content: [
               {
-                type: 'tool_result',
+                type: "tool_result",
                 tool_use_id: part.callID,
                 content: output,
-                is_error: part.state.status === 'error',
+                is_error: part.state.status === "error",
                 ...(structuredContent ? { structuredContent } : {}),
                 // Replay says what the live stream said: opencode keeps the
                 // asked questions and the chosen answers on the part itself, so
                 // a reopened transcript draws the answered card rather than
                 // losing the exchange.
-                ...(questionResultOf(part) ? { questionResult: questionResultOf(part) } : {}),
+                ...(questionResultOf(part)
+                  ? { questionResult: questionResultOf(part) }
+                  : {}),
               },
             ],
           },

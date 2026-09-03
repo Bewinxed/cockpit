@@ -5,39 +5,24 @@
  * caught up — without a terminal on it, and without clobbering a dev machine
  * that is mid-edit.
  */
-import type { UpdateReport } from '@whiffle/core';
-import { homedir, platform } from 'node:os';
-import { join } from 'node:path';
-import { REPO_ROOT } from './build';
+
+import { homedir, platform } from "node:os";
+import { join } from "node:path";
+import type { UpdateReport } from "@whiffle/core";
+import { REPO_ROOT } from "./build";
 import {
   checkDeploy,
   DEPLOY_BRANCH,
-  deployRoot,
-  describeDeploy,
-  startDeployPoller,
   type DeployPoller,
   type DeployState,
   type DeployWatcherOptions,
-} from './deploy';
-import { toolEnv } from './tools';
+  deployRoot,
+  describeDeploy,
+  startDeployPoller,
+} from "./deploy";
+import { toolEnv } from "./tools";
 
 export interface UpdateOptions {
-  /** Restart this daemon too, once everything else is up — and only when idle. */
-  restartAgent?: boolean;
-  /** Pull onto a dirty checkout, and restart the agent mid-turn. Both are refusals. */
-  force?: boolean;
-  /**
-   * How many turns this daemon is carrying. Filled in by the supervisor, which
-   * is the only thing that knows — never read off the wire.
-   */
-  busy?: number;
-  /**
-   * Which checkout to update. Defaults to the one this daemon is running out of
-   * — which is the whole of what the manual `updateWhiffle` control ever meant.
-   * The deployment poller passes the marked clone explicitly (C8), because
-   * "wherever this file happens to sit" is not a thing to pull into.
-   */
-  root?: string;
   /**
    * Pull from `origin/<branch>` by name rather than from whatever upstream the
    * checkout has configured. Set by the deployment poller (C8/G3): the deploy
@@ -45,12 +30,29 @@ export interface UpdateOptions {
    * named is how a clone quietly starts following something else.
    */
   branch?: string;
+  /**
+   * How many turns this daemon is carrying. Filled in by the supervisor, which
+   * is the only thing that knows — never read off the wire.
+   */
+  busy?: number;
+  /** Pull onto a dirty checkout, and restart the agent mid-turn. Both are refusals. */
+  force?: boolean;
+  /** Restart this daemon too, once everything else is up — and only when idle. */
+  restartAgent?: boolean;
+  /**
+   * Which checkout to update. Defaults to the one this daemon is running out of
+   * — which is the whole of what the manual `updateWhiffle` control ever meant.
+   * The deployment poller passes the marked clone explicitly (C8), because
+   * "wherever this file happens to sit" is not a thing to pull into.
+   */
+  root?: string;
 }
 
 /** The end of a command's output: enough to name what happened, not a wall of it. */
 const TAIL_LINES = 4;
 
-const tail = (output: string): string => output.trim().split('\n').slice(-TAIL_LINES).join('\n');
+const tail = (output: string): string =>
+  output.trim().split("\n").slice(-TAIL_LINES).join("\n");
 
 /** Bounds, in the order the steps run. A step that will not end must not hold the rest. */
 const GIT_TIMEOUT_MS = 60_000;
@@ -59,8 +61,8 @@ const BUILD_TIMEOUT_MS = 10 * 60_000;
 const SERVICE_TIMEOUT_MS = 30_000;
 
 export interface Ran {
-  ok: boolean;
   code: number;
+  ok: boolean;
   /** The tail of what it said: what it printed, or what it failed with. */
   said: string;
 }
@@ -70,12 +72,16 @@ export interface Ran {
  * running if it hangs: a pull against an unreachable remote would otherwise hold
  * the control open forever, and the hub would never hear how the update went.
  */
-export const run = async (argv: string[], timeoutMs: number, cwd: string = REPO_ROOT): Promise<Ran> => {
+export const run = async (
+  argv: string[],
+  timeoutMs: number,
+  cwd: string = REPO_ROOT
+): Promise<Ran> => {
   const child = Bun.spawn(argv, {
     cwd,
     env: toolEnv(),
-    stdout: 'pipe',
-    stderr: 'pipe',
+    stdout: "pipe",
+    stderr: "pipe",
     timeout: timeoutMs,
   });
   const [stdout, stderr] = await Promise.all([
@@ -87,16 +93,21 @@ export const run = async (argv: string[], timeoutMs: number, cwd: string = REPO_
     return { ok: false, code, said: `timed out after ${timeoutMs / 1000}s` };
   }
   const ok = code === 0;
-  return { ok, code, said: ok ? tail(stdout) || tail(stderr) : tail(stderr) || tail(stdout) };
+  return {
+    ok,
+    code,
+    said: ok ? tail(stdout) || tail(stderr) : tail(stderr) || tail(stdout),
+  };
 };
 
-const git = (args: string[], cwd?: string): Promise<Ran> => run(['git', ...args], GIT_TIMEOUT_MS, cwd);
+const git = (args: string[], cwd?: string): Promise<Ran> =>
+  run(["git", ...args], GIT_TIMEOUT_MS, cwd);
 
 const failed = (step: string, ran: Ran): Error =>
   new Error(`${step} failed: ${ran.said || `exited ${ran.code}`}`);
 
 /** The three services `whiffle service install` puts on a machine, in start order. */
-type Service = 'hub' | 'dashboard' | 'agent';
+type Service = "hub" | "dashboard" | "agent";
 
 /**
  * Where that install left them — the same two paths it writes, named here
@@ -104,22 +115,28 @@ type Service = 'hub' | 'dashboard' | 'agent';
  * must stay identical to the installer's in `packages/cli`.
  */
 const unitPath = (id: Service): string =>
-  platform() === 'darwin'
-    ? join(homedir(), 'Library', 'LaunchAgents', `dev.whiffle.${id}.plist`)
+  platform() === "darwin"
+    ? join(homedir(), "Library", "LaunchAgents", `dev.whiffle.${id}.plist`)
     : join(
-        process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'),
-        'systemd',
-        'user',
+        process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
+        "systemd",
+        "user",
         `whiffle-${id}.service`
       );
 
 /** A service nobody installed here is not this machine's to restart. */
-const isInstalled = (id: Service): Promise<boolean> => Bun.file(unitPath(id)).exists();
+const isInstalled = (id: Service): Promise<boolean> =>
+  Bun.file(unitPath(id)).exists();
 
 const restartCommand = (id: Service): string[] =>
-  platform() === 'darwin'
-    ? ['launchctl', 'kickstart', '-k', `gui/${process.getuid?.() ?? 0}/dev.whiffle.${id}`]
-    : ['systemctl', '--user', 'restart', `whiffle-${id}.service`];
+  platform() === "darwin"
+    ? [
+        "launchctl",
+        "kickstart",
+        "-k",
+        `gui/${process.getuid?.() ?? 0}/dev.whiffle.${id}`,
+      ]
+    : ["systemctl", "--user", "restart", `whiffle-${id}.service`];
 
 /** How long the reply gets to reach the hub before this daemon goes down with it. */
 const RESTART_DELAY_S = 1;
@@ -130,13 +147,16 @@ const RESTART_DELAY_S = 1;
  * Handed to a shell that waits a second first — every argument is a unit name
  * or a launchd label, so joining them is safe.
  */
-const scheduleRestart = (id: 'agent' | 'hub'): void => {
-  const command = `sleep ${RESTART_DELAY_S}; exec ${restartCommand(id).join(' ')}`;
-  Bun.spawn(['sh', '-c', command], { stdio: ['ignore', 'ignore', 'ignore'] }).unref();
+const scheduleRestart = (id: "agent" | "hub"): void => {
+  const command = `sleep ${RESTART_DELAY_S}; exec ${restartCommand(id).join(" ")}`;
+  Bun.spawn(["sh", "-c", command], {
+    stdio: ["ignore", "ignore", "ignore"],
+  }).unref();
 };
 
 /** What the dashboard service serves, and the sign that this machine builds it. */
-const dashboardBuild = (root: string): string => join(root, 'apps', 'dashboard', 'build', 'index.js');
+const dashboardBuild = (root: string): string =>
+  join(root, "apps", "dashboard", "build", "index.js");
 
 /**
  * Whether a dashboard build is this machine's business. A worker running only
@@ -144,7 +164,8 @@ const dashboardBuild = (root: string): string => join(root, 'apps', 'dashboard',
  * a machine that has one already is one that serves it.
  */
 const buildsDashboard = async (root: string): Promise<boolean> =>
-  (await Bun.file(dashboardBuild(root)).exists()) || (await isInstalled('dashboard'));
+  (await Bun.file(dashboardBuild(root)).exists()) ||
+  (await isInstalled("dashboard"));
 
 /**
  * How the checkout is moved forward, and the one line of this file that the
@@ -162,7 +183,7 @@ const buildsDashboard = async (root: string): Promise<boolean> =>
  * up since.
  */
 export const pullArgs = (branch?: string): string[] =>
-  branch ? ['pull', '--ff-only', 'origin', branch] : ['pull', '--ff-only'];
+  branch ? ["pull", "--ff-only", "origin", branch] : ["pull", "--ff-only"];
 
 /**
  * Everything the `updateWhiffle` control does, in the order it has to happen.
@@ -176,20 +197,30 @@ export const updateCheckout = async ({
   root = REPO_ROOT,
   branch,
 }: UpdateOptions = {}): Promise<UpdateReport> => {
-  const head = await git(['rev-parse', '--short', 'HEAD'], root);
-  if (!head.ok) throw new Error(`${root} is not a git checkout, so there is nothing to pull`);
+  const head = await git(["rev-parse", "--short", "HEAD"], root);
+  if (!head.ok) {
+    throw new Error(
+      `${root} is not a git checkout, so there is nothing to pull`
+    );
+  }
 
-  const dirty = await git(['status', '--porcelain'], root);
-  if (!dirty.ok) throw failed('git status', dirty);
+  const dirty = await git(["status", "--porcelain"], root);
+  if (!dirty.ok) {
+    throw failed("git status", dirty);
+  }
   if (dirty.said && !force) {
-    throw new Error('the checkout has uncommitted changes; refusing to pull');
+    throw new Error("the checkout has uncommitted changes; refusing to pull");
   }
 
   const args = pullArgs(branch);
   const pulled = await git(args, root);
-  if (!pulled.ok) throw failed(`git ${args.join(' ')}`, pulled);
-  const moved = await git(['rev-parse', '--short', 'HEAD'], root);
-  if (!moved.ok) throw failed('git rev-parse', moved);
+  if (!pulled.ok) {
+    throw failed(`git ${args.join(" ")}`, pulled);
+  }
+  const moved = await git(["rev-parse", "--short", "HEAD"], root);
+  if (!moved.ok) {
+    throw failed("git rev-parse", moved);
+  }
 
   const report: UpdateReport = {
     from: head.said,
@@ -205,20 +236,28 @@ export const updateCheckout = async ({
   // services are still restarted, because being asked to update a machine that
   // is already current is how a wedged one gets picked up off the floor.
   if (report.to !== report.from) {
-    const installed = await run([process.execPath, 'install'], INSTALL_TIMEOUT_MS, root);
-    if (!installed.ok) throw failed('bun install', installed);
+    const installed = await run(
+      [process.execPath, "install"],
+      INSTALL_TIMEOUT_MS,
+      root
+    );
+    if (!installed.ok) {
+      throw failed("bun install", installed);
+    }
     report.installed = true;
 
     if (await buildsDashboard(root)) {
       const built = await run(
-        [process.execPath, 'run', '--filter', '@whiffle/dashboard', 'build'],
+        [process.execPath, "run", "--filter", "@whiffle/dashboard", "build"],
         BUILD_TIMEOUT_MS,
         root
       );
-      if (!built.ok) throw failed('the dashboard build', built);
+      if (!built.ok) {
+        throw failed("the dashboard build", built);
+      }
       report.built = true;
     } else {
-      skipped.push('this machine serves no dashboard, so none was built');
+      skipped.push("this machine serves no dashboard, so none was built");
     }
   }
 
@@ -236,7 +275,11 @@ export const updateCheckout = async ({
  */
 export const restartStack = async (
   report: UpdateReport,
-  { restartAgent, force, busy = 0 }: { restartAgent?: boolean; force?: boolean; busy?: number },
+  {
+    restartAgent,
+    force,
+    busy = 0,
+  }: { restartAgent?: boolean; force?: boolean; busy?: number },
   skipped: string[]
 ): Promise<UpdateReport> => {
   // The dashboard restarts in front of whoever asked; the hub cannot. An update
@@ -244,14 +287,19 @@ export const restartStack = async (
   // reply is still travelling on and the caller reads a timeout for an update
   // that worked. It is scheduled for a second later, exactly as this daemon
   // schedules its own restart, and for exactly the same reason.
-  if (await isInstalled('dashboard')) {
-    const restarted = await run(restartCommand('dashboard'), SERVICE_TIMEOUT_MS);
-    if (!restarted.ok) throw failed('restarting dashboard', restarted);
-    report.restarted.push('dashboard');
+  if (await isInstalled("dashboard")) {
+    const restarted = await run(
+      restartCommand("dashboard"),
+      SERVICE_TIMEOUT_MS
+    );
+    if (!restarted.ok) {
+      throw failed("restarting dashboard", restarted);
+    }
+    report.restarted.push("dashboard");
   }
-  if (await isInstalled('hub')) {
-    report.restarted.push('hub');
-    scheduleRestart('hub');
+  if (await isInstalled("hub")) {
+    report.restarted.push("hub");
+    scheduleRestart("hub");
   }
 
   // Last, and only when asked: this daemon is hosting the sessions the restart
@@ -259,16 +307,22 @@ export const restartStack = async (
   // second it waits is only there so this report can leave first.
   if (restartAgent) {
     if (busy > 0 && !force) {
-      skipped.push(`the agent is carrying ${busy} turn(s), so it was left running`);
-    } else if (!(await isInstalled('agent'))) {
-      skipped.push('the agent runs no service here, so nothing could restart it');
+      skipped.push(
+        `the agent is carrying ${busy} turn(s), so it was left running`
+      );
+    } else if (await isInstalled("agent")) {
+      report.restarted.push("agent");
+      scheduleRestart("agent");
     } else {
-      report.restarted.push('agent');
-      scheduleRestart('agent');
+      skipped.push(
+        "the agent runs no service here, so nothing could restart it"
+      );
     }
   }
 
-  if (skipped.length > 0) report.skipped = skipped.join('; ');
+  if (skipped.length > 0) {
+    report.skipped = skipped.join("; ");
+  }
   return report;
 };
 
@@ -283,13 +337,21 @@ export const restartStack = async (
  * live in sessiond's cgroup and not in the agent's (PLAN.md C7/D4).
  */
 export const deployUpdate = (state: DeployState): Promise<UpdateReport> => {
-  if (state.kind !== 'behind') {
-    throw new Error(`refusing to update a checkout that is ${state.kind}: ${describeDeploy(state)}`);
+  if (state.kind !== "behind") {
+    throw new Error(
+      `refusing to update a checkout that is ${state.kind}: ${describeDeploy(state)}`
+    );
   }
-  return updateCheckout({ root: state.root, branch: DEPLOY_BRANCH, restartAgent: true });
+  return updateCheckout({
+    root: state.root,
+    branch: DEPLOY_BRANCH,
+    restartAgent: true,
+  });
 };
 
-export type DeployWatchOptions = Partial<Omit<DeployWatcherOptions, 'update'>> & {
+export type DeployWatchOptions = Partial<
+  Omit<DeployWatcherOptions, "update">
+> & {
   readonly intervalMs?: number;
 };
 
@@ -300,12 +362,14 @@ export type DeployWatchOptions = Partial<Omit<DeployWatcherOptions, 'update'>> &
  * to, the very first thing every tick does is fail the marker check, so the
  * poller is a no-op in a dev tree by construction rather than by configuration.
  */
-export const watchDeployment = (options: DeployWatchOptions = {}): DeployPoller =>
-  startDeployPoller({ ...options, update: deployUpdate });
+export const watchDeployment = (
+  options: DeployWatchOptions = {}
+): DeployPoller => startDeployPoller({ ...options, update: deployUpdate });
 
 /**
  * Where this machine stands against the deployment branch, asked once. What
  * `whiffle deploy status` prints, and what the daemon can answer with.
  */
-export const deploymentState = (root: string = deployRoot()): Promise<DeployState> =>
-  checkDeploy({ root });
+export const deploymentState = (
+  root: string = deployRoot()
+): Promise<DeployState> => checkDeploy({ root });

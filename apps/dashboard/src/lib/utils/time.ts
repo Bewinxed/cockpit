@@ -6,7 +6,7 @@ export function formatDistanceToNow(date: Date): string {
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
   if (diffInSeconds < 5) {
-    return 'just now';
+    return "just now";
   }
 
   if (diffInSeconds < 60) {
@@ -46,11 +46,11 @@ export function formatDistanceToNow(date: Date): string {
  * Format a date as a readable timestamp
  */
 export function formatTimestamp(date: Date): string {
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
     hour12: true,
   });
 }

@@ -6,8 +6,8 @@
    * A model nobody here has a logo for renders nothing, and the caller keeps
    * whatever it had been showing instead.
    */
-  import type { Component } from 'svelte';
-  import { providerOf } from '$lib/whiffle/models.svelte';
+  import type { Component } from "svelte";
+  import { providerOf } from "$lib/whiffle/models.svelte";
   /*
    * Every mark here is square, and that is a hard requirement rather than a
    * coincidence: the caller sizes this with one number, so a mark whose viewBox
@@ -20,20 +20,20 @@
    * even distance from all of them. Where `logos` has only a wide mark, the
    * square sibling from `thesvg-color` is used instead.
    */
-  import IconClaude from '~icons/logos/claude-icon';
-  import IconOpenai from '~icons/logos/openai-icon';
-  import IconGrok from '~icons/logos/grok-icon';
-  import IconQwen from '~icons/logos/qwen-icon';
-  import IconMoonshot from '~icons/logos/moonshot-ai-icon';
-  import IconMistral from '~icons/logos/mistral-ai-icon';
-  import IconDeepseek from '~icons/thesvg-color/deepseek';
-  import IconGemini from '~icons/thesvg-color/google-gemini';
-  import IconMeta from '~icons/thesvg-color/metaai';
+  import IconClaude from "~icons/logos/claude-icon";
+  import IconGrok from "~icons/logos/grok-icon";
+  import IconMistral from "~icons/logos/mistral-ai-icon";
+  import IconMoonshot from "~icons/logos/moonshot-ai-icon";
+  import IconOpenai from "~icons/logos/openai-icon";
+  import IconQwen from "~icons/logos/qwen-icon";
+  import IconDeepseek from "~icons/thesvg-color/deepseek";
+  import IconGemini from "~icons/thesvg-color/google-gemini";
+  import IconMeta from "~icons/thesvg-color/metaai";
+  import IconMinimax from "~icons/thesvg-color/minimax";
   /* `nemotron` is the only id that resolves to this lab (see `provider.ts`), so
      the Nemotron mark is the accurate one as well as the square one. */
-  import IconNvidia from '~icons/thesvg-color/nvidia-nemotron';
-  import IconZhipu from '~icons/thesvg-color/zhipu';
-  import IconMinimax from '~icons/thesvg-color/minimax';
+  import IconNvidia from "~icons/thesvg-color/nvidia-nemotron";
+  import IconZhipu from "~icons/thesvg-color/zhipu";
 
   const LOGOS: Record<string, Component> = {
     anthropic: IconClaude,
@@ -53,7 +53,7 @@
   let {
     model,
     size = 16,
-    class: className = '',
+    class: className = "",
   }: {
     /** The model id as known on the wire; the provider is read off its name. */
     model: string;
@@ -62,7 +62,7 @@
     class?: string;
   } = $props();
 
-  const Logo = $derived(LOGOS[providerOf(model) ?? '']);
+  const Logo = $derived(LOGOS[providerOf(model) ?? ""]);
 
   // A `Record` lookup returns the component or `undefined`; that is the signal
   // the caller's own glyph should keep standing. So the whole body is guarded.
@@ -79,9 +79,9 @@
     instead. The attributes stay for the intrinsic size before CSS applies.
   -->
   <Logo
-    width={size}
+    class={className}
     height={size}
     style="width:{size}px;height:{size}px"
-    class={className}
+    width={size}
   />
 {/if}

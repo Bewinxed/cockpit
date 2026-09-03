@@ -5,31 +5,31 @@
    * popover in the session header, and the context rail's MCP tab, which is the
    * same question asked with more room.
    */
-  import type { McpServerStatus } from '@whiffle/core';
-  import { Button } from '$lib/components/ui/button';
-  import { toast } from 'svelte-sonner';
-  import { restartMcpServer, setMcpServerEnabled } from './client.svelte';
-  import { faviconCandidates, mcpHost } from './mcp';
+  import type { McpServerStatus } from "@whiffle/core";
+  import { toast } from "svelte-sonner";
+  import { Button } from "$lib/components/ui/button";
+  import { restartMcpServer, setMcpServerEnabled } from "./client.svelte";
+  import { faviconCandidates, mcpHost } from "./mcp";
 
   interface Props {
-    server: McpServerStatus;
     instanceId: string;
     machineId: string;
+    server: McpServerStatus;
   }
 
   let { server, instanceId, machineId }: Props = $props();
 
   const DOT: Record<string, string> = {
-    connected: 'bg-success',
-    failed: 'bg-destructive',
-    'needs-auth': 'bg-warning',
-    pending: 'bg-muted-foreground animate-pulse',
+    connected: "bg-success",
+    failed: "bg-destructive",
+    "needs-auth": "bg-warning",
+    pending: "bg-muted-foreground animate-pulse",
   };
 
   const WORD: Record<string, string> = {
-    connected: 'text-success',
-    failed: 'text-destructive',
-    'needs-auth': 'text-warning',
+    connected: "text-success",
+    failed: "text-destructive",
+    "needs-auth": "text-warning",
   };
 
   const host = $derived(mcpHost(server));
@@ -52,7 +52,8 @@
     }
   }
 
-  const restart = () => run(() => restartMcpServer(instanceId, machineId, server.name));
+  const restart = () =>
+    run(() => restartMcpServer(instanceId, machineId, server.name));
   const setEnabled = (enabled: boolean) =>
     run(() => setMcpServerEnabled(instanceId, machineId, server.name, enabled));
 </script>
@@ -61,29 +62,34 @@
   <div class="flex items-center gap-2">
     {#if step < candidates.length}
       <img
-        src={candidates[step]}
         alt=""
         class="size-5 shrink-0 rounded-[var(--radius-mark)]"
         onerror={() => (step += 1)}
-      />
+        src={candidates[step]}
+      >
     {:else}
       <span
-        class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs leading-none font-medium text-muted-foreground uppercase"
         aria-hidden="true"
+        class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs leading-none font-medium text-muted-foreground uppercase"
       >
         {server.name.charAt(0)}
       </span>
     {/if}
     <span class="truncate text-sm font-medium">{server.name}</span>
     {#if server.serverInfo?.version}
-      <span class="text-xs text-muted-foreground">v{server.serverInfo.version}</span>
+      <span class="text-xs text-muted-foreground"
+        >v{server.serverInfo.version}</span
+      >
     {/if}
   </div>
 
   <div class="mt-2 flex items-center gap-1.5">
-    <span class="size-2 shrink-0 rounded-full {DOT[server.status] ?? 'bg-muted-foreground/40'}"
+    <span
+      class="size-2 shrink-0 rounded-full {DOT[server.status] ?? 'bg-muted-foreground/40'}"
     ></span>
-    <span class="text-xs {WORD[server.status] ?? 'text-muted-foreground'}">{server.status}</span>
+    <span class="text-xs {WORD[server.status] ?? 'text-muted-foreground'}"
+      >{server.status}</span
+    >
     {#if server.scope}
       <span class="ml-auto text-xs text-muted-foreground">{server.scope}</span>
     {/if}
@@ -98,25 +104,51 @@
   {/if}
 
   {#if server.tools?.length}
-    <p class="mt-2 text-xs font-medium text-muted-foreground">{server.tools.length} tools</p>
+    <p class="mt-2 text-xs font-medium text-muted-foreground">
+      {server.tools.length}
+      tools
+    </p>
     <ul class="mt-1 max-h-40 overflow-y-auto">
       {#each server.tools as tool (tool.name)}
-        <li class="truncate font-mono text-micro leading-5" title={tool.description}>{tool.name}</li>
+        <li
+          class="truncate font-mono text-micro leading-5"
+          title={tool.description}
+        >
+          {tool.name}
+        </li>
       {/each}
     </ul>
   {/if}
 
   <!-- A phone has no right-click, so the menu's verbs sit here too. -->
   <div class="mt-3 flex gap-1.5">
-    <Button variant="ghost" size="sm" class="rounded-[var(--radius-control)] text-xs" disabled={busy} onclick={restart}>
+    <Button
+      class="rounded-[var(--radius-control)] text-xs"
+      disabled={busy}
+      onclick={restart}
+      size="sm"
+      variant="ghost"
+    >
       Restart
     </Button>
     {#if server.status === 'disabled'}
-      <Button variant="ghost" size="sm" class="rounded-[var(--radius-control)] text-xs" disabled={busy} onclick={() => setEnabled(true)}>
+      <Button
+        class="rounded-[var(--radius-control)] text-xs"
+        disabled={busy}
+        onclick={() => setEnabled(true)}
+        size="sm"
+        variant="ghost"
+      >
         Start
       </Button>
     {:else}
-      <Button variant="ghost" size="sm" class="rounded-[var(--radius-control)] text-xs" disabled={busy} onclick={() => setEnabled(false)}>
+      <Button
+        class="rounded-[var(--radius-control)] text-xs"
+        disabled={busy}
+        onclick={() => setEnabled(false)}
+        size="sm"
+        variant="ghost"
+      >
         Stop
       </Button>
     {/if}

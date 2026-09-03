@@ -1,7 +1,7 @@
-import { error } from '@sveltejs/kit';
-import type { DelegateTypesPayload } from '$lib/whiffle/delegate-types';
-import type { DelegateType } from '@whiffle/core';
-import type { PageLoad } from './$types';
+import { error } from "@sveltejs/kit";
+import type { DelegateType } from "@whiffle/core";
+import type { DelegateTypesPayload } from "$lib/whiffle/delegate-types";
+import type { PageLoad } from "./$types";
 
 /**
  * One delegate type, or the blank one. `new` is the name of a delegate type
@@ -12,9 +12,11 @@ import type { PageLoad } from './$types';
  * of rows, and the list of names is needed anyway to refuse a duplicate.
  */
 export const load: PageLoad = async ({ fetch, params }) => {
-  const payload = await fetch('/api/delegate-types')
+  const payload = await fetch("/api/delegate-types")
     .then(async (response) => {
-      if (!response.ok) throw new Error(`the hub answered ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`the hub answered ${response.status}`);
+      }
       return (await response.json()) as DelegateTypesPayload;
     })
     .catch((caught: unknown) => caught as Error);
@@ -23,20 +25,26 @@ export const load: PageLoad = async ({ fetch, params }) => {
     return {
       type: null as DelegateType | null,
       taken: [] as string[],
-      composing: params.name === 'new',
+      composing: params.name === "new",
       error: `Could not read the delegate types — ${payload.message}.`,
     };
   }
 
-  const type = payload.types.find((candidate) => candidate.name === params.name) ?? null;
-  if (params.name !== 'new' && !type) {
-    error(404, 'That delegate type is gone — it was deleted, or the link is from another hub.');
+  const type =
+    payload.types.find((candidate) => candidate.name === params.name) ?? null;
+  if (params.name !== "new" && !type) {
+    error(
+      404,
+      "That delegate type is gone — it was deleted, or the link is from another hub."
+    );
   }
 
   return {
     type,
-    taken: payload.types.filter((other) => other.name !== params.name).map((other) => other.name),
-    composing: params.name === 'new',
+    taken: payload.types
+      .filter((other) => other.name !== params.name)
+      .map((other) => other.name),
+    composing: params.name === "new",
     error: null as string | null,
   };
 };

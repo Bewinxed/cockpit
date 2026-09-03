@@ -1,418 +1,1656 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Whiffle — session transcript (compact)</title>
-<link rel="preload" href="./fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="./fonts/geist.css">
-<style>
-:root{
-  --bg:#F4F4F4;            /* content field            */
-  --sidebar:#FDFDFD;       /* sidebar surface          */
-  --card:#FCFCFC;          /* stat card outer          */
-  --well:#F4F4F4;          /* recessed inner panel     */
-  --surface:#FFFFFF;       /* table card               */
-  --band:#F1F1F1;          /* table header band        */
-  --line:#EDEDED;          /* hairline                 */
-  --line-well:#EEEEEE;     /* well border              */
-  /* NOTE: the reference's own muted inks fail WCAG AA (#969696 on #F4F4F4 = 2.69:1,
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+      name="viewport"
+    >
+    <title>Whiffle — session transcript (compact)</title>
+    <link
+      as="font"
+      crossorigin
+      href="./fonts/geist-latin-wght-normal.woff2"
+      rel="preload"
+      type="font/woff2"
+    >
+    <link href="./fonts/geist.css" rel="stylesheet">
+    <style>
+      :root {
+        --bg: #f4f4f4; /* content field            */
+        --sidebar: #fdfdfd; /* sidebar surface          */
+        --card: #fcfcfc; /* stat card outer          */
+        --well: #f4f4f4; /* recessed inner panel     */
+        --surface: #ffffff; /* table card               */
+        --band: #f1f1f1; /* table header band        */
+        --line: #ededed; /* hairline                 */
+        --line-well: #eeeeee; /* well border              */
+        /* NOTE: the reference's own muted inks fail WCAG AA (#969696 on #F4F4F4 = 2.69:1,
      section labels 2.16:1, placeholder 2.17:1). These are darkened to the lightest
      value that passes 4.5:1 on every surface it lands on — measured, not guessed. */
-  --ink:#161616;
-  --muted:#636363;       /* re-measured from ink cores; 6.01:1 on card */
-  --sec-ink:#757575;     /* was #AFAFAF (2.16:1) -> 4.53:1 */
-  --placeholder:#767676; /* was #B0B0B0 (2.17:1) -> 4.54:1 */
-  --ink-2:#5B5B5B;   /* stat label, 6.17:1 */
-  --stat-num:#404040; /* stat value is grey, NOT near-black — 9.43:1 */
-  --row-name:#393939;   /* measured from the reference's ink cores */
-  --divider:#E9E9E9;
-  --action:#272727;
-  --action-2:#2E2E2E;
+        --ink: #161616;
+        --muted: #636363; /* re-measured from ink cores; 6.01:1 on card */
+        --sec-ink: #757575; /* was #AFAFAF (2.16:1) -> 4.53:1 */
+        --placeholder: #767676; /* was #B0B0B0 (2.17:1) -> 4.54:1 */
+        --ink-2: #5b5b5b; /* stat label, 6.17:1 */
+        --stat-num: #404040; /* stat value is grey, NOT near-black — 9.43:1 */
+        --row-name: #393939; /* measured from the reference's ink cores */
+        --divider: #e9e9e9;
+        --action: #272727;
+        --action-2: #2e2e2e;
 
-  --ok-bg:#DFF6E9;   --ok-fg:#2F7A54;   /* 4.59:1 */
-  --warn-bg:#FBF0D9; --warn-fg:#8D6713;  /* was #9A7420 (3.79:1) -> 4.55:1 */
-  --err-bg:#FFDFE3;  --err-fg:#A8323C;   /* error: pink */
-  --att-bg:#FDECC8;  --att-fg:#8A5A08;   /* needs-you: amber, distinct from error */
-  --lav-bg:#D9E6FC;  --lav-fg:#4A5BC4;   /* 4.65:1 */
-  --mint-bg:#E6FFEA; --mint-fg:#2E7D4F;  /* 4.77:1 */
-  --ok-ink:#227F4B;  --warn-ink:#96660B; --bad-ink:#C0453C;  /* threshold numerals, all >=4.5:1 */
+        --ok-bg: #dff6e9;
+        --ok-fg: #2f7a54; /* 4.59:1 */
+        --warn-bg: #fbf0d9;
+        --warn-fg: #8d6713; /* was #9A7420 (3.79:1) -> 4.55:1 */
+        --err-bg: #ffdfe3;
+        --err-fg: #a8323c; /* error: pink */
+        --att-bg: #fdecc8;
+        --att-fg: #8a5a08; /* needs-you: amber, distinct from error */
+        --lav-bg: #d9e6fc;
+        --lav-fg: #4a5bc4; /* 4.65:1 */
+        --mint-bg: #e6ffea;
+        --mint-fg: #2e7d4f; /* 4.77:1 */
+        --ok-ink: #227f4b;
+        --warn-ink: #96660b;
+        --bad-ink: #c0453c; /* threshold numerals, all >=4.5:1 */
 
-  --r-well:7px; --r-ctl:8px; --r-card:10px; --r-panel:14px; --r-mark:5px;
-  --pad-x:25px;
-}
+        --r-well: 7px;
+        --r-ctl: 8px;
+        --r-card: 10px;
+        --r-panel: 14px;
+        --r-mark: 5px;
+        --pad-x: 25px;
+      }
 
-
-/* ============================================================
+      /* ============================================================
    COMPACT DENSITY.
    Same tokens, marks, pills and radii as the management surfaces —
    only the dimension ramp differs. Compact is a FINE-POINTER
    affordance: under `pointer: coarse` every row relaxes to a 44px
    touch target and type stops following the ramp down.
    ============================================================ */
-:root{
-  --c-row:24px;      /* tool/step row            (mgmt: 44) */
-  --c-gap:6px;
-  --c-pad:12px;
-  --c-fs:12.5px;     /* transcript body          (mgmt: 14) */
-  --c-fs-sm:11.5px;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{font:400 var(--c-fs)/1.5 'Geist Variable',ui-sans-serif,system-ui,sans-serif;
-  color:var(--ink);background:var(--bg);display:grid;
-  grid-template-columns:228px minmax(0,1fr);height:100vh;width:100%;-webkit-font-smoothing:antialiased}
-.mono{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11.5px}
+      :root {
+        --c-row: 24px; /* tool/step row            (mgmt: 44) */
+        --c-gap: 6px;
+        --c-pad: 12px;
+        --c-fs: 12.5px; /* transcript body          (mgmt: 14) */
+        --c-fs-sm: 11.5px;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        font:
+          400 var(--c-fs) / 1.5 "Geist Variable",
+          ui-sans-serif,
+          system-ui,
+          sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        display: grid;
+        grid-template-columns: 228px minmax(0, 1fr);
+        height: 100vh;
+        width: 100%;
+        -webkit-font-smoothing: antialiased;
+      }
+      .mono {
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 11.5px;
+      }
 
-aside{background:var(--well);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
-.brand{height:57px;display:flex;align-items:center;gap:9px;padding:0 14px;flex-shrink:0}
-.logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(#3C3C3C,#262626);color:#fff;
-  display:grid;place-items:center;font-size:12px;font-weight:600}
-.brand b{font-size:15px;font-weight:600;letter-spacing:-.004em}
-.sec{font-size:11.5px;color:var(--sec-ink);font-weight:500;padding:0 20px;margin:14px 0 6px}
-nav{padding:0 10px;display:flex;flex-direction:column;gap:1px}
-.nav-i{height:36px;border-radius:var(--r-ctl);display:flex;align-items:center;gap:10px;padding:0 10px;
-  font-size:14px;color:#3F3F3F;font-weight:450}
-.nav-i.on{background:#F1F1F1;color:var(--ink);font-weight:600;box-shadow:inset 0 1px 1px rgba(20,20,20,.045)}
-.run-i{height:32px;border-radius:7px;display:flex;align-items:center;gap:9px;padding:0 10px;font-size:13px;color:#4A4A4A}
-.run-i.on{background:#F1F1F1;font-weight:600;color:var(--ink)}
-.runs{padding:0 10px;display:flex;flex-direction:column;gap:1px}
-.mark{width:17px;height:17px;border-radius:4.6px;flex-shrink:0;display:grid;place-items:center;
-  background-image:linear-gradient(rgba(255,255,255,.22),rgba(0,0,0,.06))}
-.mark svg{width:10px;height:10px;opacity:.62}
-.nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 auto}
+      aside {
+        background: var(--well);
+        border-right: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .brand {
+        height: 57px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 14px;
+        flex-shrink: 0;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: 7px;
+        background: linear-gradient(#3c3c3c, #262626);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .brand b {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.004em;
+      }
+      .sec {
+        font-size: 11.5px;
+        color: var(--sec-ink);
+        font-weight: 500;
+        padding: 0 20px;
+        margin: 14px 0 6px;
+      }
+      nav {
+        padding: 0 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .nav-i {
+        height: 36px;
+        border-radius: var(--r-ctl);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 10px;
+        font-size: 14px;
+        color: #3f3f3f;
+        font-weight: 450;
+      }
+      .nav-i.on {
+        background: #f1f1f1;
+        color: var(--ink);
+        font-weight: 600;
+        box-shadow: inset 0 1px 1px rgba(20, 20, 20, 0.045);
+      }
+      .run-i {
+        height: 32px;
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 10px;
+        font-size: 13px;
+        color: #4a4a4a;
+      }
+      .run-i.on {
+        background: #f1f1f1;
+        font-weight: 600;
+        color: var(--ink);
+      }
+      .runs {
+        padding: 0 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .mark {
+        width: 17px;
+        height: 17px;
+        border-radius: 4.6px;
+        flex-shrink: 0;
+        display: grid;
+        place-items: center;
+        background-image: linear-gradient(
+          rgba(255, 255, 255, 0.22),
+          rgba(0, 0, 0, 0.06)
+        );
+      }
+      .mark svg {
+        width: 10px;
+        height: 10px;
+        opacity: 0.62;
+      }
+      .nm {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
 
-main{display:flex;flex-direction:column;overflow:hidden;min-width:0;position:relative}
-/* ---- session header: the fixed identity of the run ---- */
-.shead{height:57px;border-bottom:1px solid var(--line);background:var(--sidebar);
-  display:flex;align-items:center;gap:10px;padding:0 21px 0 25px;flex-shrink:0}
-.shead .back{width:28px;height:28px;border:1px solid #E7E7E7;background:#fff;border-radius:var(--r-ctl);
-  display:grid;place-items:center;color:#5B5B5B;flex:0 0 auto}
-.shead h1{font-size:14px;font-weight:600;letter-spacing:-.004em;white-space:nowrap}
-.shead .path{font-family:ui-monospace,monospace;font-size:11.5px;color:var(--muted)}
-.shead .meta{margin-left:auto;display:flex;align-items:center;gap:14px;font-size:11.5px;color:var(--muted)}
-.shead .meta b{font-weight:500;color:var(--ink-2);font-variant-numeric:tabular-nums}
-.chip-s{display:inline-flex;align-items:center;height:20px;padding:0 9px;border-radius:999px;
-  font-size:11px;font-weight:600}
-.s-att{background:var(--att-bg);color:var(--att-fg)}
-.s-ok{background:var(--ok-bg);color:var(--ok-fg)}
+      main {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        min-width: 0;
+        position: relative;
+      }
+      /* ---- session header: the fixed identity of the run ---- */
+      .shead {
+        height: 57px;
+        border-bottom: 1px solid var(--line);
+        background: var(--sidebar);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 21px 0 25px;
+        flex-shrink: 0;
+      }
+      .shead .back {
+        width: 28px;
+        height: 28px;
+        border: 1px solid #e7e7e7;
+        background: #fff;
+        border-radius: var(--r-ctl);
+        display: grid;
+        place-items: center;
+        color: #5b5b5b;
+        flex: 0 0 auto;
+      }
+      .shead h1 {
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: -0.004em;
+        white-space: nowrap;
+      }
+      .shead .path {
+        font-family: ui-monospace, monospace;
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+      .shead .meta {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+      .shead .meta b {
+        font-weight: 500;
+        color: var(--ink-2);
+        font-variant-numeric: tabular-nums;
+      }
+      .chip-s {
+        display: inline-flex;
+        align-items: center;
+        height: 20px;
+        padding: 0 9px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .s-att {
+        background: var(--att-bg);
+        color: var(--att-fg);
+      }
+      .s-ok {
+        background: var(--ok-bg);
+        color: var(--ok-fg);
+      }
 
-/* ---- transcript ---- */
-.tr{flex:1 1 auto;overflow-y:auto;padding:14px 21px 96px 25px;min-height:0;position:relative}
-.turn{margin-bottom:14px}
-.who{display:flex;align-items:center;gap:7px;font-size:var(--c-fs-sm);color:var(--muted);
-  font-weight:500;margin-bottom:4px}
-.who .dot{width:14px;height:14px;border-radius:4px;display:grid;place-items:center;flex:0 0 auto}
-.who .dot.u{background:#E4E4E4;color:#5B5B5B}
-.who .dot.a{background:linear-gradient(#3C3C3C,#262626);color:#fff}
-.msg{font-size:var(--c-fs);line-height:1.55;color:var(--ink);max-width:74ch}
-.msg code{font-family:ui-monospace,monospace;font-size:11.5px;background:#F1F1F1;
-  padding:1px 4px;border-radius:4px}
+      /* ---- transcript ---- */
+      .tr {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding: 14px 21px 96px 25px;
+        min-height: 0;
+        position: relative;
+      }
+      .turn {
+        margin-bottom: 14px;
+      }
+      .who {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: var(--c-fs-sm);
+        color: var(--muted);
+        font-weight: 500;
+        margin-bottom: 4px;
+      }
+      .who .dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 4px;
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+      }
+      .who .dot.u {
+        background: #e4e4e4;
+        color: #5b5b5b;
+      }
+      .who .dot.a {
+        background: linear-gradient(#3c3c3c, #262626);
+        color: #fff;
+      }
+      .msg {
+        font-size: var(--c-fs);
+        line-height: 1.55;
+        color: var(--ink);
+        max-width: 74ch;
+      }
+      .msg code {
+        font-family: ui-monospace, monospace;
+        font-size: 11.5px;
+        background: #f1f1f1;
+        padding: 1px 4px;
+        border-radius: 4px;
+      }
 
-/* tool group: indent + rail, never a nested card */
-.tools{margin:6px 0 0 7px;padding-left:12px;
-  background:var(--rail) left top/2px 100% no-repeat}
-.trow{height:var(--c-row);display:flex;align-items:center;gap:8px;font-size:var(--c-fs-sm);color:var(--ink-2)}
-.trow .tk{font-weight:600;color:var(--ink);font-size:var(--c-fs-sm)}
-.trow .arg{font-family:ui-monospace,monospace;color:var(--muted);overflow:hidden;
-  text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.trow .t{margin-left:auto;color:var(--muted);font-variant-numeric:tabular-nums;flex:0 0 auto}
-.trow .d{color:var(--ok-ink);font-variant-numeric:tabular-nums;flex:0 0 auto}
-.tdot{width:5px;height:5px;border-radius:999px;flex:0 0 auto}
+      /* tool group: indent + rail, never a nested card */
+      .tools {
+        margin: 6px 0 0 7px;
+        padding-left: 12px;
+        background: var(--rail) left top / 2px 100% no-repeat;
+      }
+      .trow {
+        height: var(--c-row);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: var(--c-fs-sm);
+        color: var(--ink-2);
+      }
+      .trow .tk {
+        font-weight: 600;
+        color: var(--ink);
+        font-size: var(--c-fs-sm);
+      }
+      .trow .arg {
+        font-family: ui-monospace, monospace;
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .trow .t {
+        margin-left: auto;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        flex: 0 0 auto;
+      }
+      .trow .d {
+        color: var(--ok-ink);
+        font-variant-numeric: tabular-nums;
+        flex: 0 0 auto;
+      }
+      .tdot {
+        width: 5px;
+        height: 5px;
+        border-radius: 999px;
+        flex: 0 0 auto;
+      }
 
-.think{margin:6px 0 0 7px;padding-left:12px;
-  background:var(--rail) left top/2px 100% no-repeat;
-  font-style:italic;color:var(--muted);font-size:var(--c-fs-sm);line-height:1.5;max-width:70ch}
-.think .caret{display:inline-block;width:2px;height:11px;background:var(--muted);
-  vertical-align:-1px;margin-left:2px;animation:blink 1.1s steps(1) infinite}
-@keyframes blink{50%{opacity:0}}
+      .think {
+        margin: 6px 0 0 7px;
+        padding-left: 12px;
+        background: var(--rail) left top / 2px 100% no-repeat;
+        font-style: italic;
+        color: var(--muted);
+        font-size: var(--c-fs-sm);
+        line-height: 1.5;
+        max-width: 70ch;
+      }
+      .think .caret {
+        display: inline-block;
+        width: 2px;
+        height: 11px;
+        background: var(--muted);
+        vertical-align: -1px;
+        margin-left: 2px;
+        animation: blink 1.1s steps(1) infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
 
-/* subagent branch: a fold, not a box */
-.branch{margin:6px 0 0 7px;padding-left:12px;
-  background:var(--rail) left top/2px 100% no-repeat}
-.bhead{height:var(--c-row);display:flex;align-items:center;gap:8px;font-size:var(--c-fs-sm)}
-/* Subagent badge: a branch header must read distinct from the tool
+      /* subagent branch: a fold, not a box */
+      .branch {
+        margin: 6px 0 0 7px;
+        padding-left: 12px;
+        background: var(--rail) left top / 2px 100% no-repeat;
+      }
+      .bhead {
+        height: var(--c-row);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: var(--c-fs-sm);
+      }
+      /* Subagent badge: a branch header must read distinct from the tool
    rows above it. A Solar branch glyph, an accent chip fill, and 11.5px ink that
    clears 4.5:1 on the chip in both schemes (accent-text on accent-bg-subtle is a
    palette-guaranteed pair) — not 10px muted text on a faint hairline. */
-.bhead .tag{display:inline-flex;align-items:center;gap:4px;font-size:var(--text-sm);
-  font-weight:500;letter-spacing:.02em;text-transform:uppercase;color:var(--accent-text);
-  background:var(--accent-bg-subtle);border:0;border-radius:5px;padding:2px 7px}
-.bhead .tag svg{width:12px;height:12px;flex:0 0 auto}
+      .bhead .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: var(--text-sm);
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        color: var(--accent-text);
+        background: var(--accent-bg-subtle);
+        border: 0;
+        border-radius: 5px;
+        padding: 2px 7px;
+      }
+      .bhead .tag svg {
+        width: 12px;
+        height: 12px;
+        flex: 0 0 auto;
+      }
 
-/* ---- human-in-the-loop cards ---- */
-.hitl{border:1px solid #E7E7E7;border-radius:var(--r-panel);background:#fff;
-  margin:10px 0 0 7px;padding:13px 14px;max-width:none;box-shadow:0 1px 2px rgba(20,20,20,.05)}
-.hitl h2{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;margin-bottom:7px}
-.hitl .lede{font-size:var(--c-fs);line-height:1.55;color:var(--ink-2);margin-bottom:9px;max-width:72ch}
-.cmd{font-family:ui-monospace,monospace;font-size:11.5px;color:var(--ink);
-  border-left:2px solid var(--line);padding:3px 0 3px 10px;margin-bottom:10px}
-.scope{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:11.5px;margin-bottom:11px}
-.scope dt{color:var(--muted)}
-.scope dd{color:var(--ink-2)}
-.scope dd .mono{font-size:11px}
-/* Approve and Deny are peers: identical box, identical weight, neither filled,
+      /* ---- human-in-the-loop cards ---- */
+      .hitl {
+        border: 1px solid #e7e7e7;
+        border-radius: var(--r-panel);
+        background: #fff;
+        margin: 10px 0 0 7px;
+        padding: 13px 14px;
+        max-width: none;
+        box-shadow: 0 1px 2px rgba(20, 20, 20, 0.05);
+      }
+      .hitl h2 {
+        font-size: 13px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 7px;
+      }
+      .hitl .lede {
+        font-size: var(--c-fs);
+        line-height: 1.55;
+        color: var(--ink-2);
+        margin-bottom: 9px;
+        max-width: 72ch;
+      }
+      .cmd {
+        font-family: ui-monospace, monospace;
+        font-size: 11.5px;
+        color: var(--ink);
+        border-left: 2px solid var(--line);
+        padding: 3px 0 3px 10px;
+        margin-bottom: 10px;
+      }
+      .scope {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 3px 14px;
+        font-size: 11.5px;
+        margin-bottom: 11px;
+      }
+      .scope dt {
+        color: var(--muted);
+      }
+      .scope dd {
+        color: var(--ink-2);
+      }
+      .scope dd .mono {
+        font-size: 11px;
+      }
+      /* Approve and Deny are peers: identical box, identical weight, neither filled,
    neither autofocused. Symmetry is the requirement, not decoration. */
-.choice{display:flex;gap:8px}
-.choice button{width:132px;height:32px;border:1px solid #D8D8D8;background:#fff;
-  border-radius:var(--r-ctl);font:600 12.5px 'Geist Variable';color:var(--ink);cursor:pointer}
-.choice button:focus-visible{outline:2px solid #4A5BC4;outline-offset:2px}
-/* Scope-widening sits BELOW a rule and after the pair in tab order.
+      .choice {
+        display: flex;
+        gap: 8px;
+      }
+      .choice button {
+        width: 132px;
+        height: 32px;
+        border: 1px solid #d8d8d8;
+        background: #fff;
+        border-radius: var(--r-ctl);
+        font: 600 12.5px "Geist Variable";
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .choice button:focus-visible {
+        outline: 2px solid #4a5bc4;
+        outline-offset: 2px;
+      }
+      /* Scope-widening sits BELOW a rule and after the pair in tab order.
    STATED MINIMUM: >=40px from the bottom of the Approve/Deny pair.
    An earlier build put this 23px below Approve and it was correctly called the
    worst defect on the surface — a widening control must not sit in the muscle
    memory of the one-off approve. */
-.widen{margin-top:26px;padding-top:18px;border-top:1px solid var(--line)}
-.widen button{height:28px;padding:0 11px;border:1px solid var(--line);background:#fff;
-  border-radius:var(--r-ctl);font:450 11.5px 'Geist Variable';color:var(--ink-2);cursor:pointer}
-.widen p{font-size:11px;color:var(--muted);margin-top:6px;max-width:66ch}
+      .widen {
+        margin-top: 26px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+      }
+      .widen button {
+        height: 28px;
+        padding: 0 11px;
+        border: 1px solid var(--line);
+        background: #fff;
+        border-radius: var(--r-ctl);
+        font: 450 11.5px "Geist Variable";
+        color: var(--ink-2);
+        cursor: pointer;
+      }
+      .widen p {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 6px;
+        max-width: 66ch;
+      }
 
-.qopts{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px}
-.qopts button{height:30px;padding:0 12px;border:1px solid #D8D8D8;background:#fff;
-  border-radius:var(--r-ctl);font:500 12px 'Geist Variable';color:var(--ink);cursor:pointer}
-.qfree{display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--muted)}
-.qfree .fake-in{flex:1 1 auto;height:30px;border:1px solid #E7E7E7;border-radius:var(--r-ctl);
-  display:flex;align-items:center;padding:0 10px;color:var(--placeholder)}
+      .qopts {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 9px;
+      }
+      .qopts button {
+        height: 30px;
+        padding: 0 12px;
+        border: 1px solid #d8d8d8;
+        background: #fff;
+        border-radius: var(--r-ctl);
+        font: 500 12px "Geist Variable";
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .qfree {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+      .qfree .fake-in {
+        flex: 1 1 auto;
+        height: 30px;
+        border: 1px solid #e7e7e7;
+        border-radius: var(--r-ctl);
+        display: flex;
+        align-items: center;
+        padding: 0 10px;
+        color: var(--placeholder);
+      }
 
-/* ---- composer: a hovering morph, not a docked panel ----------------
+      /* ---- composer: a hovering morph, not a docked panel ----------------
    It floats over the transcript instead of reserving a strip. Idle it is a
    capsule; on focus it morphs open and reveals its affordances. The transcript
    keeps scroll-padding equal to the collapsed height so nothing is ever
    permanently hidden underneath it.
    Motion: the reveal uses grid-template-rows 0fr->1fr (the approved collapse
    technique) plus transform/opacity — no width/height/top/left is animated. */
-.composer{position:absolute;left:50%;transform:translateX(-50%);z-index:20;
-  bottom:calc(16px + env(safe-area-inset-bottom));
-  width:min(720px,calc(100% - 50px));pointer-events:none}
-.composer > *{pointer-events:auto}
-/* content fades out behind the capsule rather than colliding with it */
-.fade{position:absolute;left:0;right:0;bottom:0;height:96px;pointer-events:none;z-index:19;
-  background:linear-gradient(to top,var(--bg) 22%,rgba(244,244,244,0))}
-.cin{border:1px solid #E0E0E0;background:rgba(255,255,255,.82);
-  -webkit-backdrop-filter:blur(16px) saturate(1.6);backdrop-filter:blur(16px) saturate(1.6);
-  border-radius:24px;padding:5px 5px 5px 15px;display:flex;align-items:center;gap:10px;
-  box-shadow:0 10px 30px rgba(20,20,20,.11),0 1px 3px rgba(20,20,20,.07);
-  transition:border-radius 240ms cubic-bezier(.16,1,.3,1)}
-.composer:focus-within .cin{border-radius:18px;flex-direction:column;align-items:stretch;padding:12px 12px 9px}
-.cin textarea{flex:1 1 auto;border:0;outline:0;background:transparent;resize:none;
-  font:400 var(--c-fs)/1.5 'Geist Variable',sans-serif;color:var(--ink);
-  height:34px;padding:7px 0 0;min-width:0}
-.composer:focus-within .cin textarea{height:66px;padding-top:0}
-.cin textarea::placeholder{color:var(--placeholder)}
-.stop{width:34px;height:34px;border:0;border-radius:999px;flex:0 0 auto;
-  background:linear-gradient(#3C3C3C,#262626);box-shadow:inset 0 -1px 0 #212121,0 1px 2px rgba(0,0,0,.12);
-  color:#fff;display:grid;place-items:center;cursor:pointer;font-size:11px}
-/* affordances are revealed by the morph, not permanently parked */
-.aff-row{display:grid;grid-template-rows:0fr;opacity:0;
-  transition:grid-template-rows 240ms cubic-bezier(.16,1,.3,1),opacity 160ms}
-.composer:focus-within .aff-row{grid-template-rows:1fr;opacity:1}
-.aff-row > .inner{overflow:hidden;display:flex;align-items:center;gap:12px;
-  font-size:11.5px;color:var(--muted);padding-top:8px}
-.aff-row .hint{margin-left:auto}
-.composer:focus-within .stop{align-self:flex-end;margin-top:-30px}
+      .composer {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 20;
+        bottom: calc(16px + env(safe-area-inset-bottom));
+        width: min(720px, calc(100% - 50px));
+        pointer-events: none;
+      }
+      .composer > * {
+        pointer-events: auto;
+      }
+      /* content fades out behind the capsule rather than colliding with it */
+      .fade {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 96px;
+        pointer-events: none;
+        z-index: 19;
+        background: linear-gradient(
+          to top,
+          var(--bg) 22%,
+          rgba(244, 244, 244, 0)
+        );
+      }
+      .cin {
+        border: 1px solid #e0e0e0;
+        background: rgba(255, 255, 255, 0.82);
+        -webkit-backdrop-filter: blur(16px) saturate(1.6);
+        backdrop-filter: blur(16px) saturate(1.6);
+        border-radius: 24px;
+        padding: 5px 5px 5px 15px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        box-shadow:
+          0 10px 30px rgba(20, 20, 20, 0.11),
+          0 1px 3px rgba(20, 20, 20, 0.07);
+        transition: border-radius 240ms cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .composer:focus-within .cin {
+        border-radius: 18px;
+        flex-direction: column;
+        align-items: stretch;
+        padding: 12px 12px 9px;
+      }
+      .cin textarea {
+        flex: 1 1 auto;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        resize: none;
+        font:
+          400 var(--c-fs) / 1.5 "Geist Variable",
+          sans-serif;
+        color: var(--ink);
+        height: 34px;
+        padding: 7px 0 0;
+        min-width: 0;
+      }
+      .composer:focus-within .cin textarea {
+        height: 66px;
+        padding-top: 0;
+      }
+      .cin textarea::placeholder {
+        color: var(--placeholder);
+      }
+      .stop {
+        width: 34px;
+        height: 34px;
+        border: 0;
+        border-radius: 999px;
+        flex: 0 0 auto;
+        background: linear-gradient(#3c3c3c, #262626);
+        box-shadow:
+          inset 0 -1px 0 #212121,
+          0 1px 2px rgba(0, 0, 0, 0.12);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        font-size: 11px;
+      }
+      /* affordances are revealed by the morph, not permanently parked */
+      .aff-row {
+        display: grid;
+        grid-template-rows: 0fr;
+        opacity: 0;
+        transition:
+          grid-template-rows 240ms cubic-bezier(0.16, 1, 0.3, 1),
+          opacity 160ms;
+      }
+      .composer:focus-within .aff-row {
+        grid-template-rows: 1fr;
+        opacity: 1;
+      }
+      .aff-row > .inner {
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 11.5px;
+        color: var(--muted);
+        padding-top: 8px;
+      }
+      .aff-row .hint {
+        margin-left: auto;
+      }
+      .composer:focus-within .stop {
+        align-self: flex-end;
+        margin-top: -30px;
+      }
 
-/* Compact is fine-pointer only. Coarse pointers get real targets back. */
-@media (pointer:coarse){
-  .trow,.bhead{height:44px}
-  .nav-i,.run-i{min-height:44px}
-  .back,.stop{min-width:44px;min-height:44px}
-  .qfree .fake-in{min-height:44px;font-size:16px}
-  .choice button{height:44px;flex:1 1 auto;width:auto}
-  .qopts button,.widen button,.stop{min-height:44px}
-  .cin textarea{font-size:16px}   /* 16px: iOS will not zoom the viewport on focus */
-}
-@media (max-width:900px){
-  body{grid-template-columns:1fr}
-  aside{position:fixed;inset:0 auto 0 0;width:284px;z-index:40;transform:translateX(-100%)}
-  .shead,.tr,.dock{padding-left:16px;padding-right:16px}
-  .shead .meta{display:none}
-  .hitl,.tools,.think,.branch{margin-left:0}
-  /* On a phone the composer docks in normal flow at the foot of the column
+      /* Compact is fine-pointer only. Coarse pointers get real targets back. */
+      @media (pointer: coarse) {
+        .trow,
+        .bhead {
+          height: 44px;
+        }
+        .nav-i,
+        .run-i {
+          min-height: 44px;
+        }
+        .back,
+        .stop {
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .qfree .fake-in {
+          min-height: 44px;
+          font-size: 16px;
+        }
+        .choice button {
+          height: 44px;
+          flex: 1 1 auto;
+          width: auto;
+        }
+        .qopts button,
+        .widen button,
+        .stop {
+          min-height: 44px;
+        }
+        .cin textarea {
+          font-size: 16px;
+        } /* 16px: iOS will not zoom the viewport on focus */
+      }
+      @media (max-width: 900px) {
+        body {
+          grid-template-columns: 1fr;
+        }
+        aside {
+          position: fixed;
+          inset: 0 auto 0 0;
+          width: 284px;
+          z-index: 40;
+          transform: translateX(-100%);
+        }
+        .shead,
+        .tr,
+        .dock {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+        .shead .meta {
+          display: none;
+        }
+        .hitl,
+        .tools,
+        .think,
+        .branch {
+          margin-left: 0;
+        }
+        /* On a phone the composer docks in normal flow at the foot of the column
      instead of floating over the scroll — so it reads and tabs LAST, after the
      transcript, and nothing scrolls underneath a hovering capsule. */
-  .composer{position:static;transform:none;left:auto;width:auto;
-    margin:6px 16px calc(6px + env(safe-area-inset-bottom));z-index:auto}
-  .fade{display:none}
-  .tr{padding-bottom:16px}
-}
-.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+        .composer {
+          position: static;
+          transform: none;
+          left: auto;
+          width: auto;
+          margin: 6px 16px calc(6px + env(safe-area-inset-bottom));
+          z-index: auto;
+        }
+        .fade {
+          display: none;
+        }
+        .tr {
+          padding-bottom: 16px;
+        }
+      }
+      .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
 
-/* ===== shared sidebar shell — same component as the fleet board (v2) ===== */
-/* ---------------- sidebar ---------------- */
-aside{background:var(--sidebar);border-right:1px solid var(--line);display:flex;flex-direction:column}
-.brand{height:57px;display:flex;align-items:center;gap:9px;padding:0 14px;flex-shrink:0}
-.logo{width:26px;height:26px;border-radius:7px;background:var(--action);color:var(--on-action);
-      display:grid;place-items:center;font-size:13px;font-weight:700}
-.brand b{font-size:15px;font-weight:600;letter-spacing:-.004em}
-.brand .collapse{margin-left:auto;color:var(--muted);font-size:15px}
+      /* ===== shared sidebar shell — same component as the fleet board (v2) ===== */
+      /* ---------------- sidebar ---------------- */
+      aside {
+        background: var(--sidebar);
+        border-right: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+      }
+      .brand {
+        height: 57px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 14px;
+        flex-shrink: 0;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: 7px;
+        background: var(--action);
+        color: var(--on-action);
+        display: grid;
+        place-items: center;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .brand b {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.004em;
+      }
+      .brand .collapse {
+        margin-left: auto;
+        color: var(--muted);
+        font-size: 15px;
+      }
 
-.sec{font-size:10.5px;color:var(--sec-ink);font-weight:600;text-transform:uppercase;letter-spacing:.07em;
-     padding:0 20px;margin:16px 0 7px;display:flex;align-items:center;gap:7px}
-.sec .plus{margin-left:auto;width:20px;height:20px;border:1px solid var(--line);border-radius:6px;
-           background:var(--elev);display:grid;place-items:center;color:var(--muted);font-size:12px}
-nav{padding:0 10px;display:flex;flex-direction:column;gap:1px}
-.nav-i{height:36px;border-radius:var(--r-ctl);display:flex;align-items:center;gap:10px;
-       padding:0 10px;font-size:14px;color:var(--nav-ink);font-weight:450}
-.nav-i .ic{width:17px;text-align:center;font-size:13px;color:var(--icon-ink)}
-/* sidebar icon parity: v2/v3 carry this rule, v4 did not, so v4's nav glyphs
+      .sec {
+        font-size: 10.5px;
+        color: var(--sec-ink);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        padding: 0 20px;
+        margin: 16px 0 7px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .sec .plus {
+        margin-left: auto;
+        width: 20px;
+        height: 20px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--elev);
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      nav {
+        padding: 0 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .nav-i {
+        height: 36px;
+        border-radius: var(--r-ctl);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 10px;
+        font-size: 14px;
+        color: var(--nav-ink);
+        font-weight: 450;
+      }
+      .nav-i .ic {
+        width: 17px;
+        text-align: center;
+        font-size: 13px;
+        color: var(--icon-ink);
+      }
+      /* sidebar icon parity: v2/v3 carry this rule, v4 did not, so v4's nav glyphs
    rendered at 17px against 16px on the other two boards. One optical size. */
-.ic svg{width:16px;height:16px}
-.nav-i.on{background:var(--elev);color:var(--ink);font-weight:600;
-          box-shadow:var(--chip-shadow)}
-.nav-i.on .ic{color:var(--ink)}
-.pill-n{margin-left:auto;font-size:11px;font-weight:600;line-height:1;padding:4px 7px;border-radius:999px;
-        background:var(--lav-bg);color:var(--lav-fg)}
-.pill-n.mint{background:var(--mint-bg);color:var(--mint-fg)}
+      .ic svg {
+        width: 16px;
+        height: 16px;
+      }
+      .nav-i.on {
+        background: var(--elev);
+        color: var(--ink);
+        font-weight: 600;
+        box-shadow: var(--chip-shadow);
+      }
+      .nav-i.on .ic {
+        color: var(--ink);
+      }
+      .pill-n {
+        margin-left: auto;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1;
+        padding: 4px 7px;
+        border-radius: 999px;
+        background: var(--lav-bg);
+        color: var(--lav-fg);
+      }
+      .pill-n.mint {
+        background: var(--mint-bg);
+        color: var(--mint-fg);
+      }
 
-.runs{padding:0 10px;display:flex;flex-direction:column;gap:1px}
-.run-i{height:32px;border-radius:7px;display:flex;align-items:center;gap:9px;padding:0 10px;
-       font-size:13px;color:var(--run-ink);font-weight:450}
-.run-i .mark{width:17px;height:17px;border-radius:6px;flex-shrink:0;display:grid;place-items:center}
-.run-i .mark svg{width:10px;height:10px;display:block}
-.run-i .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 auto}
-.run-i .star{margin-left:auto;color:var(--muted);font-size:12px}
+      .runs {
+        padding: 0 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .run-i {
+        height: 32px;
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 10px;
+        font-size: 13px;
+        color: var(--run-ink);
+        font-weight: 450;
+      }
+      .run-i .mark {
+        width: 17px;
+        height: 17px;
+        border-radius: 6px;
+        flex-shrink: 0;
+        display: grid;
+        place-items: center;
+      }
+      .run-i .mark svg {
+        width: 10px;
+        height: 10px;
+        display: block;
+      }
+      .run-i .nm {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .run-i .star {
+        margin-left: auto;
+        color: var(--muted);
+        font-size: 12px;
+      }
 
-.quota{margin:auto 10px 12px;background:var(--elev);border:1px solid var(--line);border-radius:var(--r-panel);padding:13px}
-.run-i .star{flex:0 0 auto}
-.quota .n{font-size:14.5px;font-weight:600;display:flex;align-items:center;gap:6px}
-.quota .n svg{width:15px;height:15px;flex:0 0 15px;color:var(--warn-fg)}
-.quota .s{font-size:11.5px;color:var(--muted);margin:2px 0 10px}
-.quota button{width:100%;height:31px;border:0;border-radius:var(--r-ctl);background:var(--sel);
-              color:var(--btn-ink);font:600 12.5px 'Geist Variable';cursor:pointer}
-.me{border-top:1px solid var(--line);height:60px;display:flex;align-items:center;gap:9px;padding:0 14px}
-.av{width:31px;height:31px;border-radius:999px;background:var(--av-bg);flex-shrink:0;
-    display:grid;place-items:center;font-size:11.5px;font-weight:600;color:var(--av-ink);letter-spacing:.01em}
-.me .nm{font-size:13px;font-weight:600;line-height:1.25}
-.me .em{font-size:11.5px;color:var(--muted)}
-.me .chev{margin-left:auto;color:var(--muted);font-size:11px}
+      .quota {
+        margin: auto 10px 12px;
+        background: var(--elev);
+        border: 1px solid var(--line);
+        border-radius: var(--r-panel);
+        padding: 13px;
+      }
+      .run-i .star {
+        flex: 0 0 auto;
+      }
+      .quota .n {
+        font-size: 14.5px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .quota .n svg {
+        width: 15px;
+        height: 15px;
+        flex: 0 0 15px;
+        color: var(--warn-fg);
+      }
+      .quota .s {
+        font-size: 11.5px;
+        color: var(--muted);
+        margin: 2px 0 10px;
+      }
+      .quota button {
+        width: 100%;
+        height: 31px;
+        border: 0;
+        border-radius: var(--r-ctl);
+        background: var(--sel);
+        color: var(--btn-ink);
+        font: 600 12.5px "Geist Variable";
+        cursor: pointer;
+      }
+      .me {
+        border-top: 1px solid var(--line);
+        height: 60px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 14px;
+      }
+      .av {
+        width: 31px;
+        height: 31px;
+        border-radius: 999px;
+        background: var(--av-bg);
+        flex-shrink: 0;
+        display: grid;
+        place-items: center;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--av-ink);
+        letter-spacing: 0.01em;
+      }
+      .me .nm {
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.25;
+      }
+      .me .em {
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+      .me .chev {
+        margin-left: auto;
+        color: var(--muted);
+        font-size: 11px;
+      }
 
-/* Defect 8: tool rows align in columns — icon + fixed-width label, then arg */
-.trow{align-items:center}
-.tic{width:15px;height:15px;flex:0 0 auto;display:grid;place-items:center;color:var(--muted)}
-.tic svg{width:15px;height:15px;display:block}
-.trow .tk{flex:0 0 42px}
-.bhead .tk{flex:0 0 auto}
-/* Defect 7 + 9: quick-reply keycaps and graceful wrapping to realistic answers */
-.qopts{align-items:flex-start}
-.qopts button{display:inline-flex;align-items:center;gap:8px;height:auto;
-  padding:7px 11px;text-align:left;max-width:100%}
-.qopts button .kc{flex:0 0 auto}
-.kc{display:inline-grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border-radius:5px;
-  background:#E4E4E4;font:600 10.5px ui-monospace,monospace;color:var(--ink-2);
-  line-height:1}
-</style></head><body>
-
-<aside>
-    <div class="brand"><div class="logo">◧</div><b>Whiffle</b><span class="collapse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9.5 4.5v15"/></svg></span></div>
-
-  <div class="sec">Fleet</div>
-  <nav>
-    <div class="nav-i on"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg></span>Fleet<span class="pill-n">6</span></div>
-    <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.1-2.1z"/></svg></span>Tools</div>
-    <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 12h11M4 19h7"/></svg></span>Rules<span class="pill-n mint">14</span></div>
-    <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>Usage</div>
-    <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>Projects</div>
-  </nav>
-
-  <div class="sec">Machines</div>
-  <nav>
-    <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="12" rx="2"/><path d="M8 20h8M12 16.5V20"/></svg></span>nixbox</div>
-    <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="12" rx="2"/><path d="M8 20h8M12 16.5V20"/></svg></span>mba-m3</div>
-    <div class="nav-i"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="12" rx="2"/><path d="M8 20h8M12 16.5V20"/></svg></span>hetzner-01</div>
-  </nav>
-
-  <div class="sec">Running now <span class="plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span></div>
-  <div class="runs">
-    <div class="run-i"><span class="mark" style="background:#F0705E"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.55" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(-45 12 12)"/></svg></span><span class="nm">wire delegate row outc…</span><span class="star"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z"/></svg></span></div>
-    <div class="run-i"><span class="mark" style="background:#F2C14E"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.55" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(-45 12 12)"/></svg></span><span class="nm">table system spike</span><span class="star"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z"/></svg></span></div>
-    <div class="run-i"><span class="mark" style="background:#4FC3D9"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.55" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(-45 12 12)"/></svg></span><span class="nm">flaky ws reconnect</span><span class="star"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z"/></svg></span></div>
-    <div class="run-i"><span class="mark" style="background:#7B8FE8"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.55" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(-45 12 12)"/></svg></span><span class="nm">landing copy pass</span><span class="star"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z"/></svg></span></div>
-  </div>
-
-  <div class="quota">
-    <div class="n"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/></svg>18.40 / 50.00</div>
-    <div class="s">Spend today across the fleet</div>
-    <button>View usage</button>
-  </div>
-  <div class="me"><div class="av">bw</div><div><div class="nm">bewinxed</div><div class="em">obelisk-of-light</div></div><span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9.5 6 6 6-6"/></svg></span></div>
-</aside>
-
-<main>
-  <header class="shead">
-    <div class="back">‹</div>
-    <span class="mark" style="background:#F0705E"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.55" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.6" transform="rotate(-45 12 12)"/></svg></span>
-    <h1>wire delegate row outcomes</h1>
-    <span class="path">nixbox : ~/whiffle</span>
-    <span class="chip-s s-att">needs you</span>
-    <div class="meta"><span>Claude Code</span><span><b>28</b> turns</span><span><b>104k</b>/200k</span><span><b>$4.12</b></span></div>
-  </header>
-
-  <div class="tr" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Session transcript">
-    <div class="turn">
-      <div class="who"><span class="dot u">y</span>You</div>
-      <div class="msg">The delegate rows and the fleet board disagree on how they order equal-age items. Make them consistent.</div>
-    </div>
-
-    <div class="turn">
-      <div class="who"><span class="dot a">◧</span>Claude Code</div>
-      <div class="msg">Three real call sites use the age comparator: <code>FleetBoard.svelte</code>, <code>SessionPane.svelte</code>, <code>fleet-memory.ts</code>. A fourth hit is a test fixture asserting the old shape deliberately.</div>
-      <div class="tools">
-        <div class="trow"><span class="tic">{{solar:magnifer}}</span><span class="tk">Grep</span><span class="arg">outcomeLabel\( — 4 files</span><span class="t">0.4s</span></div>
-        <div class="trow"><span class="tic">{{solar:document-text}}</span><span class="tk">Read</span><span class="arg">lib/state/delegates.svelte.ts</span><span class="t">0.2s</span></div>
-        <div class="trow"><span class="tic">{{solar:pen}}</span><span class="tk">Edit</span><span class="arg">DelegateRow.svelte</span><span class="d">+14 −6</span></div>
-        <div class="trow"><span class="tic">{{solar:pen}}</span><span class="tk">Edit</span><span class="arg">lib/format/age.ts</span><span class="d">+9 −2</span></div>
+      /* Defect 8: tool rows align in columns — icon + fixed-width label, then arg */
+      .trow {
+        align-items: center;
+      }
+      .tic {
+        width: 15px;
+        height: 15px;
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+      }
+      .tic svg {
+        width: 15px;
+        height: 15px;
+        display: block;
+      }
+      .trow .tk {
+        flex: 0 0 42px;
+      }
+      .bhead .tk {
+        flex: 0 0 auto;
+      }
+      /* Defect 7 + 9: quick-reply keycaps and graceful wrapping to realistic answers */
+      .qopts {
+        align-items: flex-start;
+      }
+      .qopts button {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: auto;
+        padding: 7px 11px;
+        text-align: left;
+        max-width: 100%;
+      }
+      .qopts button .kc {
+        flex: 0 0 auto;
+      }
+      .kc {
+        display: inline-grid;
+        place-items: center;
+        min-width: 17px;
+        height: 17px;
+        padding: 0 4px;
+        border-radius: 5px;
+        background: #e4e4e4;
+        font:
+          600 10.5px ui-monospace,
+          monospace;
+        color: var(--ink-2);
+        line-height: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <div class="brand">
+        <div class="logo">◧</div>
+        <b>Whiffle</b
+        ><span class="collapse"
+          ><svg
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.6"
+            viewBox="0 0 24 24"
+          >
+            <rect height="15" rx="2" width="17" x="3.5" y="4.5" />
+            <path d="M9.5 4.5v15" />
+          </svg></span
+        >
       </div>
-      <div class="branch">
-        <div class="bhead"><span class="tag">{{solar:branching-paths-down}}subagent</span><span class="tk">fixture-check</span><span class="arg">pi · 2 steps</span><span class="t">9s</span></div>
-        <div class="msg" style="font-size:var(--c-fs-sm);color:var(--ink-2)">Fixture asserts the old shape on purpose. Left alone, flagged.</div>
+
+      <div class="sec">Fleet</div>
+      <nav>
+        <div class="nav-i on">
+          <span class="ic"
+            ><svg
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.6"
+              viewBox="0 0 24 24"
+            >
+              <rect height="7" rx="1.6" width="7" x="3" y="3" />
+              <rect height="7" rx="1.6" width="7" x="14" y="3" />
+              <rect height="7" rx="1.6" width="7" x="3" y="14" />
+              <rect height="7" rx="1.6" width="7" x="14" y="14" />
+            </svg></span
+          >Fleet<span class="pill-n">6</span>
+        </div>
+        <div class="nav-i">
+          <span class="ic"
+            ><svg
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.6"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.1-2.1z"
+              />
+            </svg></span
+          >Tools
+        </div>
+        <div class="nav-i">
+          <span class="ic"
+            ><svg
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.6"
+              viewBox="0 0 24 24"
+            >
+              <path d="M4 5h16M4 12h11M4 19h7" />
+            </svg></span
+          >Rules<span class="pill-n mint">14</span>
+        </div>
+        <div class="nav-i">
+          <span class="ic"
+            ><svg
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.6"
+              viewBox="0 0 24 24"
+            >
+              <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+            </svg></span
+          >Usage
+        </div>
+        <div class="nav-i">
+          <span class="ic"
+            ><svg
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.6"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+              />
+            </svg></span
+          >Projects
+        </div>
+      </nav>
+
+      <div class="sec">Machines</div>
+      <nav>
+        <div class="nav-i">
+          <span class="ic"
+            ><svg
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.6"
+              viewBox="0 0 24 24"
+            >
+              <rect height="12" rx="2" width="19" x="2.5" y="4.5" />
+              <path d="M8 20h8M12 16.5V20" />
+            </svg></span
+          >nixbox
+        </div>
+        <div class="nav-i">
+          <span class="ic"
+            ><svg
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.6"
+              viewBox="0 0 24 24"
+            >
+              <rect height="12" rx="2" width="19" x="2.5" y="4.5" />
+              <path d="M8 20h8M12 16.5V20" />
+            </svg></span
+          >mba-m3
+        </div>
+        <div class="nav-i">
+          <span class="ic"
+            ><svg
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.6"
+              viewBox="0 0 24 24"
+            >
+              <rect height="12" rx="2" width="19" x="2.5" y="4.5" />
+              <path d="M8 20h8M12 16.5V20" />
+            </svg></span
+          >hetzner-01
+        </div>
+      </nav>
+
+      <div class="sec">
+        Running now
+        <span class="plus"
+          ><svg
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.8"
+            viewBox="0 0 24 24"
+          >
+            <path d="M12 5v14M5 12h14" />
+          </svg></span
+        >
       </div>
-    </div>
-
-    <section class="hitl" aria-labelledby="q1">
-      <h2 id="q1"><span class="chip-s s-att">needs you</span>Question from the agent</h2>
-      <p class="lede">Two delegate rows can finish in the same second. What should break the tie in the age column?</p>
-      <div class="qopts">
-        <button><kbd class="kc">1</kbd><span>Earliest start time wins the tie</span></button>
-        <button><kbd class="kc">2</kbd><span>Order by session id</span></button>
-        <button><kbd class="kc">3</kbd><span>Group by machine, then by start time within each machine</span></button>
-        <button><kbd class="kc">4</kbd><span>Keep them equal and preserve the order they arrived in</span></button>
+      <div class="runs">
+        <div class="run-i">
+          <span class="mark" style="background:#F0705E"
+            ><svg
+              fill="none"
+              stroke="#fff"
+              stroke-linecap="round"
+              stroke-width="1.55"
+              viewBox="0 0 24 24"
+            >
+              <circle cx="12" cy="12" r="3.1" />
+              <ellipse
+                cx="12"
+                cy="12"
+                rx="10"
+                ry="4.6"
+                transform="rotate(45 12 12)"
+              />
+              <ellipse
+                cx="12"
+                cy="12"
+                rx="10"
+                ry="4.6"
+                transform="rotate(-45 12 12)"
+              />
+            </svg></span
+          ><span class="nm">wire delegate row outc…</span
+          ><span class="star"
+            ><svg
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.6"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z"
+              />
+            </svg></span
+          >
+        </div>
+        <div class="run-i">
+          <span class="mark" style="background:#F2C14E"
+            ><svg
+              fill="none"
+              stroke="#fff"
+              stroke-linecap="round"
+              stroke-width="1.55"
+              viewBox="0 0 24 24"
+            >
+              <circle cx="12" cy="12" r="3.1" />
+              <ellipse
+                cx="12"
+                cy="12"
+                rx="10"
+                ry="4.6"
+                transform="rotate(45 12 12)"
+              />
+              <ellipse
+                cx="12"
+                cy="12"
+                rx="10"
+                ry="4.6"
+                transform="rotate(-45 12 12)"
+              />
+            </svg></span
+          ><span class="nm">table system spike</span
+          ><span class="star"
+            ><svg
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.6"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z"
+              />
+            </svg></span
+          >
+        </div>
+        <div class="run-i">
+          <span class="mark" style="background:#4FC3D9"
+            ><svg
+              fill="none"
+              stroke="#fff"
+              stroke-linecap="round"
+              stroke-width="1.55"
+              viewBox="0 0 24 24"
+            >
+              <circle cx="12" cy="12" r="3.1" />
+              <ellipse
+                cx="12"
+                cy="12"
+                rx="10"
+                ry="4.6"
+                transform="rotate(45 12 12)"
+              />
+              <ellipse
+                cx="12"
+                cy="12"
+                rx="10"
+                ry="4.6"
+                transform="rotate(-45 12 12)"
+              />
+            </svg></span
+          ><span class="nm">flaky ws reconnect</span
+          ><span class="star"
+            ><svg
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.6"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z"
+              />
+            </svg></span
+          >
+        </div>
+        <div class="run-i">
+          <span class="mark" style="background:#7B8FE8"
+            ><svg
+              fill="none"
+              stroke="#fff"
+              stroke-linecap="round"
+              stroke-width="1.55"
+              viewBox="0 0 24 24"
+            >
+              <circle cx="12" cy="12" r="3.1" />
+              <ellipse
+                cx="12"
+                cy="12"
+                rx="10"
+                ry="4.6"
+                transform="rotate(45 12 12)"
+              />
+              <ellipse
+                cx="12"
+                cy="12"
+                rx="10"
+                ry="4.6"
+                transform="rotate(-45 12 12)"
+              />
+            </svg></span
+          ><span class="nm">landing copy pass</span
+          ><span class="star"
+            ><svg
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.6"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="m12 3.6 2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z"
+              />
+            </svg></span
+          >
+        </div>
       </div>
-      <div class="qfree"><span>Or answer in your own words</span><span class="fake-in">Type an answer…</span></div>
-    </section>
 
-    <div class="turn" style="margin-top:14px">
-      <div class="who"><span class="dot a">◧</span>Claude Code</div>
-      <div class="think">The token rename landed in the same branch, so the build cache is still holding the old CSS custom properties and the dev server keeps serving them<span class="caret"></span></div>
-    </div>
-
-    <section class="hitl" aria-labelledby="p1">
-      <h2 id="p1"><span class="chip-s s-att">needs you</span>Permission — run a shell command</h2>
-      <p class="lede">This deletes the SvelteKit build cache so the next build picks up the renamed tokens. The next build regenerates it, so the change is reversible. Nothing outside <code>apps/dashboard</code> is touched.</p>
-      <div class="cmd">rm -rf apps/dashboard/.svelte-kit</div>
-      <dl class="scope">
-        <dt>Machine</dt><dd>nixbox <span style="color:var(--muted)">— mba-m3 and hetzner-01 are not affected</span></dd>
-        <dt>Path</dt><dd class="mono">/home/bewinxed/whiffle/apps/dashboard/.svelte-kit</dd>
-        <dt>Network</dt><dd>No network access requested.</dd>
-        <dt>Undo</dt><dd>Regenerated by the next <span class="mono">vite build</span>. No checkpoint needed.</dd>
-        <dt>Future</dt><dd>Approving covers this one command. It does not widen what the agent may run later.</dd>
-      </dl>
-      <div class="choice"><button>Approve</button><button>Deny</button></div>
-      <div class="widen">
-        <button>Always allow <span class="mono">rm -rf</span> in ~/whiffle</button>
-        <p>Widens future permissions for every session in this folder, on every machine. Reviewable under Rules.</p>
+      <div class="quota">
+        <div class="n">
+          <svg
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.6"
+            viewBox="0 0 24 24"
+          >
+            <path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z" />
+          </svg
+          >18.40 / 50.00
+        </div>
+        <div class="s">Spend today across the fleet</div>
+        <button>View usage</button>
       </div>
-    </section>
-  </div>
+      <div class="me">
+        <div class="av">bw</div>
+        <div>
+          <div class="nm">bewinxed</div>
+          <div class="em">obelisk-of-light</div>
+        </div>
+        <span class="chev"
+          ><svg
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.8"
+            viewBox="0 0 24 24"
+          >
+            <path d="m6 9.5 6 6 6-6" />
+          </svg></span
+        >
+      </div>
+    </aside>
 
-  <div class="fade"></div>
-  <div class="composer">
-    <form class="cin" onsubmit="return false">
-      <textarea placeholder="Message the agent…" aria-label="Message the agent"></textarea>
-      <div class="aff-row"><div class="inner">
-        <span>/ commands</span><span>@ mention</span><span>＋ attach</span>
-        <span class="hint">Enter sends · Shift+Enter for a new line</span>
-      </div></div>
-      <button class="stop" type="button" aria-label="Stop the agent">■</button>
-    </form>
-  </div>
-</main>
-<p class="sr" role="status" aria-live="assertive">Agent is waiting for your approval to run a shell command on nixbox.</p>
-</body></html>
+    <main>
+      <header class="shead">
+        <div class="back">‹</div>
+        <span class="mark" style="background:#F0705E"
+          ><svg
+            fill="none"
+            stroke="#fff"
+            stroke-linecap="round"
+            stroke-width="1.55"
+            viewBox="0 0 24 24"
+          >
+            <circle cx="12" cy="12" r="3.1" />
+            <ellipse
+              cx="12"
+              cy="12"
+              rx="10"
+              ry="4.6"
+              transform="rotate(45 12 12)"
+            />
+            <ellipse
+              cx="12"
+              cy="12"
+              rx="10"
+              ry="4.6"
+              transform="rotate(-45 12 12)"
+            />
+          </svg></span
+        >
+        <h1>wire delegate row outcomes</h1>
+        <span class="path">nixbox : ~/whiffle</span>
+        <span class="chip-s s-att">needs you</span>
+        <div class="meta">
+          <span>Claude Code</span><span><b>28</b> turns</span
+          ><span><b>104k</b>/200k</span><span><b>$4.12</b></span>
+        </div>
+      </header>
+
+      <div
+        aria-label="Session transcript"
+        aria-live="polite"
+        aria-relevant="additions text"
+        class="tr"
+        role="log"
+      >
+        <div class="turn">
+          <div class="who"><span class="dot u">y</span>You</div>
+          <div class="msg">
+            The delegate rows and the fleet board disagree on how they order
+            equal-age items. Make them consistent.
+          </div>
+        </div>
+
+        <div class="turn">
+          <div class="who"><span class="dot a">◧</span>Claude Code</div>
+          <div class="msg">
+            Three real call sites use the age comparator:
+            <code>FleetBoard.svelte</code>, <code>SessionPane.svelte</code>,
+            <code>fleet-memory.ts</code>. A fourth hit is a test fixture
+            asserting the old shape deliberately.
+          </div>
+          <div class="tools">
+            <div class="trow">
+              <span class="tic">{{solar:magnifer}}</span
+              ><span class="tk">Grep</span
+              ><span class="arg">outcomeLabel\( — 4 files</span
+              ><span class="t">0.4s</span>
+            </div>
+            <div class="trow">
+              <span class="tic">{{solar:document-text}}</span
+              ><span class="tk">Read</span
+              ><span class="arg">lib/state/delegates.svelte.ts</span
+              ><span class="t">0.2s</span>
+            </div>
+            <div class="trow">
+              <span class="tic">{{solar:pen}}</span><span class="tk">Edit</span
+              ><span class="arg">DelegateRow.svelte</span
+              ><span class="d">+14 −6</span>
+            </div>
+            <div class="trow">
+              <span class="tic">{{solar:pen}}</span><span class="tk">Edit</span
+              ><span class="arg">lib/format/age.ts</span
+              ><span class="d">+9 −2</span>
+            </div>
+          </div>
+          <div class="branch">
+            <div class="bhead">
+              <span class="tag">{{solar:branching-paths-down}}subagent</span
+              ><span class="tk">fixture-check</span
+              ><span class="arg">pi · 2 steps</span><span class="t">9s</span>
+            </div>
+            <div
+              class="msg"
+              style="font-size:var(--c-fs-sm);color:var(--ink-2)"
+            >
+              Fixture asserts the old shape on purpose. Left alone, flagged.
+            </div>
+          </div>
+        </div>
+
+        <section aria-labelledby="q1" class="hitl">
+          <h2 id="q1">
+            <span class="chip-s s-att">needs you</span>Question from the agent
+          </h2>
+          <p class="lede">
+            Two delegate rows can finish in the same second. What should break
+            the tie in the age column?
+          </p>
+          <div class="qopts">
+            <button>
+              <kbd class="kc">1</kbd
+              ><span>Earliest start time wins the tie</span>
+            </button>
+            <button>
+              <kbd class="kc">2</kbd><span>Order by session id</span>
+            </button>
+            <button>
+              <kbd class="kc">3</kbd
+              ><span
+                >Group by machine, then by start time within each machine</span
+              >
+            </button>
+            <button>
+              <kbd class="kc">4</kbd
+              ><span
+                >Keep them equal and preserve the order they arrived in</span
+              >
+            </button>
+          </div>
+          <div class="qfree">
+            <span>Or answer in your own words</span
+            ><span class="fake-in">Type an answer…</span>
+          </div>
+        </section>
+
+        <div class="turn" style="margin-top:14px">
+          <div class="who"><span class="dot a">◧</span>Claude Code</div>
+          <div class="think">
+            The token rename landed in the same branch, so the build cache is
+            still holding the old CSS custom properties and the dev server keeps
+            serving them<span class="caret"></span>
+          </div>
+        </div>
+
+        <section aria-labelledby="p1" class="hitl">
+          <h2 id="p1">
+            <span class="chip-s s-att">needs you</span>Permission — run a shell
+            command
+          </h2>
+          <p class="lede">
+            This deletes the SvelteKit build cache so the next build picks up
+            the renamed tokens. The next build regenerates it, so the change is
+            reversible. Nothing outside <code>apps/dashboard</code> is touched.
+          </p>
+          <div class="cmd">rm -rf apps/dashboard/.svelte-kit</div>
+          <dl class="scope">
+            <dt>Machine</dt>
+            <dd>
+              nixbox
+              <span style="color:var(--muted)"
+                >— mba-m3 and hetzner-01 are not affected</span
+              >
+            </dd>
+            <dt>Path</dt>
+            <dd class="mono">
+              /home/bewinxed/whiffle/apps/dashboard/.svelte-kit
+            </dd>
+            <dt>Network</dt>
+            <dd>No network access requested.</dd>
+            <dt>Undo</dt>
+            <dd>
+              Regenerated by the next <span class="mono">vite build</span>. No
+              checkpoint needed.
+            </dd>
+            <dt>Future</dt>
+            <dd>
+              Approving covers this one command. It does not widen what the
+              agent may run later.
+            </dd>
+          </dl>
+          <div class="choice">
+            <button>Approve</button><button>Deny</button>
+          </div>
+          <div class="widen">
+            <button>
+              Always allow <span class="mono">rm -rf</span> in ~/whiffle
+            </button>
+            <p>
+              Widens future permissions for every session in this folder, on
+              every machine. Reviewable under Rules.
+            </p>
+          </div>
+        </section>
+      </div>
+
+      <div class="fade"></div>
+      <div class="composer">
+        <form class="cin" onsubmit="return false">
+          <textarea
+            aria-label="Message the agent"
+            placeholder="Message the agent…"
+          ></textarea>
+          <div class="aff-row">
+            <div class="inner">
+              <span>/ commands</span><span>@ mention</span
+              ><span>＋ attach</span>
+              <span class="hint">Enter sends · Shift+Enter for a new line</span>
+            </div>
+          </div>
+          <button aria-label="Stop the agent" class="stop" type="button">
+            ■
+          </button>
+        </form>
+      </div>
+    </main>
+    <p aria-live="assertive" class="sr" role="status">
+      Agent is waiting for your approval to run a shell command on nixbox.
+    </p>
+  </body>
+</html>

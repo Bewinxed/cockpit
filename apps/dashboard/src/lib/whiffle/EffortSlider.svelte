@@ -13,17 +13,10 @@
    * model to a shallow one should show `max` leaving the board, not quietly
    * hand back `high`.
    */
-  import type { EffortLevel } from '@whiffle/core';
-  import type { EffortStop } from './effort-levels';
+  import type { EffortLevel } from "@whiffle/core";
+  import type { EffortStop } from "./effort-levels";
 
   interface EffortSliderProps {
-    /** Every stop of the scale, each carrying whether this model reaches it. */
-    stops: EffortStop[];
-    /** The level in force, or `null` when nothing has chosen one yet. */
-    value: EffortLevel | null;
-    onchange: (level: EffortLevel) => void;
-    /** Named in the out-of-range line, so a reader knows what to change to reach the rest. */
-    modelName?: string;
     disabled?: boolean;
     /**
      * Names the control for a reader who arrives at it by keyboard. The VISIBLE
@@ -32,6 +25,13 @@
      * vocabulary for the panel, not one per control.
      */
     label?: string;
+    /** Named in the out-of-range line, so a reader knows what to change to reach the rest. */
+    modelName?: string;
+    onchange: (level: EffortLevel) => void;
+    /** Every stop of the scale, each carrying whether this model reaches it. */
+    stops: EffortStop[];
+    /** The level in force, or `null` when nothing has chosen one yet. */
+    value: EffortLevel | null;
   }
 
   let {
@@ -40,7 +40,7 @@
     onchange,
     modelName,
     disabled = false,
-    label = 'Reasoning effort',
+    label = "Reasoning effort",
   }: EffortSliderProps = $props();
 
   let track = $state<HTMLDivElement | null>(null);
@@ -51,7 +51,8 @@
   /** Where the hatching starts: the first stop the model cannot be run at. */
   const ceiling = $derived(stops.findIndex((stop) => !stop.reachable));
 
-  const at = (position: number) => (stops.length < 2 ? 0 : (position / (stops.length - 1)) * 100);
+  const at = (position: number) =>
+    stops.length < 2 ? 0 : (position / (stops.length - 1)) * 100;
   /** A scale nothing has chosen on yet is drawn empty rather than filled to a guess. */
   const fill = $derived(index < 0 ? 0 : at(index));
 
@@ -60,11 +61,13 @@
   /** `low, medium and max` — a list a sentence can hold. */
   const listed = (names: string[]): string =>
     names.length <= 1
-      ? (names[0] ?? '')
-      : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+      ? (names[0] ?? "")
+      : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 
   function choose(stop: EffortStop | undefined) {
-    if (disabled || !stop?.reachable || stop.value === value) return;
+    if (disabled || !stop?.reachable || stop.value === value) {
+      return;
+    }
     onchange(stop.value);
   }
 
@@ -72,9 +75,11 @@
   function nearest(fraction: number): EffortStop | undefined {
     const wanted = fraction * (stops.length - 1);
     let closest: EffortStop | undefined;
-    let distance = Infinity;
+    let distance = Number.POSITIVE_INFINITY;
     for (const [position, stop] of stops.entries()) {
-      if (!stop.reachable) continue;
+      if (!stop.reachable) {
+        continue;
+      }
       const gap = Math.abs(position - wanted);
       if (gap < distance) {
         distance = gap;
@@ -86,12 +91,18 @@
 
   function point(event: PointerEvent) {
     const box = track?.getBoundingClientRect();
-    if (!box || box.width === 0) return;
-    choose(nearest(Math.min(1, Math.max(0, (event.clientX - box.left) / box.width))));
+    if (!box || box.width === 0) {
+      return;
+    }
+    choose(
+      nearest(Math.min(1, Math.max(0, (event.clientX - box.left) / box.width)))
+    );
   }
 
   function grab(event: PointerEvent) {
-    if (disabled) return;
+    if (disabled) {
+      return;
+    }
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
     point(event);
   }
@@ -99,20 +110,30 @@
   function drag(event: PointerEvent) {
     // `buttons` rather than a flag of our own: a pointer released outside the
     // window never sends the up event, and a stale flag would keep dragging.
-    if (event.buttons === 0) return;
+    if (event.buttons === 0) {
+      return;
+    }
     point(event);
   }
 
   /** Steps over what the model cannot reach, so the keyboard never lands out of range. */
   function step(direction: 1 | -1) {
     const from = index < 0 ? (direction === 1 ? -1 : stops.length) : index;
-    for (let next = from + direction; next >= 0 && next < stops.length; next += direction) {
-      if (stops[next].reachable) return choose(stops[next]);
+    for (
+      let next = from + direction;
+      next >= 0 && next < stops.length;
+      next += direction
+    ) {
+      if (stops[next].reachable) {
+        return choose(stops[next]);
+      }
     }
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (disabled) return;
+    if (disabled) {
+      return;
+    }
     const keys: Record<string, () => void> = {
       ArrowRight: () => step(1),
       ArrowUp: () => step(1),
@@ -122,7 +143,9 @@
       End: () => choose(reachable[reachable.length - 1]),
     };
     const move = keys[event.key];
-    if (!move) return;
+    if (!move) {
+      return;
+    }
     event.preventDefault();
     move();
   }
@@ -140,21 +163,21 @@
        the rail grows to the platform's 44px floor while the track stays 6px, so
        a thumb has something to land on without the control getting fatter. -->
   <div
-    role="slider"
-    tabindex={disabled ? -1 : 0}
+    aria-disabled={disabled}
     aria-label={label}
-    aria-valuemin={0}
     aria-valuemax={stops.length - 1}
+    aria-valuemin={0}
     aria-valuenow={index < 0 ? undefined : index}
     aria-valuetext={selected ? `${selected.label} — ${selected.description}` : 'not chosen'}
-    aria-disabled={disabled}
     class="effort-rail"
-    class:is-disabled={disabled}
     onkeydown={handleKeydown}
     onpointerdown={grab}
     onpointermove={drag}
+    role="slider"
+    tabindex={disabled ? -1 : 0}
+    class:is-disabled={disabled}
   >
-    <div bind:this={track} class="effort-track">
+    <div class="effort-track" bind:this={track}>
       {#if ceiling >= 0}
         <!-- Everything past the last reachable stop, hatched: the scale is still
              there, this model just cannot be run on it. -->
@@ -183,15 +206,15 @@
   <div class="effort-marks">
     {#each stops as stop (stop.value)}
       <button
-        type="button"
-        disabled={disabled || !stop.reachable}
-        title={stop.reachable ? stop.description : `${stop.label} is not offered by this model`}
         class="effort-mark {!stop.reachable
           ? 'is-blocked'
           : stop.value === value
             ? 'is-on'
             : ''}"
+        disabled={disabled || !stop.reachable}
         onclick={() => choose(stop)}
+        title={stop.reachable ? stop.description : `${stop.label} is not offered by this model`}
+        type="button"
       >
         {stop.label}
       </button>
@@ -205,7 +228,8 @@
   {#if unreachable.length > 0}
     <p class="effort-note">
       {listed(unreachable.map((stop) => stop.label))}
-      {unreachable.length === 1 ? 'is' : 'are'} out of range on {modelName ?? 'this model'}.
+      {unreachable.length === 1 ? 'is' : 'are'}
+      out of range on {modelName ?? 'this model'}.
     </p>
   {/if}
 </div>

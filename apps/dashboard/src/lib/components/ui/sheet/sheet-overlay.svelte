@@ -1,17 +1,17 @@
 <script lang="ts">
-	import { Dialog as SheetPrimitive } from "bits-ui";
-	import { cn } from "$lib/utils.js";
+  import { Dialog as SheetPrimitive } from "bits-ui";
+  import { cn } from "$lib/utils.js";
 
-	let {
-		ref = $bindable(null),
-		class: className,
-		...restProps
-	}: SheetPrimitive.OverlayProps = $props();
+  let {
+    ref = $bindable(null),
+    class: className,
+    ...restProps
+  }: SheetPrimitive.OverlayProps = $props();
 </script>
 
 <SheetPrimitive.Overlay
-	bind:ref
-	data-slot="sheet-overlay"
-	class={cn("bg-[var(--scrim)] supports-backdrop-filter:backdrop-blur-xs fixed inset-0 z-50", className)}
-	{...restProps}
+  class={cn("bg-[var(--scrim)] supports-backdrop-filter:backdrop-blur-xs fixed inset-0 z-50", className)}
+  data-slot="sheet-overlay"
+  bind:ref
+  {...restProps}
 />

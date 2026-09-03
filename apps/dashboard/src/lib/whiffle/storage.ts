@@ -4,7 +4,9 @@
  * errors, so a browser that refuses to store just asks again next time.
  */
 export function readJson<T>(key: string, fallback: T): T {
-  if (typeof localStorage === 'undefined') return fallback;
+  if (typeof localStorage === "undefined") {
+    return fallback;
+  }
   try {
     const stored = localStorage.getItem(key);
     return stored === null ? fallback : (JSON.parse(stored) as T);
@@ -14,7 +16,9 @@ export function readJson<T>(key: string, fallback: T): T {
 }
 
 export function writeJson(key: string, value: unknown): void {
-  if (typeof localStorage === 'undefined') return;
+  if (typeof localStorage === "undefined") {
+    return;
+  }
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {

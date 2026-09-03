@@ -24,10 +24,6 @@ import {
   CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
   CONTROL_SET_PERMISSION_MODE,
-  RESOLVE_PERMISSION,
-  RING_SIZE,
-  SessionRing,
-  STREAM_V1,
   type CommandAck,
   type CommandEnvelope,
   type CommandKind,
@@ -36,14 +32,18 @@ import {
   type FramePayload,
   type FrameProvenance,
   type IngestMark,
+  RESOLVE_PERMISSION,
+  RING_SIZE,
   type SendPayload,
+  SessionRing,
   type SessionStreamEvent,
+  STREAM_V1,
   type StreamBacklog,
   type StreamDelta,
   type StreamReset,
   type StreamSubscribe,
-} from '@whiffle/core';
-import type { HubSocket } from './registry';
+} from "@whiffle/core";
+import type { HubSocket } from "./registry";
 
 export { RING_SIZE };
 
@@ -70,21 +70,24 @@ const SWEEP_INTERVAL_MS = 60_000;
 const RING_IDLE_MS = 15 * 60_000;
 
 /** The control method each command kind is allowed to become — and only that one. */
-const CONTROL_METHOD: Readonly<Record<Exclude<CommandKind, 'send'>, string>> = {
-  'permission.answer': RESOLVE_PERMISSION,
+const CONTROL_METHOD: Readonly<Record<Exclude<CommandKind, "send">, string>> = {
+  "permission.answer": RESOLVE_PERMISSION,
   interrupt: CONTROL_INTERRUPT,
-  'set-model': CONTROL_SET_MODEL,
-  'set-permission-mode': CONTROL_SET_PERMISSION_MODE,
-  'set-effort': CONTROL_SET_EFFORT,
+  "set-model": CONTROL_SET_MODEL,
+  "set-permission-mode": CONTROL_SET_PERMISSION_MODE,
+  "set-effort": CONTROL_SET_EFFORT,
 };
 
-const COMMAND_KINDS = new Set<string>(['send', ...Object.keys(CONTROL_METHOD)]);
+const COMMAND_KINDS = new Set<string>(["send", ...Object.keys(CONTROL_METHOD)]);
 
 /**
  * The `control_result` shape a settled command reads: exactly the frame the
  * daemon already sends back for every control it runs.
  */
-export type ControlResultFrame = Extract<FramePayload, { kind: 'control_result' }>;
+export type ControlResultFrame = Extract<
+  FramePayload,
+  { kind: "control_result" }
+>;
 
 /**
  * What this module needs from the hub it lives in. Narrow on purpose: the
@@ -93,49 +96,30 @@ export type ControlResultFrame = Extract<FramePayload, { kind: 'control_result' 
  * the two paths drift and one of them starts lying.
  */
 export interface StreamPorts {
+  /** Whether a daemon for this machine is connected right now. */
+  readonly isMachineConnected: (machineId: string) => boolean;
+  /** The dashboard `control` relay, verbatim — false when the relay refused it. */
+  readonly relayControl: (
+    envelope: Envelope<ControlPayload>,
+    dashboard: HubSocket
+  ) => boolean;
+  /** The dashboard `send` relay, verbatim — false when the relay refused it. */
+  readonly relaySend: (
+    envelope: Envelope<SendPayload>,
+    dashboard: HubSocket
+  ) => boolean;
   /**
    * `registry.setSubscriptions` — replaces a dashboard's legacy per-frame
    * subscription set. Used to subtract stream-followed sessions, so no socket
    * is ever told the same frame twice in two dialects.
    */
-  readonly setLegacySubscriptions: (socket: HubSocket, instanceIds: string[]) => void;
-  /** Whether a daemon for this machine is connected right now. */
-  readonly isMachineConnected: (machineId: string) => boolean;
-  /** The dashboard `send` relay, verbatim — false when the relay refused it. */
-  readonly relaySend: (envelope: Envelope<SendPayload>, dashboard: HubSocket) => boolean;
-  /** The dashboard `control` relay, verbatim — false when the relay refused it. */
-  readonly relayControl: (envelope: Envelope<ControlPayload>, dashboard: HubSocket) => boolean;
+  readonly setLegacySubscriptions: (
+    socket: HubSocket,
+    instanceIds: string[]
+  ) => void;
 }
 
 export interface StreamHubShape {
-  /**
-   * Stamps a relayed frame with the session's next `seq`, files it in the ring
-   * and fans it out to that session's followers. Called for EVERY relayed
-   * frame, subscribed or not: the sequence is the session's canonical order,
-   * not a function of who happens to be listening, and a ring with holes in it
-   * could not answer a resume.
-   */
-  readonly sequence: (sessionId: string, frame: unknown) => SessionStreamEvent;
-  /**
-   * Handles a message on the dashboard socket that belongs to this protocol.
-   * Returns true when it consumed it, so the legacy envelope path never sees
-   * a shape it would only log as malformed.
-   */
-  readonly handleClientMessage: (socket: HubSocket, raw: unknown) => boolean;
-  /**
-   * Records the legacy subscription set a dashboard asked for, and returns the
-   * set the registry should actually hold: the same list minus the sessions
-   * this socket already follows through the stream.
-   */
-  readonly noteLegacySubscriptions: (socket: HubSocket, instanceIds: string[]) => string[];
-  /**
-   * A `control_result` off an agent socket. Returns true when it answered a
-   * command — that reply is that command's ack and nobody else's news, exactly
-   * as a routed requester's reply is today.
-   */
-  readonly settleCommand: (requestId: string, result: ControlResultFrame) => boolean;
-  /** A dashboard socket is gone: it follows nothing and awaits nothing. */
-  readonly dropSocket: (socketId: string) => void;
   /**
    * THE INGEST LEDGER (sessiond design §7). Files one frame's provenance and
    * answers whether it may become a hub frame at all: `false` is a line this
@@ -146,7 +130,22 @@ export interface StreamHubShape {
    * opencode session, a pi session and every agent that predates the field are
    * unchanged, and their frames are not deduped by a mark that does not exist.
    */
-  readonly admitFrame: (instanceId: string, provenance: FrameProvenance | undefined) => boolean;
+  readonly admitFrame: (
+    instanceId: string,
+    provenance: FrameProvenance | undefined
+  ) => boolean;
+  /** A dashboard socket is gone: it follows nothing and awaits nothing. */
+  readonly dropSocket: (socketId: string) => void;
+  /** How many sockets follow a session — for tests and for reasoning about fan-out. */
+  readonly followerCount: (sessionId: string) => number;
+  /**
+   * Handles a message on the dashboard socket that belongs to this protocol.
+   * Returns true when it consumed it, so the legacy envelope path never sees
+   * a shape it would only log as malformed.
+   */
+  readonly handleClientMessage: (socket: HubSocket, raw: unknown) => boolean;
+  /** The last seq assigned to a session; 0 when it has never been relayed. */
+  readonly head: (sessionId: string) => number;
   /**
    * What the register ack hands back: the hub's mark for each instance the
    * daemon says it is holding. An instance with no entry is simply absent —
@@ -154,39 +153,64 @@ export interface StreamHubShape {
    * a zero mark, which would read as "I have line 0 of your current epoch" and
    * ask for a replay of everything.
    */
-  readonly ingestedFor: (instanceIds: readonly string[]) => Record<string, IngestMark>;
-  /** The last seq assigned to a session; 0 when it has never been relayed. */
-  readonly head: (sessionId: string) => number;
-  /** How many sockets follow a session — for tests and for reasoning about fan-out. */
-  readonly followerCount: (sessionId: string) => number;
+  readonly ingestedFor: (
+    instanceIds: readonly string[]
+  ) => Record<string, IngestMark>;
+  /**
+   * Records the legacy subscription set a dashboard asked for, and returns the
+   * set the registry should actually hold: the same list minus the sessions
+   * this socket already follows through the stream.
+   */
+  readonly noteLegacySubscriptions: (
+    socket: HubSocket,
+    instanceIds: string[]
+  ) => string[];
+  /**
+   * Stamps a relayed frame with the session's next `seq`, files it in the ring
+   * and fans it out to that session's followers. Called for EVERY relayed
+   * frame, subscribed or not: the sequence is the session's canonical order,
+   * not a function of who happens to be listening, and a ring with holes in it
+   * could not answer a resume.
+   */
+  readonly sequence: (sessionId: string, frame: unknown) => SessionStreamEvent;
+  /**
+   * A `control_result` off an agent socket. Returns true when it answered a
+   * command — that reply is that command's ack and nobody else's news, exactly
+   * as a routed requester's reply is today.
+   */
+  readonly settleCommand: (
+    requestId: string,
+    result: ControlResultFrame
+  ) => boolean;
+  /** Stops the TTL sweep. */
+  readonly stop: () => void;
   /**
    * Runs the housekeeping the interval runs: forgets commands whose reply never
    * came and the replay windows of sessions gone quiet. Returns how many rings
    * it emptied. Exposed so the RULE can be tested without waiting on a clock.
    */
   readonly sweepStale: (now?: number) => number;
-  /** Stops the TTL sweep. */
-  readonly stop: () => void;
 }
 
 /** A command dispatched toward a daemon, waiting for the reply that confirms it. */
 interface AwaitedCommand {
+  readonly at: number;
   readonly commandId: string;
   readonly socketId: string;
-  readonly at: number;
 }
 
 interface Follower {
-  socket: HubSocket;
-  readonly sessions: Set<string>;
   /** The legacy set this socket last asked for, so the subtraction can be re-derived. */
   legacy: string[];
+  readonly sessions: Set<string>;
+  socket: HubSocket;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
+  typeof value === "object" && value !== null;
 
-const nonEmpty = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
+const nonEmpty = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0;
 
 export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   /**
@@ -218,13 +242,18 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
    */
   const sweepStale = (now = Date.now()): number => {
     const staleCommand = now - COMMAND_TTL_MS;
-    for (const [requestId, command] of awaiting)
-      if (command.at < staleCommand) awaiting.delete(requestId);
+    for (const [requestId, command] of awaiting) {
+      if (command.at < staleCommand) {
+        awaiting.delete(requestId);
+      }
+    }
 
     const idleRing = now - RING_IDLE_MS;
     let emptied = 0;
     for (const ring of rings.values()) {
-      if (ring.lastAt >= idleRing || ring.oldest > ring.head) continue;
+      if (ring.lastAt >= idleRing || ring.oldest > ring.head) {
+        continue;
+      }
       ring.forget();
       emptied++;
     }
@@ -236,7 +265,9 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
 
   const ringOf = (sessionId: string): SessionRing => {
     const existing = rings.get(sessionId);
-    if (existing) return existing;
+    if (existing) {
+      return existing;
+    }
     const ring = new SessionRing();
     rings.set(sessionId, ring);
     return ring;
@@ -261,12 +292,17 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       for (const sessionId of entry.sessions) {
         const perSession = followers.get(sessionId);
         perSession?.delete(socketId);
-        if (perSession && perSession.size === 0) followers.delete(sessionId);
+        if (perSession && perSession.size === 0) {
+          followers.delete(sessionId);
+        }
       }
       sockets.delete(socketId);
     }
-    for (const [requestId, command] of awaiting)
-      if (command.socketId === socketId) awaiting.delete(requestId);
+    for (const [requestId, command] of awaiting) {
+      if (command.socketId === socketId) {
+        awaiting.delete(requestId);
+      }
+    }
   };
 
   const entryFor = (socket: HubSocket): Follower => {
@@ -287,20 +323,22 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   };
 
   const fail = (socket: HubSocket, commandId: string, reason: string): void => {
-    ackTo(socket, { type: 'command.ack', commandId, stage: 'failed', reason });
+    ackTo(socket, { type: "command.ack", commandId, stage: "failed", reason });
   };
 
   const sequence = (sessionId: string, frame: unknown): SessionStreamEvent => {
     const event = ringOf(sessionId).record(sessionId, frame);
     const perSession = followers.get(sessionId);
     if (perSession) {
-      const delta: StreamDelta = { type: 'stream.event', event };
+      const delta: StreamDelta = { type: "stream.event", event };
       // Iterated live, no defensive copy: this runs on every frame of every
       // session, and deleting from a Set mid-iteration is well defined — which
       // is exactly what a failed delivery does.
       for (const socketId of perSession) {
         const follower = sockets.get(socketId);
-        if (follower) deliver(follower.socket, delta);
+        if (follower) {
+          deliver(follower.socket, delta);
+        }
       }
     }
     return event;
@@ -336,14 +374,22 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     const ring = ringOf(sessionId);
     // A fresh join asks for nothing: history comes through the existing read
     // paths, and this socket follows from the next frame on.
-    if (message.afterSeq === undefined) return;
+    if (message.afterSeq === undefined) {
+      return;
+    }
 
     const afterSeq = message.afterSeq;
     const reset = (): void => {
-      const refusal: StreamReset = { type: 'stream.reset', sessionId, nextSeq: ring.head + 1 };
+      const refusal: StreamReset = {
+        type: "stream.reset",
+        sessionId,
+        nextSeq: ring.head + 1,
+      };
       deliver(socket, refusal);
     };
-    if (!ring.canReplay(typeof afterSeq === 'number' ? afterSeq : Number.NaN)) return reset();
+    if (!ring.canReplay(typeof afterSeq === "number" ? afterSeq : Number.NaN)) {
+      return reset();
+    }
 
     let events: SessionStreamEvent[];
     try {
@@ -357,7 +403,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     }
 
     const backlog: StreamBacklog = {
-      type: 'stream.backlog',
+      type: "stream.backlog",
       sessionId,
       // Empty when the client is already current — an honest "you missed
       // nothing" rather than silence the client cannot tell from a lost reply.
@@ -380,40 +426,59 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     // even when this dashboard never subscribed to anything.
     entryFor(socket);
 
-    if (!nonEmpty(sessionId)) return fail(socket, commandId, 'the command names no session');
-    if (!nonEmpty(machineId)) return fail(socket, commandId, 'the command names no machine');
+    if (!nonEmpty(sessionId)) {
+      return fail(socket, commandId, "the command names no session");
+    }
+    if (!nonEmpty(machineId)) {
+      return fail(socket, commandId, "the command names no machine");
+    }
     if (!ports.isMachineConnected(machineId)) {
       return fail(socket, commandId, `machine ${machineId} is not connected`);
     }
 
     const payload = isRecord(message.payload) ? message.payload : undefined;
-    if (!payload) return fail(socket, commandId, `a ${kind} command carries no payload`);
+    if (!payload) {
+      return fail(socket, commandId, `a ${kind} command carries no payload`);
+    }
 
-    if (kind === 'send') {
+    if (kind === "send") {
       if (!isRecord(payload.message)) {
-        return fail(socket, commandId, 'a send command carries no message');
+        return fail(socket, commandId, "a send command carries no message");
       }
       const sent = ports.relaySend(
         {
-          verb: 'send',
+          verb: "send",
           machineId,
           instanceId: sessionId,
           // The envelope's session is authoritative: the payload's own copy is
           // normalised onto it so the two can never disagree on the wire.
-          payload: { ...payload, instanceId: sessionId } as unknown as SendPayload,
+          payload: {
+            ...payload,
+            instanceId: sessionId,
+          } as unknown as SendPayload,
         },
         socket
       );
-      if (!sent) return fail(socket, commandId, `machine ${machineId} is not connected`);
+      if (!sent) {
+        return fail(socket, commandId, `machine ${machineId} is not connected`);
+      }
       // No confirmation exists to wait for: the daemon's `send` answers with
       // the turn itself. `accepted` is the last honest word the hub has, and
       // the sequenced frames that follow are the proof of application.
-      return ackTo(socket, { type: 'command.ack', commandId, stage: 'accepted' });
+      return ackTo(socket, {
+        type: "command.ack",
+        commandId,
+        stage: "accepted",
+      });
     }
 
     const method = CONTROL_METHOD[kind];
     if (nonEmpty(payload.method) && payload.method !== method) {
-      return fail(socket, commandId, `a ${kind} command may not call ${payload.method}`);
+      return fail(
+        socket,
+        commandId,
+        `a ${kind} command may not call ${payload.method}`
+      );
     }
     if (payload.args !== undefined && !Array.isArray(payload.args)) {
       return fail(socket, commandId, `a ${kind} command's args are not a list`);
@@ -424,19 +489,19 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     // correlated by an id the hub mints, which also makes the reply
     // unforgeable from the dashboard side.
     const requestId =
-      kind === 'permission.answer'
+      kind === "permission.answer"
         ? nonEmpty(payload.requestId)
           ? payload.requestId
           : undefined
         : crypto.randomUUID();
     if (!requestId) {
-      return fail(socket, commandId, 'a permission answer names no request');
+      return fail(socket, commandId, "a permission answer names no request");
     }
     // A double-click, or two devices answering the same card. The first answer
     // is already in flight and owns the reply; a second dispatch would settle
     // the parked ask twice and orphan the first command at `accepted` forever.
     if (awaiting.has(requestId)) {
-      return fail(socket, commandId, 'that request is already being answered');
+      return fail(socket, commandId, "that request is already being answered");
     }
 
     const control: ControlPayload = {
@@ -452,60 +517,82 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     // that never arrives.
     awaiting.set(requestId, { commandId, socketId: socket.id, at: Date.now() });
     const relayed = ports.relayControl(
-      { verb: 'control', machineId, instanceId: sessionId, requestId, payload: control },
+      {
+        verb: "control",
+        machineId,
+        instanceId: sessionId,
+        requestId,
+        payload: control,
+      },
       socket
     );
     if (!relayed) {
       awaiting.delete(requestId);
       return fail(socket, commandId, `machine ${machineId} is not connected`);
     }
-    ackTo(socket, { type: 'command.ack', commandId, stage: 'accepted' });
+    ackTo(socket, { type: "command.ack", commandId, stage: "accepted" });
   };
 
-  const settleCommand = (requestId: string, result: ControlResultFrame): boolean => {
+  const settleCommand = (
+    requestId: string,
+    result: ControlResultFrame
+  ): boolean => {
     const awaited = awaiting.get(requestId);
-    if (!awaited) return false;
+    if (!awaited) {
+      return false;
+    }
     awaiting.delete(requestId);
     const socket = sockets.get(awaited.socketId)?.socket;
     // The commanding socket is gone; the reply is still consumed — it answered
     // a command, so it is not fleet news to broadcast at everyone else.
-    if (!socket) return true;
+    if (!socket) {
+      return true;
+    }
     ackTo(
       socket,
       result.ok
-        ? { type: 'command.ack', commandId: awaited.commandId, stage: 'applied' }
-        : {
-            type: 'command.ack',
+        ? {
+            type: "command.ack",
             commandId: awaited.commandId,
-            stage: 'failed',
-            reason: result.error ?? 'the machine could not carry out that request',
+            stage: "applied",
+          }
+        : {
+            type: "command.ack",
+            commandId: awaited.commandId,
+            stage: "failed",
+            reason:
+              result.error ?? "the machine could not carry out that request",
           }
     );
     return true;
   };
 
   const handleClientMessage = (socket: HubSocket, raw: unknown): boolean => {
-    if (!isRecord(raw) || typeof raw.type !== 'string') return false;
+    if (!isRecord(raw) || typeof raw.type !== "string") {
+      return false;
+    }
 
-    if (raw.type === 'stream.subscribe') {
+    if (raw.type === "stream.subscribe") {
       if (!nonEmpty(raw.sessionId)) {
-        console.warn('[hub] dropped stream.subscribe with no session', raw);
+        console.warn("[hub] dropped stream.subscribe with no session", raw);
         return true;
       }
       subscribe(socket, {
-        type: 'stream.subscribe',
+        type: "stream.subscribe",
         sessionId: raw.sessionId,
         // A malformed resume is NOT a fresh join: `undefined` would silently
         // start the client from now and lose whatever it thought it had, so it
         // is passed through as-is and answered with a reset.
-        ...(raw.afterSeq === undefined ? {} : { afterSeq: raw.afterSeq as number }),
+        ...(raw.afterSeq === undefined
+          ? {}
+          : { afterSeq: raw.afterSeq as number }),
       });
       return true;
     }
 
-    if (raw.type === 'command') {
+    if (raw.type === "command") {
       if (!nonEmpty(raw.commandId)) {
-        console.warn('[hub] dropped command with no id', raw);
+        console.warn("[hub] dropped command with no id", raw);
         return true;
       }
       if (!COMMAND_KINDS.has(raw.kind as string)) {
@@ -519,7 +606,10 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     return false;
   };
 
-  const noteLegacySubscriptions = (socket: HubSocket, instanceIds: string[]): string[] => {
+  const noteLegacySubscriptions = (
+    socket: HubSocket,
+    instanceIds: string[]
+  ): string[] => {
     const entry = entryFor(socket);
     entry.legacy = instanceIds;
     // Streamed sessions are subtracted, never pruned: a client is free to stop
@@ -551,21 +641,33 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
    *   and a ring overflow arrives as its own announced `sessiond_stream_gap`
    *   frame rather than as a silent splice.
    */
-  const admitFrame = (instanceId: string, provenance: FrameProvenance | undefined): boolean => {
+  const admitFrame = (
+    instanceId: string,
+    provenance: FrameProvenance | undefined
+  ): boolean => {
     if (!provenance) {
       ledger.delete(instanceId);
       return true;
     }
-    if (alreadyIngested(ledger.get(instanceId), provenance)) return false;
-    ledger.set(instanceId, { epoch: provenance.srcEpoch, srcSeq: provenance.srcSeq });
+    if (alreadyIngested(ledger.get(instanceId), provenance)) {
+      return false;
+    }
+    ledger.set(instanceId, {
+      epoch: provenance.srcEpoch,
+      srcSeq: provenance.srcSeq,
+    });
     return true;
   };
 
-  const ingestedFor = (instanceIds: readonly string[]): Record<string, IngestMark> => {
+  const ingestedFor = (
+    instanceIds: readonly string[]
+  ): Record<string, IngestMark> => {
     const marks: Record<string, IngestMark> = {};
     for (const instanceId of instanceIds) {
       const mark = ledger.get(instanceId);
-      if (mark) marks[instanceId] = { ...mark };
+      if (mark) {
+        marks[instanceId] = { ...mark };
+      }
     }
     return marks;
   };

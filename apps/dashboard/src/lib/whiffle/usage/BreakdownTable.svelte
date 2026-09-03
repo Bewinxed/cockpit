@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from "$app/navigation";
   /**
    * The breakdown table (USAGE-SPEC.md §7.2.5). Tabs for Project / Model /
    * Session, driven from a search param like the tools page, plus a harness
@@ -6,28 +7,34 @@
    * and opencode's real spend never sit in the same total. Each (tab, harness)
    * pair is fetched once and cached, so switching back costs no request.
    */
-  import { page } from '$app/state';
-  import { goto } from '$app/navigation';
-  import * as Tabs from '$lib/components/ui/tabs';
-  import * as Dialog from '$lib/components/ui/dialog';
-  import * as Table from '$lib/components/ui/table';
-  import { compactNumber, totalTokensOf, usd, type UsageSummary, type UsageSummaryRow } from '../usage';
+  import { page } from "$app/state";
+  import * as Dialog from "$lib/components/ui/dialog";
+  import * as Table from "$lib/components/ui/table";
+  import * as Tabs from "$lib/components/ui/tabs";
+  import {
+    compactNumber,
+    totalTokensOf,
+    type UsageSummary,
+    type UsageSummaryRow,
+    usd,
+  } from "../usage";
 
-  type TabId = 'model' | 'project' | 'session';
-  type Harness = 'claude' | 'opencode';
+  type TabId = "model" | "project" | "session";
+  type Harness = "claude" | "opencode";
 
   const TAB_LIST = [
-    { id: 'model', label: 'Model' },
-    { id: 'project', label: 'Project' },
-    { id: 'session', label: 'Session' },
+    { id: "model", label: "Model" },
+    { id: "project", label: "Project" },
+    { id: "session", label: "Session" },
   ] as const;
 
   const tab: TabId = $derived(
-    (['model', 'project', 'session'] as const).find((id) => id === page.url.searchParams.get('tab')) ??
-      'model'
+    (["model", "project", "session"] as const).find(
+      (id) => id === page.url.searchParams.get("tab")
+    ) ?? "model"
   );
 
-  let harness = $state<Harness>('claude');
+  let harness = $state<Harness>("claude");
 
   const cache = new Map<string, UsageSummary>();
   let summary = $state<UsageSummary | null>(null);
@@ -45,8 +52,12 @@
     loading = true;
     error = null;
     try {
-      const response = await fetch(`/api/usage/summary?groupBy=${tab}&harness=${harness}`);
-      if (!response.ok) throw new Error(`the hub answered ${response.status}`);
+      const response = await fetch(
+        `/api/usage/summary?groupBy=${tab}&harness=${harness}`
+      );
+      if (!response.ok) {
+        throw new Error(`the hub answered ${response.status}`);
+      }
       const data = (await response.json()) as UsageSummary;
       cache.set(key, data);
       summary = data;
@@ -66,20 +77,30 @@
     void goto(`/usage?tab=${next}`, { noScroll: true, replaceState: true });
   }
 
-  type SortKey = 'input' | 'output' | 'cacheCreation' | 'cacheRead' | 'total' | 'costUsd' | 'messages';
+  type SortKey =
+    | "input"
+    | "output"
+    | "cacheCreation"
+    | "cacheRead"
+    | "total"
+    | "costUsd"
+    | "messages";
 
   interface Row extends UsageSummaryRow {
     total: number;
   }
 
-  let sortBy = $state<SortKey>('total');
+  let sortBy = $state<SortKey>("total");
   let sortAsc = $state(false);
 
   const rows: Row[] = $derived.by(() => {
-    const out = (summary?.rows ?? []).map((row) => ({ ...row, total: totalTokensOf(row) }));
+    const out = (summary?.rows ?? []).map((row) => ({
+      ...row,
+      total: totalTokensOf(row),
+    }));
     out.sort((a, b) => {
       const cmp =
-        typeof a[sortBy] === 'number' && typeof b[sortBy] === 'number'
+        typeof a[sortBy] === "number" && typeof b[sortBy] === "number"
           ? (a[sortBy] as number) - (b[sortBy] as number)
           : String(a[sortBy]).localeCompare(String(b[sortBy]));
       return sortAsc ? cmp : -cmp;
@@ -88,21 +109,25 @@
   });
 
   function sort(next: SortKey): void {
-    if (sortBy === next) sortAsc = !sortAsc;
-    else {
+    if (sortBy === next) {
+      sortAsc = !sortAsc;
+    } else {
       sortBy = next;
       sortAsc = false;
     }
   }
 
   const COLUMNS: { key: SortKey; label: string }[] = $derived([
-    { key: 'input', label: 'Input' },
-    { key: 'output', label: 'Output' },
-    { key: 'cacheCreation', label: 'Cache write' },
-    { key: 'cacheRead', label: 'Cache read' },
-    { key: 'total', label: 'Total' },
-    { key: 'messages', label: 'Messages' },
-    { key: 'costUsd', label: harness === 'claude' ? 'Cost · would cost on API' : 'Cost' },
+    { key: "input", label: "Input" },
+    { key: "output", label: "Output" },
+    { key: "cacheCreation", label: "Cache write" },
+    { key: "cacheRead", label: "Cache read" },
+    { key: "total", label: "Total" },
+    { key: "messages", label: "Messages" },
+    {
+      key: "costUsd",
+      label: harness === "claude" ? "Cost · would cost on API" : "Cost",
+    },
   ]);
 
   const nameOf = (row: Row): string => String(row.key);
@@ -122,23 +147,27 @@
       <h2 class="text-title">Breakdown</h2>
       <p class="text-caption">Tokens and cost by {tab}.</p>
     </div>
-    <div class="flex gap-1 rounded-[var(--radius-control)] bg-muted p-0.5" role="group" aria-label="Harness">
+    <div
+      aria-label="Harness"
+      class="flex gap-1 rounded-[var(--radius-control)] bg-muted p-0.5"
+      role="group"
+    >
       <button
+        aria-pressed={harness === 'claude'}
         class="rounded-[var(--radius-tile)] px-2.5 py-1 text-micro transition-colors duration-150 ease-out
                {harness === 'claude'
           ? 'bg-card text-foreground shadow-sm'
           : 'text-muted-foreground hover:text-foreground'}"
-        aria-pressed={harness === 'claude'}
         onclick={() => (harness = 'claude')}
       >
         Claude
       </button>
       <button
+        aria-pressed={harness === 'opencode'}
         class="rounded-[var(--radius-tile)] px-2.5 py-1 text-micro transition-colors duration-150 ease-out
                {harness === 'opencode'
           ? 'bg-card text-foreground shadow-sm'
           : 'text-muted-foreground hover:text-foreground'}"
-        aria-pressed={harness === 'opencode'}
         onclick={() => (harness = 'opencode')}
       >
         opencode
@@ -146,8 +175,8 @@
     </div>
   </div>
 
-  <Tabs.Root value={tab} onValueChange={switchTab}>
-    <Tabs.List variant="line" class="w-full">
+  <Tabs.Root onValueChange={switchTab} value={tab}>
+    <Tabs.List class="w-full" variant="line">
       {#each TAB_LIST as one (one.id)}
         <Tabs.Trigger value={one.id}>{one.label}</Tabs.Trigger>
       {/each}
@@ -166,8 +195,8 @@
           {#each COLUMNS as column (column.key)}
             <Table.Head class="num">
               <button
-                class="sortbtn"
                 aria-pressed={sortBy === column.key}
+                class="sortbtn"
                 onclick={() => sort(column.key)}
               >
                 {column.label}
@@ -184,14 +213,14 @@
           <Table.Row
             class={tab === 'session' ? 'clickable' : ''}
             onclick={() => (tab === 'session' ? openSession(row) : undefined)}
-            role={tab === 'session' ? 'button' : undefined}
-            tabindex={tab === 'session' ? 0 : undefined}
             onkeydown={(event) => {
               if (tab === 'session' && (event.key === 'Enter' || event.key === ' ')) {
                 event.preventDefault();
                 openSession(row);
               }
             }}
+            role={tab === 'session' ? 'button' : undefined}
+            tabindex={tab === 'session' ? 0 : undefined}
           >
             <Table.Cell
               class="name {tab === 'model' || tab === 'session' ? 'mono' : ''}"
@@ -201,16 +230,20 @@
             </Table.Cell>
             <Table.Cell class="num">{compactNumber(row.input)}</Table.Cell>
             <Table.Cell class="num">{compactNumber(row.output)}</Table.Cell>
-            <Table.Cell class="num">{compactNumber(row.cacheCreation)}</Table.Cell>
+            <Table.Cell class="num"
+              >{compactNumber(row.cacheCreation)}</Table.Cell
+            >
             <Table.Cell class="num">{compactNumber(row.cacheRead)}</Table.Cell>
-            <Table.Cell class="num strong">{compactNumber(row.total)}</Table.Cell>
+            <Table.Cell class="num strong"
+              >{compactNumber(row.total)}</Table.Cell
+            >
             <Table.Cell class="num">{row.messages.toLocaleString()}</Table.Cell>
             <Table.Cell class="num strong">{usd(row.costUsd)}</Table.Cell>
           </Table.Row>
         {/each}
         {#if rows.length === 0}
           <Table.Row>
-            <Table.Cell colspan={8} class="empty">
+            <Table.Cell class="empty" colspan={8}>
               Nothing recorded for this harness yet.
             </Table.Cell>
           </Table.Row>
@@ -220,20 +253,45 @@
   {/if}
 </div>
 
-<Dialog.Root bind:open={dialogOpen} onOpenChange={(open) => !open && (selected = null)}>
+<Dialog.Root
+  onOpenChange={(open) => !open && (selected = null)}
+  bind:open={dialogOpen}
+>
   <Dialog.Content class="max-w-md">
     <Dialog.Header>
       <Dialog.Title>Session</Dialog.Title>
-      <Dialog.Description class="font-mono text-micro">{selected?.key}</Dialog.Description>
+      <Dialog.Description class="font-mono text-micro"
+        >{selected?.key}</Dialog.Description
+      >
     </Dialog.Header>
     {#if selected}
       <dl class="grid grid-cols-2 gap-2 text-caption">
-        <div><dt class="text-muted-foreground">Input</dt><dd class="tabular-nums">{selected.input.toLocaleString()}</dd></div>
-        <div><dt class="text-muted-foreground">Output</dt><dd class="tabular-nums">{selected.output.toLocaleString()}</dd></div>
-        <div><dt class="text-muted-foreground">Cache write</dt><dd class="tabular-nums">{selected.cacheCreation.toLocaleString()}</dd></div>
-        <div><dt class="text-muted-foreground">Cache read</dt><dd class="tabular-nums">{selected.cacheRead.toLocaleString()}</dd></div>
-        <div><dt class="text-muted-foreground">Total</dt><dd class="tabular-nums">{selected.total.toLocaleString()}</dd></div>
-        <div><dt class="text-muted-foreground">Cost</dt><dd class="tabular-nums">{usd(selected.costUsd)}</dd></div>
+        <div>
+          <dt class="text-muted-foreground">Input</dt>
+          <dd class="tabular-nums">{selected.input.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt class="text-muted-foreground">Output</dt>
+          <dd class="tabular-nums">{selected.output.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt class="text-muted-foreground">Cache write</dt>
+          <dd class="tabular-nums">
+            {selected.cacheCreation.toLocaleString()}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-muted-foreground">Cache read</dt>
+          <dd class="tabular-nums">{selected.cacheRead.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt class="text-muted-foreground">Total</dt>
+          <dd class="tabular-nums">{selected.total.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt class="text-muted-foreground">Cost</dt>
+          <dd class="tabular-nums">{usd(selected.costUsd)}</dd>
+        </div>
       </dl>
     {/if}
   </Dialog.Content>

@@ -1,12 +1,12 @@
-import { afterAll, expect, mock, test } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
-import { createServer } from 'node:net';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { SESSIOND_V1 } from '@whiffle/core/sessiond';
-import type { Envelope, NeutralMessage, SpawnPayload } from '@whiffle/core';
-import { CONTROL_SET_EFFORT } from '@whiffle/core';
-import type { HarnessContext } from '../harness';
+import { afterAll, expect, mock, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { createServer } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Envelope, NeutralMessage, SpawnPayload } from "@whiffle/core";
+import { CONTROL_SET_EFFORT } from "@whiffle/core";
+import { SESSIOND_V1 } from "@whiffle/core/sessiond";
+import type { HarnessContext } from "../harness";
 
 /**
  * Effort has two surfaces and they are not the same call, so both are pinned
@@ -33,7 +33,7 @@ const handle = {
   close: () => {},
 };
 
-mock.module('@anthropic-ai/claude-agent-sdk', () => ({
+mock.module("@anthropic-ai/claude-agent-sdk", () => ({
   query: ({ options }: { options: Record<string, unknown> }) => {
     spawned.push({ options });
     return handle;
@@ -58,14 +58,17 @@ mock.module('@anthropic-ai/claude-agent-sdk', () => ({
  * scratch socket; the real endpoint is never bound, and no child is ever
  * created here.
  */
-const endpoint = join(mkdtempSync(join(tmpdir(), 'claude-effort-')), 'sessiond.sock');
+const endpoint = join(
+  mkdtempSync(join(tmpdir(), "claude-effort-")),
+  "sessiond.sock"
+);
 const fakeSessiond = createServer((socket) => {
   socket.write(
     `${JSON.stringify({
-      type: 'welcome',
-      epoch: 'test-epoch',
+      type: "welcome",
+      epoch: "test-epoch",
       capabilities: [SESSIOND_V1],
-      build: { version: 'test', startedAt: 0 },
+      build: { version: "test", startedAt: 0 },
       procs: [],
     })}\n`
   );
@@ -77,11 +80,11 @@ afterAll(() => {
   delete process.env.WHIFFLE_SESSIOND_ENDPOINT;
 });
 
-const { ClaudeHarness } = await import('./claude');
+const { ClaudeHarness } = await import("./claude");
 
 const ctx = (): HarnessContext => ({
-  instanceId: 'inst',
-  cwd: '/tmp',
+  instanceId: "inst",
+  cwd: "/tmp",
   frame: (_message: NeutralMessage) => {},
   permission: () => {},
   busy: () => {},
@@ -91,39 +94,42 @@ const ctx = (): HarnessContext => ({
 });
 
 const spawn = (spec: Partial<SpawnPayload>) =>
-  new ClaudeHarness().spawn({ instanceId: 'inst', cwd: '/tmp', ...spec }, ctx());
+  new ClaudeHarness().spawn(
+    { instanceId: "inst", cwd: "/tmp", ...spec },
+    ctx()
+  );
 
-test('the harness reports it has an effort scale', () => {
+test("the harness reports it has an effort scale", () => {
   expect(new ClaudeHarness().capabilities.effort).toBe(true);
 });
 
 test("a spawn's effort reaches the SDK options", async () => {
   spawned.length = 0;
-  await spawn({ model: 'opus', effort: 'xhigh' });
+  await spawn({ model: "opus", effort: "xhigh" });
   expect(spawned).toHaveLength(1);
-  expect(spawned[0].options.effort).toBe('xhigh');
-  expect(spawned[0].options.model).toBe('opus');
+  expect(spawned[0].options.effort).toBe("xhigh");
+  expect(spawned[0].options.model).toBe("opus");
 });
 
-test('a spawn that names no level leaves the option out entirely', async () => {
+test("a spawn that names no level leaves the option out entirely", async () => {
   spawned.length = 0;
-  await spawn({ model: 'opus' });
+  await spawn({ model: "opus" });
   // Not `undefined` in the object, absent from it: the model's own default is
   // what should answer, and a key we wrote is a choice we made.
-  expect('effort' in spawned[0].options).toBe(false);
+  expect("effort" in spawned[0].options).toBe(false);
 });
 
-test('setEffort is applied as a flag setting, not looked up as a Query method', async () => {
+test("setEffort is applied as a flag setting, not looked up as a Query method", async () => {
   flags.length = 0;
   const session = await spawn({});
-  await session.control(CONTROL_SET_EFFORT, ['max']);
-  expect(flags).toEqual([{ effortLevel: 'max' }]);
+  await session.control(CONTROL_SET_EFFORT, ["max"]);
+  expect(flags).toEqual([{ effortLevel: "max" }]);
 });
 
-test('the other controls still go straight to the Query', async () => {
+test("the other controls still go straight to the Query", async () => {
   const session = await spawn({});
-  expect(await session.control('setModel', ['sonnet'])).toBe('sonnet');
-  await expect(session.control('noSuchMethod', [])).rejects.toThrow(
-    'unknown control method: noSuchMethod'
+  expect(await session.control("setModel", ["sonnet"])).toBe("sonnet");
+  await expect(session.control("noSuchMethod", [])).rejects.toThrow(
+    "unknown control method: noSuchMethod"
   );
 });

@@ -1,3 +1,3 @@
-import { runDaemon } from './daemon';
+import { runDaemon } from "./daemon";
 
 runDaemon();

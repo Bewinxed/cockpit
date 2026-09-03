@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { IconAssistant } from '$lib/icons';
+  import type { SupervisorEvent } from "@whiffle/core";
   /**
    * The assistant panel — DESKTOP: floating pane per mock shell law (380×899,
    * top 40/right 24, radius 16, header 47); MOBILE (<900px): vaul-svelte
@@ -9,17 +9,17 @@
    * Shell law source: mocks/v5-assistant.html, PLAN.md §C9.
    * A11y intent: mocks/v3-assistant.html syncModal JS.
    */
-  import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
-  import * as Drawer from '$lib/components/ui/drawer';
-  import { whiffle } from '../client.svelte';
-  import { workspace } from '../workspace/workspace.svelte';
+  import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
+  import * as Drawer from "$lib/components/ui/drawer";
+  import { IconAssistant } from "$lib/icons";
+  import { whiffle } from "../client.svelte";
   import {
     loadSupervisor,
     loadSupervisorEvents,
     type SupervisorStatus,
-  } from '../supervisor';
-  import type { SupervisorEvent } from '@whiffle/core';
+  } from "../supervisor";
+  import { workspace } from "../workspace/workspace.svelte";
 
   let {
     open = $bindable(false),
@@ -43,10 +43,14 @@
 
   const events = $derived.by(() => {
     const live = whiffle.supervisorEvents;
-    if (!seeded) return [];
+    if (!seeded) {
+      return [];
+    }
     const merged = [...live];
     for (const row of seededEvents) {
-      if (!merged.some((e) => e.id === row.id)) merged.push(row);
+      if (!merged.some((e) => e.id === row.id)) {
+        merged.push(row);
+      }
     }
     merged.sort((a, b) => b.id - a.id);
     return merged.slice(0, 200);
@@ -55,7 +59,9 @@
   /** The focused session's autopilot state, when viewing a session. */
   const focusedSession = $derived.by(() => {
     const id = workspace.activeSessionId;
-    if (!id) return null;
+    if (!id) {
+      return null;
+    }
     const row = whiffle.instances.find((r) => r.id === id);
     return row ?? null;
   });
@@ -63,19 +69,21 @@
   const autopilot = $derived(focusedSession?.autopilot ?? null);
 
   function checkMobile() {
-    isMobile = window.matchMedia('(max-width: 899px)').matches;
+    isMobile = window.matchMedia("(max-width: 899px)").matches;
   }
 
   onMount(() => {
     checkMobile();
-    const mq = window.matchMedia('(max-width: 899px)');
+    const mq = window.matchMedia("(max-width: 899px)");
     const handler = () => checkMobile();
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
   });
 
   $effect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     loadSupervisor()
       .then((s) => {
         sup = s;
@@ -100,27 +108,32 @@
   }
 
   function onKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
+    if (event.key === "Escape") {
       event.preventDefault();
       close();
     }
   }
 
-
   /** Relative time in the product voice: "3s", "2m", "1h", "2d". */
   function ago(ts: number): string {
     const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-    if (s < 60) return `${s}s`;
+    if (s < 60) {
+      return `${s}s`;
+    }
     const m = Math.floor(s / 60);
-    if (m < 60) return `${m}m`;
+    if (m < 60) {
+      return `${m}m`;
+    }
     const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h`;
+    if (h < 24) {
+      return `${h}h`;
+    }
     return `${Math.floor(h / 24)}d`;
   }
 
   /** The cwd's last path segment — the session's label in this log. */
   function cwdLeaf(cwd: string): string {
-    const parts = cwd.replace(/\/$/, '').split('/');
+    const parts = cwd.replace(/\/$/, "").split("/");
     return parts[parts.length - 1] || cwd;
   }
 
@@ -130,18 +143,18 @@
   }
 
   const VERDICT_TONE: Record<string, string> = {
-    silent: 'muted',
-    reply: 'live',
-    escalate: 'attn',
-    ask: 'attn',
-    error: 'fail',
-    skipped: 'muted',
+    silent: "muted",
+    reply: "live",
+    escalate: "attn",
+    ask: "attn",
+    error: "fail",
+    skipped: "muted",
   };
 </script>
 
 {#if isMobile}
   <!-- MOBILE-FIRST: vaul-svelte drawer -->
-  <Drawer.Root bind:open direction="bottom" shouldScaleBackground={false}>
+  <Drawer.Root direction="bottom" shouldScaleBackground={false} bind:open>
     <Drawer.Content class="assistant-drawer">
       <Drawer.Header>
         <Drawer.Title class="sr-only">Whiffle Assistant</Drawer.Title>
@@ -161,12 +174,12 @@
 {:else if open}
   <!-- DESKTOP: floating pane per mock shell law -->
   <div
-    bind:this={panelEl}
-    class="panel"
-    role="dialog"
     aria-label="Whiffle Assistant"
-    tabindex="-1"
+    class="panel"
     onkeydown={onKeydown}
+    role="dialog"
+    tabindex="-1"
+    bind:this={panelEl}
   >
     <header class="panel-head">
       <span class="a-logo">
@@ -174,8 +187,20 @@
       </span>
       <span class="a-t"><b>Whiffle</b> Assistant</span>
       <span class="a-role">Assistant</span>
-      <button class="a-x" type="button" aria-label="Close assistant" onclick={close}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+      <button
+        aria-label="Close assistant"
+        class="a-x"
+        onclick={close}
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-width="1.9"
+          viewBox="0 0 24 24"
+        >
           <path d="M6 6l12 12M18 6L6 18" />
         </svg>
       </button>
@@ -198,11 +223,16 @@
           <span class="dot off"></span>
           <span class="status-label">Not configured</span>
         </div>
-        <p class="sect-note">Set a supervisor model under fleet settings to enable automated session oversight.</p>
+        <p class="sect-note">
+          Set a supervisor model under fleet settings to enable automated
+          session oversight.
+        </p>
       {:else if sup.status.reachable}
         <div class="status-block">
           <span class="dot on"></span>
-          <span class="status-label">{sup.status.resolvedModel ?? sup.config.model ?? 'Connected'}</span>
+          <span class="status-label"
+            >{sup.status.resolvedModel ?? sup.config.model ?? 'Connected'}</span
+          >
         </div>
       {:else}
         <div class="status-block">
@@ -227,7 +257,9 @@
           {#if autopilot.prompt}
             <p class="sect-note prompt-clip">{autopilot.prompt}</p>
           {/if}
-          <p class="sect-hint">Edit the standing prompt from the session composer.</p>
+          <p class="sect-hint">
+            Edit the standing prompt from the session composer.
+          </p>
         {:else if autopilot && !autopilot.enabled}
           <div class="status-block">
             <span class="dot off"></span>
@@ -239,7 +271,10 @@
             <span class="dot off"></span>
             <span class="status-label">Off</span>
           </div>
-          <p class="sect-hint">Enable autopilot from the session composer to let the supervisor answer on your behalf.</p>
+          <p class="sect-hint">
+            Enable autopilot from the session composer to let the supervisor
+            answer on your behalf.
+          </p>
         {/if}
       </section>
     {/if}
@@ -254,7 +289,10 @@
             <IconAssistant />
           </div>
           <h4 class="empty-h">No interventions yet</h4>
-          <p class="empty-p">When the supervisor acts on a session, every verdict appears here — replies, escalations, and the ones it let pass.</p>
+          <p class="empty-p">
+            When the supervisor acts on a session, every verdict appears here —
+            replies, escalations, and the ones it let pass.
+          </p>
         </div>
       {:else}
         <ul class="log">
@@ -265,10 +303,10 @@
               <span class="log-time">{ago(ev.createdAt)}</span>
               {#if session}
                 <button
-                  type="button"
                   class="log-session"
                   onclick={() => navigateToSession(ev.instanceId)}
                   title={session.cwd}
+                  type="button"
                 >
                   {session.title ?? session.derivedTitle ?? cwdLeaf(session.cwd)}
                 </button>

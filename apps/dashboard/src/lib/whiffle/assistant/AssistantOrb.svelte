@@ -6,7 +6,7 @@
    * place `--accent-solid` appears as a solid fill (DESIGN.md L81): the one
    * warm dot in an otherwise hueless bar is the summon's whole signature.
    */
-  import { IconAssistant } from '$lib/icons';
+  import { IconAssistant } from "$lib/icons";
 
   let {
     onclick,
@@ -20,13 +20,13 @@
 </script>
 
 <button
-  bind:this={ref}
-  type="button"
-  class="orb"
-  aria-label={open ? 'Close assistant' : 'Open assistant'}
   aria-expanded={open}
-  title="Assistant"
+  aria-label={open ? 'Close assistant' : 'Open assistant'}
+  class="orb"
   {onclick}
+  title="Assistant"
+  type="button"
+  bind:this={ref}
 >
   <IconAssistant />
 </button>

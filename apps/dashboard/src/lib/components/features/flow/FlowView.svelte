@@ -1,41 +1,44 @@
 <script lang="ts">
   import {
-    SvelteFlow,
     Background,
-    Controls,
-    MiniMap,
-    Panel,
-    type Node,
-    type Edge,
-    type DefaultEdgeOptions,
+    BackgroundVariant,
     type ColorMode,
-    BackgroundVariant
-  } from '@xyflow/svelte';
-  import '@xyflow/svelte/dist/style.css';
-  import { onMount } from 'svelte';
-  import { theme } from '$lib/theme.svelte';
-  import type { Message } from '$lib/whiffle/types';
-  import { copyToClipboard } from '$lib/whiffle/copy';
-  import type { SubagentState } from '$lib/utils/flow-types';
-  import FlowContextMenu from './FlowContextMenu.svelte';
-  import FlowAutoFit from './FlowAutoFit.svelte';
-  import FlowZoomTracker from './FlowZoomTracker.svelte';
-  import { nodeTypes } from './nodes';
-  import { transformMessagesToFlow } from '$lib/utils/flow-transform';
-  import { applyLayout, type ZoomMode } from '$lib/utils/flow-layout';
-  import { ZOOM_MIN, ZOOM_MAX, ZOOM_THRESHOLD_LAYOUT } from '$lib/utils/flow-constants';
-  import type { ContextMenuAction } from '$lib/utils/flow-types';
+    Controls,
+    type DefaultEdgeOptions,
+    type Edge,
+    MiniMap,
+    type Node,
+    Panel,
+    SvelteFlow,
+  } from "@xyflow/svelte";
+  import "@xyflow/svelte/dist/style.css";
+  import { onMount } from "svelte";
+  import { theme } from "$lib/theme.svelte";
+  import {
+    ZOOM_MAX,
+    ZOOM_MIN,
+    ZOOM_THRESHOLD_LAYOUT,
+  } from "$lib/utils/flow-constants";
+  import { applyLayout, type ZoomMode } from "$lib/utils/flow-layout";
+  import { transformMessagesToFlow } from "$lib/utils/flow-transform";
+  import type { ContextMenuAction, SubagentState } from "$lib/utils/flow-types";
+  import { copyToClipboard } from "$lib/whiffle/copy";
+  import type { Message } from "$lib/whiffle/types";
+  import FlowAutoFit from "./FlowAutoFit.svelte";
+  import FlowContextMenu from "./FlowContextMenu.svelte";
+  import FlowZoomTracker from "./FlowZoomTracker.svelte";
+  import { nodeTypes } from "./nodes";
 
   interface Props {
     instanceId: string;
     messages: Message[];
-    /** Subagent branches to draw, keyed by the Task tool.use that spawned them. */
-    subagents?: Map<string, SubagentState>;
-    /** The tool whose output is still streaming, if any. */
-    streamingToolId?: string;
-    totalCostUsd?: number;
     /** Invoked by the context menu's "jump to chat". */
     onJump?: (nodeId: string) => void;
+    /** The tool whose output is still streaming, if any. */
+    streamingToolId?: string;
+    /** Subagent branches to draw, keyed by the Task tool.use that spawned them. */
+    subagents?: Map<string, SubagentState>;
+    totalCostUsd?: number;
   }
 
   let {
@@ -48,18 +51,20 @@
   }: Props = $props();
 
   // Transform messages to raw flow data (nodes/edges without positions)
-  const rawFlowData = $derived.by(() => {
-    return transformMessagesToFlow(messages, instanceId, {
+  const rawFlowData = $derived.by(() =>
+    transformMessagesToFlow(messages, instanceId, {
       subagents: subagentsMap,
       streamingToolId,
-    });
-  });
+    })
+  );
 
   // Derive layout with dagre hierarchical positioning
   // Re-computes when zoomMode changes for dynamic spacing
   const layoutData = $derived.by(() => {
     const { nodes: rawNodes, edges: rawEdges } = rawFlowData;
-    if (rawNodes.length === 0) return { nodes: [] as Node[], edges: [] as Edge[] };
+    if (rawNodes.length === 0) {
+      return { nodes: [] as Node[], edges: [] as Edge[] };
+    }
     return applyLayout(rawNodes, rawEdges, { zoomMode });
   });
 
@@ -71,13 +76,17 @@
 
   // Derive zoom mode from current zoom level
   // compact: zoomed out (overview/summary), expanded: zoomed in (detail)
-  const zoomMode = $derived<ZoomMode>(currentZoom >= ZOOM_THRESHOLD_LAYOUT ? 'expanded' : 'compact');
+  const zoomMode = $derived<ZoomMode>(
+    currentZoom >= ZOOM_THRESHOLD_LAYOUT ? "expanded" : "compact"
+  );
 
   // Derive colorMode from app theme for svelte-flow dark mode support
   const colorMode = $derived<ColorMode>(theme.current);
 
   // Context menu state
-  let contextMenu = $state<{ x: number; y: number; nodeId: string } | null>(null);
+  let contextMenu = $state<{ x: number; y: number; nodeId: string } | null>(
+    null
+  );
 
   // Transitions disabled state (controlled by FlowZoomTracker)
   let transitionsDisabled = $state(false);
@@ -90,11 +99,10 @@
 
   // Default edge styling - smooth bezier curves
   const defaultEdgeOptions: DefaultEdgeOptions = {
-    type: 'smoothstep',
+    type: "smoothstep",
     animated: false,
-    style: 'stroke-width: 2px;'
+    style: "stroke-width: 2px;",
   };
-
 
   // Delay SvelteFlow render until after mount to avoid initial NaN viewport errors
   onMount(() => {
@@ -107,12 +115,18 @@
   const totalCost = $derived(totalCostUsd.toFixed(4));
 
   // Handle node context menu - svelte-flow passes { node, event }
-  function handleNodeContextMenu({ node, event }: { node: Node; event: MouseEvent }) {
+  function handleNodeContextMenu({
+    node,
+    event,
+  }: {
+    node: Node;
+    event: MouseEvent;
+  }) {
     event.preventDefault();
     contextMenu = {
       x: event.clientX,
       y: event.clientY,
-      nodeId: node.id
+      nodeId: node.id,
     };
   }
 
@@ -124,14 +138,14 @@
   // Handle context menu actions
   function handleContextAction(action: ContextMenuAction, nodeId: string) {
     switch (action) {
-      case 'copy': {
-        const node = nodes.find(n => n.id === nodeId);
+      case "copy": {
+        const node = nodes.find((n) => n.id === nodeId);
         if (node?.data?.content) {
-          void copyToClipboard('Message', String(node.data.content));
+          void copyToClipboard("Message", String(node.data.content));
         }
         break;
       }
-      case 'jump':
+      case "jump":
         onJump?.(nodeId);
         break;
     }
@@ -165,63 +179,73 @@
 <div class="relative h-full w-full">
   {#if mounted}
     <SvelteFlow
-      {nodes}
-      {edges}
-      {nodeTypes}
-      {defaultEdgeOptions}
-      {colorMode}
-      onlyRenderVisibleElements={true}
-      minZoom={ZOOM_MIN}
-      maxZoom={ZOOM_MAX}
-      onpaneclick={handlePaneClick}
-      onnodecontextmenu={handleNodeContextMenu}
-      oninit={handleInit}
       class="flow-animated {transitionsDisabled ? 'transitions-disabled' : ''}"
+      {colorMode}
+      {defaultEdgeOptions}
+      {edges}
+      maxZoom={ZOOM_MAX}
+      minZoom={ZOOM_MIN}
+      {nodes}
+      {nodeTypes}
+      oninit={handleInit}
+      onlyRenderVisibleElements={true}
+      onnodecontextmenu={handleNodeContextMenu}
+      onpaneclick={handlePaneClick}
     >
-    <!-- Background grid - only render after viewport is ready to avoid NaN errors -->
-    {#if flowReady}
-      <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
-    {/if}
+      <!-- Background grid - only render after viewport is ready to avoid NaN errors -->
+      {#if flowReady}
+        <Background gap={20} size={1} variant={BackgroundVariant.Dots} />
+      {/if}
 
-    <!-- Track zoom level for dynamic layout spacing, handles re-centering on threshold cross -->
-    {#if flowReady}
-      <FlowZoomTracker onZoomChange={handleZoomChange} onTransitionsDisabled={handleTransitionsDisabled} {nodes} />
-    {/if}
+      <!-- Track zoom level for dynamic layout spacing, handles re-centering on threshold cross -->
+      {#if flowReady}
+        <FlowZoomTracker
+          {nodes}
+          onTransitionsDisabled={handleTransitionsDisabled}
+          onZoomChange={handleZoomChange}
+        />
+      {/if}
 
-    <!-- Auto-pan to new nodes (must be inside SvelteFlow context) -->
-    {#if flowReady}
-      <FlowAutoFit nodeCount={nodes.length} {nodes} />
-    {/if}
+      <!-- Auto-pan to new nodes (must be inside SvelteFlow context) -->
+      {#if flowReady}
+        <FlowAutoFit nodeCount={nodes.length} {nodes} />
+      {/if}
 
-    <!-- Controls - zoom, fit, lock -->
-    <Controls position="bottom-left" showZoom showFitView showLock />
+      <!-- Controls - zoom, fit, lock -->
+      <Controls position="bottom-left" showFitView showLock showZoom />
 
-    <!-- MiniMap - only render after viewport is ready to avoid NaN errors -->
-    {#if flowReady}
-      <MiniMap
-        position="bottom-right"
-        pannable
-        zoomable
-        class="!bg-background/80 !border-border"
-      />
-    {/if}
+      <!-- MiniMap - only render after viewport is ready to avoid NaN errors -->
+      {#if flowReady}
+        <MiniMap
+          class="!bg-background/80 !border-border"
+          pannable
+          position="bottom-right"
+          zoomable
+        />
+      {/if}
 
-    <!-- Header panel with cost display -->
-    <Panel position="top-right" class="!bg-transparent">
-      <div class="flex items-center gap-2 rounded-[var(--radius-control)] bg-background/80 backdrop-blur-sm px-3 py-1.5 border border-border text-sm">
-        <span class="text-muted-foreground">Cost:</span>
-        <span class="font-mono text-foreground">${totalCost}</span>
-      </div>
-    </Panel>
-
-    <!-- Empty state when no messages -->
-    {#if nodes.length === 0}
-      <Panel position="top-left" class="!bg-transparent">
-        <div class="flex items-center gap-2 rounded-[var(--radius-control)] bg-background/80 backdrop-blur-sm px-4 py-3 border border-border">
-          <span class="text-muted-foreground">Flow view ready. Messages will appear as nodes.</span>
+      <!-- Header panel with cost display -->
+      <Panel class="!bg-transparent" position="top-right">
+        <div
+          class="flex items-center gap-2 rounded-[var(--radius-control)] bg-background/80 backdrop-blur-sm px-3 py-1.5 border border-border text-sm"
+        >
+          <span class="text-muted-foreground">Cost:</span>
+          <span class="font-mono text-foreground">${totalCost}</span>
         </div>
       </Panel>
-    {/if}
+
+      <!-- Empty state when no messages -->
+      {#if nodes.length === 0}
+        <Panel class="!bg-transparent" position="top-left">
+          <div
+            class="flex items-center gap-2 rounded-[var(--radius-control)] bg-background/80 backdrop-blur-sm px-4 py-3 border border-border"
+          >
+            <span class="text-muted-foreground"
+              >Flow view ready. Messages will appear as nodes.</span
+            >
+          </div>
+        </Panel>
+      {/if}
     </SvelteFlow>
   {:else}
     <!-- Loading placeholder while SvelteFlow initializes -->
@@ -233,10 +257,10 @@
   <!-- Context menu -->
   {#if contextMenu}
     <FlowContextMenu
-      x={contextMenu.x}
-      y={contextMenu.y}
       onAction={(action) => handleContextAction(action as ContextMenuAction, contextMenu!.nodeId)}
       onClose={closeContextMenu}
+      x={contextMenu.x}
+      y={contextMenu.y}
     />
   {/if}
 </div>
@@ -245,7 +269,11 @@
   /* Override svelte-flow default styles to match dashboard theme */
   :global(.svelte-flow) {
     --xy-background-color: transparent;
-    --xy-minimap-background-color: color-mix(in srgb, var(--background) 80%, transparent);
+    --xy-minimap-background-color: color-mix(
+      in srgb,
+      var(--background) 80%,
+      transparent
+    );
     --xy-edge-stroke-default: var(--border);
     --xy-edge-stroke-width-default: 2;
     --xy-background-pattern-dot-color-default: var(--border);
@@ -294,7 +322,11 @@
   }
 
   :global(.svelte-flow__minimap) {
-    background: color-mix(in srgb, var(--background) 80%, transparent) !important;
+    background: color-mix(
+      in srgb,
+      var(--background) 80%,
+      transparent
+    ) !important;
     border: 1px solid var(--border) !important;
     border-radius: 0.375rem;
   }

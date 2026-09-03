@@ -1,4 +1,4 @@
-<script module lang="ts">
+<script lang="ts" module>
   /**
    * What one settings change reports back.
    *
@@ -29,24 +29,27 @@
    * one height for every interactive element in it. Desktop opens it as a
    * popover, a phone as a bottom sheet — the same panel either way.
    */
-  import type { EffortLevel, PermissionMode } from '@whiffle/core';
-  import type { CommandRecord, CommandStage } from '../client.svelte';
-  import { markHue } from '../mark';
-  import HarnessGlyph from '../HarnessGlyph.svelte';
-  import type { Activity } from '../activity';
-  import { modelLabel } from '../models.svelte';
-  import { permissionModeLabel, type PermissionModeOption } from '../permission-modes';
-  import { effortLabel, type EffortStop } from '../effort-levels';
-  import ModelCombobox from '../ModelCombobox.svelte';
-  import EffortSlider from '../EffortSlider.svelte';
-  import { TextMorph } from 'torph/svelte';
-  import { IconChat, IconFlow, IconSettings, IconUnfold } from '$lib/icons';
-  import { IsMobile } from '$lib/hooks/is-mobile.svelte';
-  import { Button } from '$lib/components/ui/button';
-  import * as ToggleGroup from '$lib/components/ui/toggle-group';
-  import * as Popover from '$lib/components/ui/popover';
-  import * as Drawer from '$lib/components/ui/drawer';
-  import * as Select from '$lib/components/ui/select';
+  import type { EffortLevel, PermissionMode } from "@whiffle/core";
+  import { TextMorph } from "torph/svelte";
+  import { Button } from "$lib/components/ui/button";
+  import * as Drawer from "$lib/components/ui/drawer";
+  import * as Popover from "$lib/components/ui/popover";
+  import * as Select from "$lib/components/ui/select";
+  import * as ToggleGroup from "$lib/components/ui/toggle-group";
+  import { IsMobile } from "$lib/hooks/is-mobile.svelte";
+  import { IconChat, IconFlow, IconSettings, IconUnfold } from "$lib/icons";
+  import type { Activity } from "../activity";
+  import type { CommandRecord, CommandStage } from "../client.svelte";
+  import EffortSlider from "../EffortSlider.svelte";
+  import { type EffortStop, effortLabel } from "../effort-levels";
+  import HarnessGlyph from "../HarnessGlyph.svelte";
+  import ModelCombobox from "../ModelCombobox.svelte";
+  import { markHue } from "../mark";
+  import { modelLabel } from "../models.svelte";
+  import {
+    type PermissionModeOption,
+    permissionModeLabel,
+  } from "../permission-modes";
 
   let {
     title,
@@ -90,8 +93,8 @@
     totalTokens: number | null;
     maxTokens: number | null;
     cost: number | null;
-    view: 'chat' | 'flow';
-    onview: (v: 'chat' | 'flow') => void;
+    view: "chat" | "flow";
+    onview: (v: "chat" | "flow") => void;
     /** Permission modes this session's harness can honour. */
     offeredModes: PermissionModeOption[];
     /** Every effort stop, each carrying whether this model reaches it. */
@@ -131,9 +134,9 @@
    * kind" — so an ack that arrives for the attempt the reader has already
    * replaced lands on a record nothing is reading.
    */
-  type Slot = 'model' | 'permission' | 'effort';
-  const SLOTS: Slot[] = ['model', 'permission', 'effort'];
-  const per = <T,>(value: T): Record<Slot, T> =>
+  type Slot = "model" | "permission" | "effort";
+  const SLOTS: Slot[] = ["model", "permission", "effort"];
+  const per = <T>(value: T): Record<Slot, T> =>
     Object.fromEntries(SLOTS.map((slot) => [slot, value])) as Record<Slot, T>;
 
   /** The round trip that beat the eye is no round trip at all — say nothing under it. */
@@ -171,8 +174,12 @@
 
   /** What the session says is actually in force for a row, right now. */
   function inForce(slot: Slot): unknown {
-    if (slot === 'model') return model;
-    if (slot === 'permission') return permissionMode;
+    if (slot === "model") {
+      return model;
+    }
+    if (slot === "permission") {
+      return permissionMode;
+    }
     return effort;
   }
 
@@ -187,20 +194,30 @@
    */
   function out(slot: Slot): boolean {
     const flight = attempt[slot];
-    if (!flight) return false;
+    if (!flight) {
+      return false;
+    }
     // The value came back, so the row has its answer whatever the tracker still
     // has to say — but only where the value moves when the MACHINE says so.
     // Today's calls write it the instant they are asked and put it back if the
     // switch is refused, so on that path a matching prop is the reader's own
     // click coming back and says nothing about where the change got to.
-    if (flight.sequenced && inForce(slot) === flight.value) return false;
-    if (flight.local) return true;
+    if (flight.sequenced && inForce(slot) === flight.value) {
+      return false;
+    }
+    if (flight.local) {
+      return true;
+    }
     const stage = stageOf(slot);
     // No record left (swept) is not a flight: a row must never wait on
     // something nothing will ever answer.
-    if (stage === null) return false;
-    if (stage === 'submitted') return true;
-    return stage === 'accepted' && flight.sequenced;
+    if (stage === null) {
+      return false;
+    }
+    if (stage === "submitted") {
+      return true;
+    }
+    return stage === "accepted" && flight.sequenced;
   }
 
   const refusal = (reason: string | undefined): string =>
@@ -209,10 +226,14 @@
   /** What a row's last attempt was refused with, in the row's own words. */
   function failure(slot: Slot): string | null {
     const flight = attempt[slot];
-    if (!flight) return null;
-    if (flight.refused) return flight.refused;
+    if (!flight) {
+      return null;
+    }
+    if (flight.refused) {
+      return flight.refused;
+    }
     const record = flight.commandId ? trackedCommand(flight.commandId) : null;
-    return record?.stage === 'failed' ? refusal(record.reason) : null;
+    return record?.stage === "failed" ? refusal(record.reason) : null;
   }
 
   /**
@@ -224,9 +245,13 @@
   $effect(() => {
     for (const slot of SLOTS) {
       const flight = attempt[slot];
-      if (!flight || flight.refused || !flight.commandId) continue;
+      if (!flight || flight.refused || !flight.commandId) {
+        continue;
+      }
       const record = trackedCommand(flight.commandId);
-      if (record?.stage === 'failed') flight.refused = refusal(record.reason);
+      if (record?.stage === "failed") {
+        flight.refused = refusal(record.reason);
+      }
     }
   });
 
@@ -237,13 +262,24 @@
   }
 
   const thrown = (error: unknown): string =>
-    error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
 
-  function apply<T>(slot: Slot, send: (value: T) => SettingChange, value: T): void {
-    if (out(slot)) return;
+  function apply<T>(
+    slot: Slot,
+    send: (value: T) => SettingChange,
+    value: T
+  ): void {
+    if (out(slot)) {
+      return;
+    }
     const token = (counter[slot] += 1);
     /** This row's attempt, or null once a newer one has replaced it. */
-    const mine = (): Attempt | null => (counter[slot] === token ? attempt[slot] : null);
+    const mine = (): Attempt | null =>
+      counter[slot] === token ? attempt[slot] : null;
     attempt[slot] = {
       commandId: null,
       local: false,
@@ -253,18 +289,22 @@
       value,
     };
     const change = send(value);
-    if (typeof change === 'string') {
+    if (typeof change === "string") {
       attempt[slot]!.commandId = change;
     } else if (change) {
       attempt[slot]!.local = true;
       void change.then(
         () => {
           const flight = mine();
-          if (flight) flight.local = false;
+          if (flight) {
+            flight.local = false;
+          }
         },
         (error: unknown) => {
           const flight = mine();
-          if (!flight) return;
+          if (!flight) {
+            return;
+          }
           flight.local = false;
           flight.refused = refusal(thrown(error) || undefined);
         }
@@ -276,27 +316,33 @@
     }
     setTimeout(() => {
       const flight = mine();
-      if (flight) flight.settled = true;
+      if (flight) {
+        flight.settled = true;
+      }
     }, SETTLE);
   }
 
   const pill = $derived(
-    activity === 'blocked'
-      ? { status: 'attn' as const, label: 'needs you' }
-      : activity === 'working'
-        ? { status: 'live' as const, label: 'working' }
-        : { status: 'idle' as const, label: 'idle' }
+    activity === "blocked"
+      ? { status: "attn" as const, label: "needs you" }
+      : activity === "working"
+        ? { status: "live" as const, label: "working" }
+        : { status: "idle" as const, label: "idle" }
   );
 
   // A single-select toggle can hand back `undefined` when the active item is
   // pressed again; the view always has to be one of the two, so an empty
   // change is dropped rather than applied.
   function pickView(next: string | undefined) {
-    if (next === 'chat' || next === 'flow') onview(next);
+    if (next === "chat" || next === "flow") {
+      onview(next);
+    }
   }
 
-  const modelText = $derived(model ? modelLabel(model) : 'Model');
-  const permissionText = $derived(permissionMode ? permissionModeLabel(permissionMode) : 'Permissions');
+  const modelText = $derived(model ? modelLabel(model) : "Model");
+  const permissionText = $derived(
+    permissionMode ? permissionModeLabel(permissionMode) : "Permissions"
+  );
   const effortText = $derived(effort ? effortLabel(effort) : null);
   // Everything the closed disclosure stands in for, in the order the panel
   // stacks it. Effort joins the line only once the session has reported one —
@@ -308,7 +354,7 @@
   );
   const summaryLabel = $derived(
     `Session settings — model ${modelText}, permission ${permissionText}${
-      effortText ? `, effort ${effortText}` : ''
+      effortText ? `, effort ${effortText}` : ""
     }`
   );
 
@@ -332,37 +378,41 @@
 {/snippet}
 
 {#snippet settings()}
-  <div class="ctl" class:is-pending={pending('model')} aria-busy={out('model')}>
+  <div aria-busy={out('model')} class="ctl" class:is-pending={pending('model')}>
     <span class="ctl-label" id="sh-model-label">Model</span>
     <ModelCombobox
-      value={model ?? ''}
+      class="w-full text-foreground"
       onchoose={(next) => apply('model', onmodel, next)}
       size="sm"
-      class="w-full text-foreground"
+      value={model ?? ''}
     />
     {@render flight('model')}
   </div>
 
   {#if offeredModes.length > 0}
-    <div class="ctl" class:is-pending={pending('permission')} aria-busy={out('permission')}>
+    <div
+      aria-busy={out('permission')}
+      class="ctl"
+      class:is-pending={pending('permission')}
+    >
       <span class="ctl-label" id="sh-perm-label">Permissions</span>
       <Select.Root
+        onValueChange={(v) => apply('permission', onpermission, v as PermissionMode)}
         type="single"
         value={permissionMode ?? undefined}
-        onValueChange={(v) => apply('permission', onpermission, v as PermissionMode)}
       >
         <Select.Trigger
           aria-labelledby="sh-perm-label"
-          size="sm"
           class="w-full {permissionMode === 'bypassPermissions'
             ? 'text-[color:var(--status-attn-ink)]'
             : 'text-foreground'}"
+          size="sm"
         >
           {permissionText}
         </Select.Trigger>
         <Select.Content>
           {#each offeredModes as mode (mode.value)}
-            <Select.Item value={mode.value} label={mode.label}>
+            <Select.Item label={mode.label} value={mode.value}>
               <span class="flex flex-col">
                 <!-- "Bypass is on" is one colour wherever it is said: the same
                      token the closed trigger wears, and the same the attention
@@ -374,7 +424,9 @@
                 >
                   {mode.label}
                 </span>
-                <span class="text-micro text-muted-foreground">{mode.description}</span>
+                <span class="text-micro text-muted-foreground"
+                  >{mode.description}</span
+                >
               </span>
             </Select.Item>
           {/each}
@@ -385,13 +437,17 @@
   {/if}
 
   {#if showEffort}
-    <div class="ctl" class:is-pending={pending('effort')} aria-busy={out('effort')}>
+    <div
+      aria-busy={out('effort')}
+      class="ctl"
+      class:is-pending={pending('effort')}
+    >
       <span class="ctl-label">Reasoning effort</span>
       <EffortSlider
-        stops={effortStops}
-        value={effort}
         modelName={model ? modelLabel(model) : undefined}
         onchange={(level) => apply('effort', oneffort, level)}
+        stops={effortStops}
+        value={effort}
       />
       {@render flight('effort')}
     </div>
@@ -412,7 +468,8 @@
        fact that ends the panel. -->
   {#if mcpCount}
     <a class="ctl-note ctl-foot ctl-link" href="/tools">
-      {mcpCount} MCP {mcpCount === 1 ? 'server' : 'servers'} connected
+      {mcpCount}
+      MCP {mcpCount === 1 ? 'server' : 'servers'} connected
     </a>
   {/if}
 {/snippet}
@@ -424,22 +481,28 @@
   <div class="sh-folded">
     <div class="sh-meta-row">
       <span>{harness}</span>
-      {#if turns !== null}<span><b>{turns}</b> turns</span>{/if}
-      {#if totalTokens !== null && maxTokens}<span><b>{k(totalTokens)}</b>/{k(maxTokens)} ctx</span>{/if}
-      {#if cost !== null}<span><b>${cost.toFixed(2)}</b></span>{/if}
+      {#if turns !== null}
+        <span><b>{turns}</b> turns</span>
+      {/if}
+      {#if totalTokens !== null && maxTokens}
+        <span><b>{k(totalTokens)}</b>/{k(maxTokens)} ctx</span>
+      {/if}
+      {#if cost !== null}
+        <span><b>${cost.toFixed(2)}</b></span>
+      {/if}
     </div>
     <ToggleGroup.Root
-      type="single"
-      value={view}
-      onValueChange={pickView}
       aria-label="Transcript view"
       class="view-toggle compact-toggle"
+      onValueChange={pickView}
+      type="single"
+      value={view}
     >
-      <ToggleGroup.Item value="chat" aria-label="Chat view" class="view-item">
+      <ToggleGroup.Item aria-label="Chat view" class="view-item" value="chat">
         <IconChat />
         <span>Chat</span>
       </ToggleGroup.Item>
-      <ToggleGroup.Item value="flow" aria-label="Flow view" class="view-item">
+      <ToggleGroup.Item aria-label="Flow view" class="view-item" value="flow">
         <IconFlow />
         <span>Flow</span>
       </ToggleGroup.Item>
@@ -448,24 +511,30 @@
 {/snippet}
 
 <header class="shead">
-  <span class="mark m{markHue(seed)}" aria-hidden="true"><HarnessGlyph {harness} /></span>
-  <h1><TextMorph text={title} as="span" duration={120} /></h1>
-  <span class="path"><TextMorph text="{machineName} : {cwd}" as="span" duration={120} /></span>
-  <span class="pill {pill.status}"><TextMorph text={pill.label} as="span" duration={100} /></span>
+  <span aria-hidden="true" class="mark m{markHue(seed)}"
+    ><HarnessGlyph {harness} /></span
+  >
+  <h1><TextMorph as="span" duration={120} text={title} /></h1>
+  <span class="path"
+    ><TextMorph as="span" duration={120} text="{machineName} : {cwd}" /></span
+  >
+  <span class="pill {pill.status}"
+    ><TextMorph as="span" duration={100} text={pill.label} /></span
+  >
 
   <div class="mid">
     <ToggleGroup.Root
-      type="single"
-      value={view}
-      onValueChange={pickView}
       aria-label="Transcript view"
       class="view-toggle inline-toggle"
+      onValueChange={pickView}
+      type="single"
+      value={view}
     >
-      <ToggleGroup.Item value="chat" aria-label="Chat view" class="view-item">
+      <ToggleGroup.Item aria-label="Chat view" class="view-item" value="chat">
         <IconChat />
         <span>Chat</span>
       </ToggleGroup.Item>
-      <ToggleGroup.Item value="flow" aria-label="Flow view" class="view-item">
+      <ToggleGroup.Item aria-label="Flow view" class="view-item" value="flow">
         <IconFlow />
         <span>Flow</span>
       </ToggleGroup.Item>
@@ -477,10 +546,10 @@
           {#snippet child({ props })}
             <Button
               {...props}
-              variant="ghost"
-              size="sm"
-              class="settings-trigger {permissionMode === 'bypassPermissions' ? 'is-bypass' : ''}"
               aria-label={summaryLabel}
+              class="settings-trigger {permissionMode === 'bypassPermissions' ? 'is-bypass' : ''}"
+              size="sm"
+              variant="ghost"
             >
               <IconSettings class="settings-gear" />
               <span class="settings-label">{summary}</span>
@@ -488,7 +557,9 @@
             </Button>
           {/snippet}
         </Drawer.Trigger>
-        <Drawer.Content class="max-h-[85vh] pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <Drawer.Content
+          class="max-h-[85vh] pb-[calc(1rem+env(safe-area-inset-bottom))]"
+        >
           <Drawer.Header class="p-0 pb-3 text-left">
             <Drawer.Title class="text-left">Session settings</Drawer.Title>
           </Drawer.Header>
@@ -504,10 +575,10 @@
           {#snippet child({ props })}
             <Button
               {...props}
-              variant="ghost"
-              size="sm"
-              class="settings-trigger {permissionMode === 'bypassPermissions' ? 'is-bypass' : ''}"
               aria-label={summaryLabel}
+              class="settings-trigger {permissionMode === 'bypassPermissions' ? 'is-bypass' : ''}"
+              size="sm"
+              variant="ghost"
             >
               <IconSettings class="settings-gear" />
               <span class="settings-label">{summary}</span>
@@ -524,9 +595,15 @@
 
   <div class="meta">
     <span>{harness}</span>
-    {#if turns !== null}<span><b>{turns}</b> turns</span>{/if}
-    {#if totalTokens !== null && maxTokens}<span><b>{k(totalTokens)}</b>/{k(maxTokens)}</span>{/if}
-    {#if cost !== null}<span><b>${cost.toFixed(2)}</b></span>{/if}
+    {#if turns !== null}
+      <span><b>{turns}</b> turns</span>
+    {/if}
+    {#if totalTokens !== null && maxTokens}
+      <span><b>{k(totalTokens)}</b>/{k(maxTokens)}</span>
+    {/if}
+    {#if cost !== null}
+      <span><b>${cost.toFixed(2)}</b></span>
+    {/if}
   </div>
 </header>
 
@@ -599,13 +676,27 @@
        opacity, so one colour is the whole glyph. */
     color: var(--mark-glyph);
   }
-  .mark.m2 { background-color: var(--mark-2); }
-  .mark.m3 { background-color: var(--mark-3); }
-  .mark.m4 { background-color: var(--mark-4); }
-  .mark.m5 { background-color: var(--mark-5); }
-  .mark.m6 { background-color: var(--mark-6); }
-  .mark.m7 { background-color: var(--mark-7); }
-  .mark.m8 { background-color: var(--mark-8); }
+  .mark.m2 {
+    background-color: var(--mark-2);
+  }
+  .mark.m3 {
+    background-color: var(--mark-3);
+  }
+  .mark.m4 {
+    background-color: var(--mark-4);
+  }
+  .mark.m5 {
+    background-color: var(--mark-5);
+  }
+  .mark.m6 {
+    background-color: var(--mark-6);
+  }
+  .mark.m7 {
+    background-color: var(--mark-7);
+  }
+  .mark.m8 {
+    background-color: var(--mark-8);
+  }
 
   /* Title and path are siblings on the bar's own baseline rather than a nested
      block, so nothing in the identity can drift off the row's centre line. */
@@ -647,8 +738,14 @@
     white-space: nowrap;
     flex: 0 0 auto;
   }
-  .pill.live { background: var(--status-live-bg); color: var(--status-live-ink); }
-  .pill.attn { background: var(--status-attn-bg); color: var(--status-attn-ink); }
+  .pill.live {
+    background: var(--status-live-bg);
+    color: var(--status-live-ink);
+  }
+  .pill.attn {
+    background: var(--status-attn-bg);
+    color: var(--status-attn-ink);
+  }
   .pill.idle {
     background: var(--status-idle-bg);
     color: var(--status-idle-ink);
@@ -690,7 +787,7 @@
       color var(--c-100) var(--e-in),
       transform var(--c-100) var(--e-in);
   }
-  :global(.view-toggle .view-item[data-state='on']) {
+  :global(.view-toggle .view-item[data-state="on"]) {
     background: var(--surface-raised);
     color: var(--ink-strong);
     box-shadow: var(--shadow-tile);

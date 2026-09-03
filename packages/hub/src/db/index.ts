@@ -22,14 +22,32 @@ import type {
   ToolPolicy,
   ToolStatus,
   UsageBucket,
-} from '@whiffle/core';
-import { RESTART_LOST, resolveRates } from '@whiffle/core';
-import { Context, Effect, Layer } from 'effect';
-import { and, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne, notInArray, or, sql } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/bun-sqlite';
-import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
-import { DB_PATH } from '../config';
-import type { DelegateAskStatus, DelegateEventKind, DelegateEventPayload } from './schema';
+} from "@whiffle/core";
+import { RESTART_LOST, resolveRates } from "@whiffle/core";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  ne,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+import { Context, Effect, Layer } from "effect";
+import { DB_PATH } from "../config";
+import type {
+  DelegateAskStatus,
+  DelegateEventKind,
+  DelegateEventPayload,
+} from "./schema";
 import {
   agents,
   credentials,
@@ -53,12 +71,14 @@ import {
   tools,
   usageBuckets,
   usageLimits,
-} from './schema';
+} from "./schema";
 
 /** Shipped with the package so a fresh boot never needs a drizzle-kit step. */
-const MIGRATIONS_DIR = Bun.fileURLToPath(new URL('../../drizzle', import.meta.url));
+const MIGRATIONS_DIR = Bun.fileURLToPath(
+  new URL("../../drizzle", import.meta.url)
+);
 
-export type InstanceKind = (typeof instances.$inferSelect)['kind'];
+export type InstanceKind = (typeof instances.$inferSelect)["kind"];
 
 /**
  * A session the returning daemon no longer carries. `resumes` is the whole
@@ -66,27 +86,27 @@ export type InstanceKind = (typeof instances.$inferSelect)['kind'];
  * again on top of it rather than the work being lost with the restart.
  */
 export interface SettledInstance {
-  row: typeof instances.$inferSelect;
   resumes: boolean;
+  row: typeof instances.$inferSelect;
 }
 
 /** How long a session that stopped moving stays in the listings the rails read. */
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
-export type AgentAuth = (typeof agents.$inferSelect)['auth'];
+export type AgentAuth = (typeof agents.$inferSelect)["auth"];
 
 /** One line of what a delegate and its parent said, as everything reads it. */
 export type DelegateEvent = typeof delegateEvents.$inferSelect;
 
 /** One superseded version of the fleet's memory, as a listing reads it. */
 export interface MemoryVersion {
-  id: number;
-  hash: string;
-  source: string;
-  /** Which document of the set it was a version of; absent is the main one. */
-  path?: string;
   bytes: number;
   createdAt: Date;
+  hash: string;
+  id: number;
+  /** Which document of the set it was a version of; absent is the main one. */
+  path?: string;
+  source: string;
 }
 
 /**
@@ -96,32 +116,32 @@ export interface MemoryVersion {
  * again is a round trip for nothing.
  */
 export interface MemoryDocRow {
-  path: string;
   content: string;
   hash: string;
+  path: string;
   updatedAt: Date;
 }
 
 /** One superseded version of one hook, as a listing reads it — without the material. */
 export interface HookVersion {
-  id: number;
-  hookId: string;
-  name: string;
+  createdAt: Date;
   hash: string;
+  hookId: string;
+  id: number;
+  name: string;
   /** `fleet` for every version today — a hook has never been edited from a machine. */
   source: string;
-  createdAt: Date;
 }
 
 /** A superseded version in full: what restoring it would actually write back. */
 export interface HookVersionMaterial {
   enabled: boolean;
   event: HookEvent;
-  matcher?: string;
   handler: HookHandler;
-  script?: string;
-  scope?: FleetScope;
+  matcher?: string;
   projectId?: string;
+  scope?: FleetScope;
+  script?: string;
 }
 
 /** A stored usage bucket, one (machine, session, model, hour) cell (USAGE-SPEC.md §6). */
@@ -131,49 +151,177 @@ export type UsageBucketRow = typeof usageBuckets.$inferSelect;
 export type UsageLimitRow = typeof usageLimits.$inferSelect;
 
 /** How `/api/usage/summary` folds the buckets it returns (USAGE-SPEC.md §6.3). */
-export type UsageGroupBy = 'day' | 'model' | 'project' | 'session';
+export type UsageGroupBy = "day" | "model" | "project" | "session";
 
 /** One aggregated group in a usage summary. */
 export interface UsageSummaryRow {
-  key: string | number;
-  input: number;
-  output: number;
   cacheCreation: number;
   cacheRead: number;
-  reasoning: number;
   costUsd: number;
+  input: number;
+  key: string | number;
   messages: number;
+  output: number;
+  reasoning: number;
 }
 
 /** The whole-window sums a summary's groups roll up to. */
 export interface UsageTotals {
-  input: number;
-  output: number;
   cacheCreation: number;
   cacheRead: number;
-  reasoning: number;
   costUsd: number;
+  input: number;
   messages: number;
+  output: number;
+  reasoning: number;
 }
 
 /** What `/api/usage/summary` returns: the groups, their totals, and unpriced models. */
 export interface UsageSummary {
+  missingPricing: string[];
   rows: UsageSummaryRow[];
   totals: UsageTotals;
-  missingPricing: string[];
 }
 
 export interface DbShape {
-  readonly upsertAgent: (agent: {
+  /**
+   * Re-arms the rule for that session and files what it said it did. Returns
+   * nothing when the session had nothing pending, so the tool can say so.
+   */
+  readonly ackRule: (
+    ruleId: string,
+    instanceId: string,
+    note: string
+  ) => RuleState | undefined;
+  /** A machine's last-known tool status by id; empty for one that never reported. */
+  readonly agentTools: (machineId: string) => Record<string, ToolStatus>;
+  readonly clearFleetMemory: () => void;
+  readonly createProject: (project: {
+    id: string;
     machineId: string;
-    hostname: string;
-    os: string;
-    auth: AgentAuth;
-    /** Absent from a register with nothing new to say about it; the row keeps what it had. */
-    build?: BuildInfo;
-    harnesses?: HarnessReport[];
-  }) => void;
-  readonly touchAgent: (machineId: string) => void;
+    name: string;
+    cwd: string;
+  }) => typeof projects.$inferSelect | undefined;
+  /** The ask a `requestId` opened, so its answer is filed under the same parent. */
+  readonly delegateAsk: (requestId: string) => DelegateEvent | undefined;
+  readonly deleteFleetAgent: (name: string) => void;
+  readonly deleteFleetHook: (id: string) => void;
+  readonly deleteFleetMemoryDoc: (path: string) => void;
+  readonly deleteMarketplace: (name: string) => void;
+  readonly deleteMcpServer: (name: string) => void;
+  readonly deletePlugin: (id: string) => void;
+  readonly deleteProject: (id: string) => void;
+  /** Removes the rule and every session's standing with it. */
+  readonly deleteRule: (id: string) => void;
+  readonly deleteSkill: (name: string) => void;
+  /** A side quest thrown away: stopped, and gone from every live listing. */
+  readonly discardInstance: (id: string) => void;
+  /** The agent reported the session dead: what killed it, kept for late readers. */
+  readonly failInstance: (id: string, error: string) => void;
+  /** The whole desired fleet state (NEW.md §11) — what a machine is sent to converge on. */
+  /**
+   * The fleet's desired state. Given a machine, the content-carrying rows it
+   * already reported holding are sent WITHOUT their files: the config goes to
+   * every machine on every fleet change, and those bytes are megabytes the
+   * machine would compare to what it has and then not write.
+   */
+  readonly fleetConfig: (machineId?: string) => FleetConfig;
+  readonly fleetHookVersion: (
+    id: number
+  ) => (HookVersion & HookVersionMaterial) | undefined;
+  readonly fleetMemoryVersion: (
+    id: number
+  ) => (MemoryVersion & { content: string }) | undefined;
+  readonly getCredential: (id: string) => Record<string, unknown> | undefined;
+  readonly getFleetHook: (id: string) => FleetHook | undefined;
+  /** The fleet's user-scope CLAUDE.md, or undefined while the fleet keeps none. */
+  readonly getFleetMemory: () =>
+    | { content: string; hash: string; updatedAt: Date }
+    | undefined;
+  readonly getFleetMemoryDoc: (path: string) => MemoryDocRow | undefined;
+  /**
+   * The named rows, however old they are — the listing's staleness cut-off does
+   * not apply here. A conversation the reader still has a tab open on is a row
+   * they are entitled to an answer about, and the answer (what it is called) was
+   * written down long before it aged out of the board. Discarded rows stay gone:
+   * those were thrown away on purpose. Raw, so a caller can tell a given title
+   * from a derived one.
+   */
+  readonly getInstancesByIds: (
+    ids: string[]
+  ) => (typeof instances.$inferSelect)[];
+  /** One rule, or nothing when it has been deleted out from under a caller. */
+  readonly getRule: (id: string) => Rule | undefined;
+  /** The supervisor's own configuration, or undefined while none is stored. */
+  readonly getSupervisorConfig: () =>
+    | {
+        enabled: boolean;
+        baseUrl: string | null;
+        model: string | null;
+        apiKey: string | null;
+        updatedAt: Date;
+      }
+    | undefined;
+  /**
+   * Every machine, in the shape everything downstream reads them: the `fleet`
+   * column is null until a machine has synced once, and `AgentRow` says absent.
+   */
+  readonly listAgents: () => AgentRow[];
+  /** Oldest first: what one delegate did, or what every delegate of one parent did. */
+  readonly listDelegateEvents: (filter: {
+    parent?: string;
+    instance?: string;
+  }) => DelegateEvent[];
+  /**
+   * Every subagent the fleet keeps, file and all: a definition is a page of
+   * markdown, so the listing is what the editor is seeded from.
+   */
+  readonly listFleetAgents: () => FleetAgent[];
+  /**
+   * Newest first, without the material: one hook's history, or — with no id —
+   * every hook's, for a fleet-wide undo panel.
+   */
+  readonly listFleetHookHistory: (hookId?: string) => HookVersion[];
+  /** Every hook the fleet keeps, by name — what the editor lists and seeds from. */
+  readonly listFleetHooks: () => FleetHook[];
+  /** Every document the main memory links, by path — the set, in one read. */
+  readonly listFleetMemoryDocs: () => MemoryDocRow[];
+  /**
+   * Newest first, without the content: a list should not weigh what it lists.
+   * One document's history, or the main file's when no path is named — the two
+   * are never mixed, because the panel asks about one document at a time.
+   */
+  readonly listFleetMemoryHistory: (path?: string) => MemoryVersion[];
+  readonly listInstances: () => (typeof instances.$inferSelect)[];
+  /**
+   * Every plugin row without its files, `error` and all. What the DASHBOARD
+   * reads: {@link fleetConfig} answers the machines and deliberately carries
+   * neither the bookkeeping nor the failure, so a plugin the hub could not
+   * fetch was until now a row nothing on the page could tell apart from one
+   * that resolved.
+   */
+  readonly listPlugins: () => FleetPlugin[];
+  readonly listProjects: () => (typeof projects.$inferSelect)[];
+  /** Every rule, newest first — what the engine reloads and the editor lists. */
+  readonly listRules: () => Rule[];
+  /** Every skill row without its files — a catalog read should not weigh megabytes. */
+  readonly listSkills: () => FleetSkillMeta[];
+  /** Newest first; optionally filtered to one session; default limit 100. */
+  readonly listSupervisorEvents: (filter: {
+    instanceId?: string;
+    limit?: number;
+  }) => SupervisorEvent[];
+  /** The fleet's tool policy (NEW.md §10) — only the tools somebody has ruled on. */
+  readonly listToolPolicies: () => ToolPolicy[];
+  /** The buckets in the window, oldest first — the rows the blocks route folds. */
+  readonly listUsageBuckets: (q: {
+    since?: number;
+    until?: number;
+    harness?: string;
+    machineId?: string;
+  }) => UsageBucketRow[];
+  /** Every machine's latest limit reading. */
+  readonly listUsageLimits: () => UsageLimitRow[];
   readonly markAgentOffline: (machineId: string) => void;
   /**
    * Every row back to `offline`, for the one moment it is unconditionally true:
@@ -189,6 +337,44 @@ export interface DbShape {
    * from is history, and history survives a restart. Only reachability is reset.
    */
   readonly markAllAgentsOffline: () => void;
+  /**
+   * The daemon has spoken about one session — its `init` frame naming the SDK
+   * conversation. That is first-hand word that a process exists, so a row still
+   * at `starting` (or demoted while the machine was unreachable) is promoted
+   * without waiting up to a beat for the heartbeat to say the same thing.
+   * Returns whether the row moved.
+   */
+  readonly markInstanceLive: (id: string) => boolean;
+  /** A whole report: every id it names is replaced, every other cell survives. */
+  readonly mergeAgentTools: (machineId: string, statuses: ToolStatus[]) => void;
+  /**
+   * The name the session's first user message gives it, for a row nobody named.
+   * Write-once and never over a given title: a spawn's headline, or a custom
+   * title arriving later, always wins. Returns whether it took, so the caller
+   * only re-publishes when something actually moved.
+   */
+  readonly noteDerivedTitle: (id: string, derivedTitle: string) => boolean;
+  /**
+   * The SDK session an `init` frame named, so the row can be read back from —
+   * with the directory it really opened in, which is the agent's word on where
+   * the spawn's `cwd` resolved to.
+   */
+  readonly noteInstanceSession: (
+    id: string,
+    sessionId: string,
+    cwd?: string,
+    harness?: string
+  ) => void;
+  /**
+   * Records a fire and returns the session's new standing. `pending` is set
+   * whenever the rule wants an acknowledgement; `fireCount` is what makes the
+   * reminder escalate, and only an acknowledgement resets it.
+   */
+  readonly noteRuleFire: (
+    ruleId: string,
+    instanceId: string,
+    requireAck: boolean
+  ) => RuleState;
   readonly openInstance: (instance: {
     id: string;
     machineId: string;
@@ -208,38 +394,94 @@ export interface DbShape {
     canDelegate?: boolean;
   }) => void;
   /**
-   * The name the session's first user message gives it, for a row nobody named.
-   * Write-once and never over a given title: a spawn's headline, or a custom
-   * title arriving later, always wins. Returns whether it took, so the caller
-   * only re-publishes when something actually moved.
-   */
-  readonly noteDerivedTitle: (id: string, derivedTitle: string) => boolean;
-  readonly stopInstance: (id: string) => void;
-  /** The agent reported the session dead: what killed it, kept for late readers. */
-  readonly failInstance: (id: string, error: string) => void;
-  /** A side quest thrown away: stopped, and gone from every live listing. */
-  readonly discardInstance: (id: string) => void;
-  /**
    * The fields a dashboard may move on a live row: "Keep" — a side quest that
    * earned its place stops being treated as scratch — and the three settings the
    * user keeps changing on a session that is already running.
    */
   readonly patchInstance: (
     id: string,
-    patch: { kind?: InstanceKind; permissionMode?: string; model?: string; effort?: string }
+    patch: {
+      kind?: InstanceKind;
+      permissionMode?: string;
+      model?: string;
+      effort?: string;
+    }
   ) => typeof instances.$inferSelect | undefined;
+  /** Every rule one session still owes an answer for — what the ack tool lists. */
+  readonly pendingRuleStates: (instanceId: string) => RuleState[];
+  readonly putCredential: (id: string, blob: Record<string, unknown>) => void;
+  /** Upsert of one definition's file; the hash and the size are read off it. */
+  readonly putFleetAgent: (agent: {
+    name: string;
+    content: string;
+  }) => FleetAgent;
   /**
-   * The SDK session an `init` frame named, so the row can be read back from —
-   * with the directory it really opened in, which is the agent's word on where
-   * the spawn's `cwd` resolved to.
+   * Upsert by id. The caller mints the id, like a rule's; the hash is not
+   * taken from the caller but recomputed here, over the material a machine
+   * actually compares before writing — so a hash can never be sent stale.
    */
-  readonly noteInstanceSession: (id: string, sessionId: string, cwd?: string, harness?: string) => void;
+  readonly putFleetHook: (hook: Omit<FleetHook, "hash">) => FleetHook;
+  /** Upsert of one document; the hash is read off the content, as everywhere. */
+  readonly putFleetMemoryDoc: (doc: {
+    path: string;
+    content: string;
+  }) => MemoryDocRow;
+  readonly putMarketplace: (marketplace: FleetMarketplace) => FleetMarketplace;
+  readonly putMcpServer: (server: {
+    name: string;
+    config: FleetMcpServer["config"];
+    enabled?: boolean;
+  }) => FleetMcpServer;
+  readonly putPlugin: (plugin: {
+    id: string;
+    enabled?: boolean;
+  }) => FleetPlugin;
   /**
-   * Marks every running instance on the machine that `liveIds` does not name as
-   * unknown: those belong to a daemon that is gone, and the hub cannot tell
-   * whether they outlived it. An empty list means the machine runs nothing.
+   * What one plugin's resolve came to: the files the hub fetched, or the
+   * sentence it failed with. The mirror of {@link putSkill}, and the write that
+   * turns a plugin from a name every machine must fetch for itself into bytes
+   * the fleet carries.
    */
-  readonly reconcileInstances: (machineId: string, liveIds: string[]) => void;
+  readonly putPluginPayload: (payload: {
+    id: string;
+    hash?: string;
+    bytes?: number;
+    error?: string;
+    files?: SkillFile[];
+  }) => void;
+  /** Upsert by id. The caller mints the id; this never invents one. */
+  readonly putRule: (rule: Rule) => Rule;
+  /** Upsert of a resolve's outcome: the files it read, or the sentence it failed with. */
+  readonly putSkill: (skill: {
+    name: string;
+    source: string;
+    enabled?: boolean;
+    hash?: string;
+    bytes?: number;
+    error?: string;
+    files?: SkillFile[];
+  }) => FleetSkillMeta;
+  /** Upserts the supervisor's configuration (single-row table). */
+  readonly putSupervisorConfig: (config: {
+    enabled?: boolean;
+    baseUrl?: string | null;
+    model?: string | null;
+    apiKey?: string | null;
+  }) => void;
+  /** Upsert; a patch names only what it changes and the rest stays as it was. */
+  readonly putToolPolicy: (
+    id: string,
+    patch: { required?: boolean; pinnedVersion?: string | null }
+  ) => ToolPolicy;
+  /**
+   * Stores a machine's usage buckets (USAGE-SPEC.md §6.2). Idempotent: the
+   * bucket's id is its (machine, harness, session, model, hour) key, and an
+   * upsert sets absolute totals — a re-report of the same bucket overwrites,
+   * never accumulates.
+   */
+  readonly putUsageBuckets: (machineId: string, buckets: UsageBucket[]) => void;
+  /** Stores the machine's latest limit reading; one row per machine. */
+  readonly putUsageLimits: (machineId: string, limits: ClaudeLimits) => void;
   /**
    * The daemon's own word, arriving every 15s: `liveIds` is exactly what its
    * supervisor is carrying right now (`HeartbeatPayload.instances`).
@@ -270,13 +512,118 @@ export interface DbShape {
     graceMs: number
   ) => { promoted: string[]; settled: (typeof instances.$inferSelect)[] };
   /**
-   * The daemon has spoken about one session — its `init` frame naming the SDK
-   * conversation. That is first-hand word that a process exists, so a row still
-   * at `starting` (or demoted while the machine was unreachable) is promoted
-   * without waiting up to a beat for the heartbeat to say the same thing.
-   * Returns whether the row moved.
+   * Marks every running instance on the machine that `liveIds` does not name as
+   * unknown: those belong to a daemon that is gone, and the hub cannot tell
+   * whether they outlived it. An empty list means the machine runs nothing.
    */
-  readonly markInstanceLive: (id: string) => boolean;
+  readonly reconcileInstances: (machineId: string, liveIds: string[]) => void;
+  /** Files one exchange between a delegate and its parent, and hands back the row. */
+  readonly recordDelegateEvent: (event: {
+    instanceId: string;
+    parentInstanceId: string;
+    kind: DelegateEventKind;
+    requestId?: string;
+    toolName?: string;
+    requestKind?: "question" | "tool";
+    payload: DelegateEventPayload;
+    status?: DelegateAskStatus;
+  }) => DelegateEvent;
+  /**
+   * Keeps a version that is about to be replaced or destroyed — a save, an
+   * edit, or a delete, the same three moments a memory document is kept at.
+   */
+  readonly recordFleetHook: (version: {
+    hookId: string;
+    name: string;
+    enabled: boolean;
+    event: HookEvent;
+    matcher?: string;
+    handler: HookHandler;
+    script?: string;
+    hash: string;
+    scope?: FleetScope;
+    projectId?: string;
+    source: string;
+  }) => void;
+  /**
+   * Keeps a version that is about to be replaced or destroyed. `source` is
+   * `fleet` for the hub's own row and `machine:<machineId>` for a copy an
+   * overwrite is taking off a machine; `path` names the document of the set it
+   * belonged to, and its absence is the main CLAUDE.md.
+   */
+  readonly recordFleetMemory: (version: {
+    content: string;
+    hash: string;
+    source: string;
+    path?: string;
+  }) => void;
+  /** Files one supervisor evaluation result and prunes to newest 5,000 rows (plan: our choice). */
+  readonly recordSupervisorEvent: (event: {
+    instanceId: string;
+    source: "rule" | "autopilot";
+    ruleId?: string;
+    verdict: "silent" | "reply" | "escalate" | "ask" | "error" | "skipped";
+    message?: string;
+    note?: string;
+    model?: string;
+    latencyMs?: number;
+  }) => SupervisorEvent;
+  /** Where a rule stands with a session; absent means it has never fired there. */
+  readonly ruleStateFor: (
+    ruleId: string,
+    instanceId: string
+  ) => RuleState | undefined;
+  /**
+   * Every session's standing with one rule, most recently active first.
+   *
+   * This is the only place the mechanism is visible to anybody. The session is
+   * told nothing, so the reader has to be told everything: which sessions
+   * tripped it, how often, and what each said it did about it.
+   */
+  readonly ruleStatesFor: (ruleId: string) => RuleState[];
+  /** Per-rule totals for the list, aggregated in SQL rather than per row. */
+  readonly ruleStats: () => RuleStats[];
+  /** A machine's own account of what it came to, from the sync it just answered. */
+  readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
+  readonly setAgentToolCell: (machineId: string, status: ToolStatus) => void;
+  /** Stores the document and the hash the machines compare against. */
+  readonly setFleetMemory: (content: string) => {
+    content: string;
+    hash: string;
+    updatedAt: Date;
+  };
+
+  /** Sets (or clears) the autopilot configuration on a session. */
+  readonly setInstanceAutopilot: (
+    instanceId: string,
+    value: { enabled: boolean; prompt: string; updatedAt: number } | null
+  ) => void;
+  /** Closes it. An ask this hub never recorded is nothing to close. */
+  readonly settleDelegateAsk: (
+    requestId: string,
+    status: DelegateAskStatus
+  ) => void;
+  /**
+   * The returning daemon's word on its machine: `liveIds` are the sessions it
+   * still carries, `resumable` the SDK sessions it could pick back up. A daemon
+   * that could not read its catalog names none, and every row it left behind
+   * keeps the benefit of the doubt.
+   */
+  /**
+   * Returns what it settled, so the caller can drop their parked questions —
+   * and, for the ones whose conversation survived and are recent enough to be
+   * worth reviving, put them back (the horizon and cap live in `server.ts`;
+   * this writes every orphan to its resting state and lets the caller choose
+   * which of them to restart). The rows come back as they were *before* the
+   * settle, so `updatedAt` on them still says when the session last moved
+   * rather than when this bookkeeping ran.
+   */
+  readonly settleInstances: (
+    machineId: string,
+    liveIds: string[],
+    resumable?: string[]
+  ) => SettledInstance[];
+  readonly stopInstance: (id: string) => void;
   /**
    * The one-time reclassification a taxonomy change needs when the column is
    * plain text and there is no SQL migration to hang it on. Idempotent by
@@ -301,232 +648,27 @@ export interface DbShape {
     toUnknown: number;
     toSleeping: number;
   };
-  /**
-   * The returning daemon's word on its machine: `liveIds` are the sessions it
-   * still carries, `resumable` the SDK sessions it could pick back up. A daemon
-   * that could not read its catalog names none, and every row it left behind
-   * keeps the benefit of the doubt.
-   */
-  /**
-   * Returns what it settled, so the caller can drop their parked questions —
-   * and, for the ones whose conversation survived and are recent enough to be
-   * worth reviving, put them back (the horizon and cap live in `server.ts`;
-   * this writes every orphan to its resting state and lets the caller choose
-   * which of them to restart). The rows come back as they were *before* the
-   * settle, so `updatedAt` on them still says when the session last moved
-   * rather than when this bookkeeping ran.
-   */
-  readonly settleInstances: (
-    machineId: string,
-    liveIds: string[],
-    resumable?: string[]
-  ) => SettledInstance[];
-  /** The fleet's tool policy (NEW.md §10) — only the tools somebody has ruled on. */
-  readonly listToolPolicies: () => ToolPolicy[];
-  /** Upsert; a patch names only what it changes and the rest stays as it was. */
-  readonly putToolPolicy: (
-    id: string,
-    patch: { required?: boolean; pinnedVersion?: string | null }
-  ) => ToolPolicy;
-  /** A machine's last-known tool status by id; empty for one that never reported. */
-  readonly agentTools: (machineId: string) => Record<string, ToolStatus>;
-  /** A whole report: every id it names is replaced, every other cell survives. */
-  readonly mergeAgentTools: (machineId: string, statuses: ToolStatus[]) => void;
-  readonly setAgentToolCell: (machineId: string, status: ToolStatus) => void;
-  /** The whole desired fleet state (NEW.md §11) — what a machine is sent to converge on. */
-  /**
-   * The fleet's desired state. Given a machine, the content-carrying rows it
-   * already reported holding are sent WITHOUT their files: the config goes to
-   * every machine on every fleet change, and those bytes are megabytes the
-   * machine would compare to what it has and then not write.
-   */
-  readonly fleetConfig: (machineId?: string) => FleetConfig;
-  readonly putMcpServer: (server: {
-    name: string;
-    config: FleetMcpServer['config'];
-    enabled?: boolean;
-  }) => FleetMcpServer;
-  readonly deleteMcpServer: (name: string) => void;
-  readonly putMarketplace: (marketplace: FleetMarketplace) => FleetMarketplace;
-  readonly deleteMarketplace: (name: string) => void;
-  readonly putPlugin: (plugin: { id: string; enabled?: boolean }) => FleetPlugin;
-  readonly deletePlugin: (id: string) => void;
-  /**
-   * What one plugin's resolve came to: the files the hub fetched, or the
-   * sentence it failed with. The mirror of {@link putSkill}, and the write that
-   * turns a plugin from a name every machine must fetch for itself into bytes
-   * the fleet carries.
-   */
-  readonly putPluginPayload: (payload: {
-    id: string;
-    hash?: string;
-    bytes?: number;
-    error?: string;
-    files?: SkillFile[];
-  }) => void;
-  /** Enabled plugins with no resolved files and no recorded failure — what a resolve is for. */
-  readonly unresolvedPlugins: () => string[];
-  /**
-   * Every plugin row without its files, `error` and all. What the DASHBOARD
-   * reads: {@link fleetConfig} answers the machines and deliberately carries
-   * neither the bookkeeping nor the failure, so a plugin the hub could not
-   * fetch was until now a row nothing on the page could tell apart from one
-   * that resolved.
-   */
-  readonly listPlugins: () => FleetPlugin[];
-  /** Every skill row without its files — a catalog read should not weigh megabytes. */
-  readonly listSkills: () => FleetSkillMeta[];
-  /** Upsert of a resolve's outcome: the files it read, or the sentence it failed with. */
-  readonly putSkill: (skill: {
-    name: string;
-    source: string;
-    enabled?: boolean;
-    hash?: string;
-    bytes?: number;
-    error?: string;
-    files?: SkillFile[];
-  }) => FleetSkillMeta;
-  readonly deleteSkill: (name: string) => void;
-  /**
-   * Every subagent the fleet keeps, file and all: a definition is a page of
-   * markdown, so the listing is what the editor is seeded from.
-   */
-  readonly listFleetAgents: () => FleetAgent[];
-  /** Upsert of one definition's file; the hash and the size are read off it. */
-  readonly putFleetAgent: (agent: { name: string; content: string }) => FleetAgent;
-  readonly deleteFleetAgent: (name: string) => void;
-  /** Every hook the fleet keeps, by name — what the editor lists and seeds from. */
-  readonly listFleetHooks: () => FleetHook[];
-  readonly getFleetHook: (id: string) => FleetHook | undefined;
-  /**
-   * Upsert by id. The caller mints the id, like a rule's; the hash is not
-   * taken from the caller but recomputed here, over the material a machine
-   * actually compares before writing — so a hash can never be sent stale.
-   */
-  readonly putFleetHook: (hook: Omit<FleetHook, 'hash'>) => FleetHook;
-  readonly deleteFleetHook: (id: string) => void;
-  /**
-   * Keeps a version that is about to be replaced or destroyed — a save, an
-   * edit, or a delete, the same three moments a memory document is kept at.
-   */
-  readonly recordFleetHook: (version: {
-    hookId: string;
-    name: string;
-    enabled: boolean;
-    event: HookEvent;
-    matcher?: string;
-    handler: HookHandler;
-    script?: string;
-    hash: string;
-    scope?: FleetScope;
-    projectId?: string;
-    source: string;
-  }) => void;
-  /**
-   * Newest first, without the material: one hook's history, or — with no id —
-   * every hook's, for a fleet-wide undo panel.
-   */
-  readonly listFleetHookHistory: (hookId?: string) => HookVersion[];
-  readonly fleetHookVersion: (id: number) => (HookVersion & HookVersionMaterial) | undefined;
-  /** The fleet's user-scope CLAUDE.md, or undefined while the fleet keeps none. */
-  readonly getFleetMemory: () => { content: string; hash: string; updatedAt: Date } | undefined;
-  /** Stores the document and the hash the machines compare against. */
-  readonly setFleetMemory: (content: string) => { content: string; hash: string; updatedAt: Date };
-  readonly clearFleetMemory: () => void;
-  /** Every document the main memory links, by path — the set, in one read. */
-  readonly listFleetMemoryDocs: () => MemoryDocRow[];
-  readonly getFleetMemoryDoc: (path: string) => MemoryDocRow | undefined;
-  /** Upsert of one document; the hash is read off the content, as everywhere. */
-  readonly putFleetMemoryDoc: (doc: { path: string; content: string }) => MemoryDocRow;
-  readonly deleteFleetMemoryDoc: (path: string) => void;
-  /**
-   * Keeps a version that is about to be replaced or destroyed. `source` is
-   * `fleet` for the hub's own row and `machine:<machineId>` for a copy an
-   * overwrite is taking off a machine; `path` names the document of the set it
-   * belonged to, and its absence is the main CLAUDE.md.
-   */
-  readonly recordFleetMemory: (version: {
-    content: string;
-    hash: string;
-    source: string;
-    path?: string;
-  }) => void;
-  /**
-   * Newest first, without the content: a list should not weigh what it lists.
-   * One document's history, or the main file's when no path is named — the two
-   * are never mixed, because the panel asks about one document at a time.
-   */
-  readonly listFleetMemoryHistory: (path?: string) => MemoryVersion[];
-  readonly fleetMemoryVersion: (id: number) => (MemoryVersion & { content: string }) | undefined;
-  /** A machine's own account of what it came to, from the sync it just answered. */
-  readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
-  /**
-   * Every machine, in the shape everything downstream reads them: the `fleet`
-   * column is null until a machine has synced once, and `AgentRow` says absent.
-   */
-  readonly listAgents: () => AgentRow[];
-  readonly listInstances: () => (typeof instances.$inferSelect)[];
-  /**
-   * The named rows, however old they are — the listing's staleness cut-off does
-   * not apply here. A conversation the reader still has a tab open on is a row
-   * they are entitled to an answer about, and the answer (what it is called) was
-   * written down long before it aged out of the board. Discarded rows stay gone:
-   * those were thrown away on purpose. Raw, so a caller can tell a given title
-   * from a derived one.
-   */
-  readonly getInstancesByIds: (ids: string[]) => (typeof instances.$inferSelect)[];
+  readonly touchAgent: (machineId: string) => void;
   /**
    * The machine's sessions that nothing has ever put a name to, however old
    * they are — a stored conversation the hub could name off the machine's own
    * catalog, and the only rows worth spending a catalog read on. Empty is the
    * steady state, which is what makes that read free to offer.
    */
-  readonly unnamedSessions: (machineId: string) => (typeof instances.$inferSelect)[];
-  readonly listProjects: () => (typeof projects.$inferSelect)[];
-  readonly createProject: (project: {
-    id: string;
+  readonly unnamedSessions: (
+    machineId: string
+  ) => (typeof instances.$inferSelect)[];
+  /** Enabled plugins with no resolved files and no recorded failure — what a resolve is for. */
+  readonly unresolvedPlugins: () => string[];
+  readonly upsertAgent: (agent: {
     machineId: string;
-    name: string;
-    cwd: string;
-  }) => typeof projects.$inferSelect | undefined;
-  readonly deleteProject: (id: string) => void;
-  readonly getCredential: (id: string) => Record<string, unknown> | undefined;
-  readonly putCredential: (id: string, blob: Record<string, unknown>) => void;
-  /** Files one exchange between a delegate and its parent, and hands back the row. */
-  readonly recordDelegateEvent: (event: {
-    instanceId: string;
-    parentInstanceId: string;
-    kind: DelegateEventKind;
-    requestId?: string;
-    toolName?: string;
-    requestKind?: 'question' | 'tool';
-    payload: DelegateEventPayload;
-    status?: DelegateAskStatus;
-  }) => DelegateEvent;
-  /** The ask a `requestId` opened, so its answer is filed under the same parent. */
-  readonly delegateAsk: (requestId: string) => DelegateEvent | undefined;
-  /** Closes it. An ask this hub never recorded is nothing to close. */
-  readonly settleDelegateAsk: (requestId: string, status: DelegateAskStatus) => void;
-  /** Oldest first: what one delegate did, or what every delegate of one parent did. */
-  readonly listDelegateEvents: (filter: { parent?: string; instance?: string }) => DelegateEvent[];
-  /**
-   * Stores a machine's usage buckets (USAGE-SPEC.md §6.2). Idempotent: the
-   * bucket's id is its (machine, harness, session, model, hour) key, and an
-   * upsert sets absolute totals — a re-report of the same bucket overwrites,
-   * never accumulates.
-   */
-  readonly putUsageBuckets: (machineId: string, buckets: UsageBucket[]) => void;
-  /** Stores the machine's latest limit reading; one row per machine. */
-  readonly putUsageLimits: (machineId: string, limits: ClaudeLimits) => void;
-  /** The buckets in the window, oldest first — the rows the blocks route folds. */
-  readonly listUsageBuckets: (q: {
-    since?: number;
-    until?: number;
-    harness?: string;
-    machineId?: string;
-  }) => UsageBucketRow[];
-  /** Every machine's latest limit reading. */
-  readonly listUsageLimits: () => UsageLimitRow[];
+    hostname: string;
+    os: string;
+    auth: AgentAuth;
+    /** Absent from a register with nothing new to say about it; the row keeps what it had. */
+    build?: BuildInfo;
+    harnesses?: HarnessReport[];
+  }) => void;
   /** Aggregates buckets in SQL (SUM/GROUP BY) and names the unpriced models. */
   readonly usageSummary: (q: {
     since?: number;
@@ -535,76 +677,9 @@ export interface DbShape {
     machineId?: string;
     groupBy: UsageGroupBy;
   }) => UsageSummary;
-
-  /** Sets (or clears) the autopilot configuration on a session. */
-  readonly setInstanceAutopilot: (
-    instanceId: string,
-    value: { enabled: boolean; prompt: string; updatedAt: number } | null
-  ) => void;
-  /** Files one supervisor evaluation result and prunes to newest 5,000 rows (plan: our choice). */
-  readonly recordSupervisorEvent: (event: {
-    instanceId: string;
-    source: 'rule' | 'autopilot';
-    ruleId?: string;
-    verdict: 'silent' | 'reply' | 'escalate' | 'ask' | 'error' | 'skipped';
-    message?: string;
-    note?: string;
-    model?: string;
-    latencyMs?: number;
-  }) => SupervisorEvent;
-  /** Newest first; optionally filtered to one session; default limit 100. */
-  readonly listSupervisorEvents: (filter: { instanceId?: string; limit?: number }) => SupervisorEvent[];
-  /** The supervisor's own configuration, or undefined while none is stored. */
-  readonly getSupervisorConfig: () => {
-    enabled: boolean;
-    baseUrl: string | null;
-    model: string | null;
-    apiKey: string | null;
-    updatedAt: Date;
-  } | undefined;
-  /** Upserts the supervisor's configuration (single-row table). */
-  readonly putSupervisorConfig: (config: {
-    enabled?: boolean;
-    baseUrl?: string | null;
-    model?: string | null;
-    apiKey?: string | null;
-  }) => void;
-  /** Every rule, newest first — what the engine reloads and the editor lists. */
-  readonly listRules: () => Rule[];
-  /** One rule, or nothing when it has been deleted out from under a caller. */
-  readonly getRule: (id: string) => Rule | undefined;
-  /** Upsert by id. The caller mints the id; this never invents one. */
-  readonly putRule: (rule: Rule) => Rule;
-  /** Removes the rule and every session's standing with it. */
-  readonly deleteRule: (id: string) => void;
-  /** Per-rule totals for the list, aggregated in SQL rather than per row. */
-  readonly ruleStats: () => RuleStats[];
-  /**
-   * Records a fire and returns the session's new standing. `pending` is set
-   * whenever the rule wants an acknowledgement; `fireCount` is what makes the
-   * reminder escalate, and only an acknowledgement resets it.
-   */
-  readonly noteRuleFire: (ruleId: string, instanceId: string, requireAck: boolean) => RuleState;
-  /** Where a rule stands with a session; absent means it has never fired there. */
-  readonly ruleStateFor: (ruleId: string, instanceId: string) => RuleState | undefined;
-  /** Every rule one session still owes an answer for — what the ack tool lists. */
-  readonly pendingRuleStates: (instanceId: string) => RuleState[];
-  /**
-   * Re-arms the rule for that session and files what it said it did. Returns
-   * nothing when the session had nothing pending, so the tool can say so.
-   */
-  readonly ackRule: (ruleId: string, instanceId: string, note: string) => RuleState | undefined;
-  /**
-   * Every session's standing with one rule, most recently active first.
-   *
-   * This is the only place the mechanism is visible to anybody. The session is
-   * told nothing, so the reader has to be told everything: which sessions
-   * tripped it, how often, and what each said it did about it.
-   */
-  readonly ruleStatesFor: (ruleId: string) => RuleState[];
 }
 
-export class Db extends Context.Service<Db, DbShape>()('Db') {}
+export class Db extends Context.Service<Db, DbShape>()("Db") {}
 
 /** A stored rule row back into the shape the fleet and the dashboard share. */
 const ruleOf = (row: typeof rules.$inferSelect): Rule => ({
@@ -640,7 +715,9 @@ const ruleStateOf = (row: typeof ruleState.$inferSelect): RuleState => ({
 });
 
 /** A skill row as everything outside the hub reads it: the row, minus its files. */
-const skillMeta = (row: Omit<typeof skills.$inferSelect, 'files' | 'createdAt'>): FleetSkillMeta => ({
+const skillMeta = (
+  row: Omit<typeof skills.$inferSelect, "files" | "createdAt">
+): FleetSkillMeta => ({
   name: row.name,
   source: row.source,
   enabled: row.enabled,
@@ -716,20 +793,20 @@ export const usageBucketFromRow = (row: UsageBucketRow): UsageBucket => ({
 });
 
 /** The one row the fleet's memory ever takes: there is one document, not a list. */
-const MEMORY_ID = 'memory';
+const MEMORY_ID = "memory";
 
 /** The one row the supervisor config ever takes — same precedent as `MEMORY_ID`. */
-const SUPERVISOR_CONFIG_ID = 'supervisor';
+const SUPERVISOR_CONFIG_ID = "supervisor";
 
 /** How many supervisor event rows to keep — bounded without a scheduler (plan: our choice). */
-const SUPERVISOR_EVENTS_RETENTION = 5_000;
+const SUPERVISOR_EVENTS_RETENTION = 5000;
 
 /** How far back the memory can be taken. Deep enough to undo a bad day, not a log. */
 const HISTORY_LIMIT = 20;
 
 /** What a machine compares its own copy against — sha256 of the text's own bytes. */
 const hashText = (content: string): string =>
-  new Bun.CryptoHasher('sha256').update(content).digest('hex');
+  new Bun.CryptoHasher("sha256").update(content).digest("hex");
 
 /**
  * What a hook's own hash covers: everything a machine actually writes — not
@@ -742,7 +819,14 @@ const hashHookMaterial = (hook: {
   handler: HookHandler;
   script?: string;
 }): string =>
-  hashText(JSON.stringify([hook.event, hook.matcher ?? null, hook.handler, hook.script ?? null]));
+  hashText(
+    JSON.stringify([
+      hook.event,
+      hook.matcher ?? null,
+      hook.handler,
+      hook.script ?? null,
+    ])
+  );
 
 /**
  * Opens (and migrates) a database at `path`.
@@ -761,16 +845,31 @@ const make = (path: string): DbShape => {
   migrate(db, { migrationsFolder: MIGRATIONS_DIR });
 
   const agentTools = (machineId: string): Record<string, ToolStatus> =>
-    db.select({ tools: agents.tools }).from(agents).where(eq(agents.machineId, machineId)).get()
-      ?.tools ?? {};
+    db
+      .select({ tools: agents.tools })
+      .from(agents)
+      .where(eq(agents.machineId, machineId))
+      .get()?.tools ?? {};
 
-  const writeAgentTools = (machineId: string, cells: Record<string, ToolStatus>): void => {
-    db.update(agents).set({ tools: cells }).where(eq(agents.machineId, machineId)).run();
+  const writeAgentTools = (
+    machineId: string,
+    cells: Record<string, ToolStatus>
+  ): void => {
+    db.update(agents)
+      .set({ tools: cells })
+      .where(eq(agents.machineId, machineId))
+      .run();
   };
 
   const getFleetMemory = () => {
-    const row = db.select().from(fleetMemory).where(eq(fleetMemory.id, MEMORY_ID)).get();
-    return row ? { content: row.content, hash: row.hash, updatedAt: row.updatedAt } : undefined;
+    const row = db
+      .select()
+      .from(fleetMemory)
+      .where(eq(fleetMemory.id, MEMORY_ID))
+      .get();
+    return row
+      ? { content: row.content, hash: row.hash, updatedAt: row.updatedAt }
+      : undefined;
   };
 
   const listFleetMemoryDocs = (): MemoryDocRow[] =>
@@ -779,29 +878,52 @@ const make = (path: string): DbShape => {
       .from(fleetMemoryDocs)
       .orderBy(fleetMemoryDocs.path)
       .all()
-      .map(({ path, content, hash, updatedAt }) => ({ path, content, hash, updatedAt }));
+      .map(({ path, content, hash, updatedAt }) => ({
+        path,
+        content,
+        hash,
+        updatedAt,
+      }));
 
   /** The window a usage query names, or nothing — the filters fold into one AND. */
-  const usageWhere = (q: { since?: number; until?: number; harness?: string; machineId?: string }) =>
+  const usageWhere = (q: {
+    since?: number;
+    until?: number;
+    harness?: string;
+    machineId?: string;
+  }) =>
     and(
-      q.since !== undefined ? gte(usageBuckets.hourStart, q.since) : undefined,
-      q.until !== undefined ? lte(usageBuckets.hourStart, q.until) : undefined,
-      q.harness !== undefined ? eq(usageBuckets.harness, q.harness as 'claude' | 'opencode') : undefined,
-      q.machineId !== undefined ? eq(usageBuckets.machineId, q.machineId) : undefined
+      q.since === undefined ? undefined : gte(usageBuckets.hourStart, q.since),
+      q.until === undefined ? undefined : lte(usageBuckets.hourStart, q.until),
+      q.harness === undefined
+        ? undefined
+        : eq(usageBuckets.harness, q.harness as "claude" | "opencode"),
+      q.machineId === undefined
+        ? undefined
+        : eq(usageBuckets.machineId, q.machineId)
     );
 
   return {
     upsertAgent: ({ machineId, hostname, os, auth, build, harnesses }) => {
       const lastSeenAt = new Date();
       db.insert(agents)
-        .values({ machineId, hostname, os, auth, status: 'online', lastSeenAt, build, harnesses })
+        .values({
+          machineId,
+          hostname,
+          os,
+          auth,
+          status: "online",
+          lastSeenAt,
+          build,
+          harnesses,
+        })
         .onConflictDoUpdate({
           target: agents.machineId,
           set: {
             hostname,
             os,
             auth,
-            status: 'online',
+            status: "online",
             lastSeenAt,
             ...(build ? { build } : {}),
             ...(harnesses ? { harnesses } : {}),
@@ -811,22 +933,37 @@ const make = (path: string): DbShape => {
     },
     touchAgent: (machineId) => {
       db.update(agents)
-        .set({ status: 'online', lastSeenAt: new Date() })
+        .set({ status: "online", lastSeenAt: new Date() })
         .where(eq(agents.machineId, machineId))
         .run();
     },
     markAgentOffline: (machineId) => {
       db.update(agents)
-        .set({ status: 'offline', lastSeenAt: new Date() })
+        .set({ status: "offline", lastSeenAt: new Date() })
         .where(eq(agents.machineId, machineId))
         .run();
     },
     // No `lastSeenAt` here, unlike its single-machine sibling above: that write
     // means "I just heard from it", and starting up is not hearing from anyone.
     markAllAgentsOffline: () => {
-      db.update(agents).set({ status: 'offline' }).run();
+      db.update(agents).set({ status: "offline" }).run();
     },
-    openInstance: ({ id, machineId, cwd, sessionId, harness, projectId, parentInstanceId, parentToolUseId, title, kind, permissionMode, model, effort, canDelegate }) => {
+    openInstance: ({
+      id,
+      machineId,
+      cwd,
+      sessionId,
+      harness,
+      projectId,
+      parentInstanceId,
+      parentToolUseId,
+      title,
+      kind,
+      permissionMode,
+      model,
+      effort,
+      canDelegate,
+    }) => {
       const now = new Date();
 
       // One conversation, one live row.
@@ -842,11 +979,13 @@ const make = (path: string): DbShape => {
             and(
               eq(instances.sessionId, sessionId),
               ne(instances.id, id),
-              inArray(instances.status, ['running', 'starting'])
+              inArray(instances.status, ["running", "starting"])
             )
           )
           .get();
-        if (live) return;
+        if (live) {
+          return;
+        }
       }
       db.insert(instances)
         .values({
@@ -872,7 +1011,7 @@ const make = (path: string): DbShape => {
           // nothing had confirmed and nothing would ever re-check. Promotion to
           // `running` comes from the daemon's own word — its heartbeat listing
           // the id, or the session's `init` frame — and from nowhere else.
-          status: 'starting',
+          status: "starting",
           createdAt: now,
           updatedAt: now,
         })
@@ -885,10 +1024,10 @@ const make = (path: string): DbShape => {
             ...(model ? { model } : {}),
             ...(effort ? { effort } : {}),
             // Presence, not truth: a leaf's `false` has to land.
-            ...(canDelegate !== undefined ? { canDelegate } : {}),
+            ...(canDelegate === undefined ? {} : { canDelegate }),
             // Same reasoning as the insert above: a relaunch or a restore is a
             // spawn going out, not a process coming up.
-            status: 'starting',
+            status: "starting",
             lastError: null,
             updatedAt: now,
             ...(sessionId ? { sessionId } : {}),
@@ -902,20 +1041,28 @@ const make = (path: string): DbShape => {
         .run();
     },
     noteDerivedTitle: (id, derivedTitle) => {
-      if (!derivedTitle) return false;
+      if (!derivedTitle) {
+        return false;
+      }
       // `updatedAt` deliberately untouched: naming a row is not the session
       // moving, and the listings age rows out on that column.
       const written = db
         .update(instances)
         .set({ derivedTitle })
-        .where(and(eq(instances.id, id), isNull(instances.title), isNull(instances.derivedTitle)))
+        .where(
+          and(
+            eq(instances.id, id),
+            isNull(instances.title),
+            isNull(instances.derivedTitle)
+          )
+        )
         .returning({ id: instances.id })
         .all();
       return written.length > 0;
     },
     stopInstance: (id) => {
       db.update(instances)
-        .set({ status: 'stopped', updatedAt: new Date() })
+        .set({ status: "stopped", updatedAt: new Date() })
         .where(eq(instances.id, id))
         .run();
     },
@@ -923,13 +1070,13 @@ const make = (path: string): DbShape => {
       // A side quest that was thrown away stays thrown away: its teardown can
       // fail long after the session did, and it is not coming back as a row.
       db.update(instances)
-        .set({ status: 'error', lastError: error, updatedAt: new Date() })
-        .where(and(eq(instances.id, id), ne(instances.status, 'discarded')))
+        .set({ status: "error", lastError: error, updatedAt: new Date() })
+        .where(and(eq(instances.id, id), ne(instances.status, "discarded")))
         .run();
     },
     discardInstance: (id) => {
       db.update(instances)
-        .set({ status: 'discarded', updatedAt: new Date() })
+        .set({ status: "discarded", updatedAt: new Date() })
         .where(eq(instances.id, id))
         .run();
     },
@@ -954,11 +1101,11 @@ const make = (path: string): DbShape => {
     // The daemon went away: its sessions may or may not still be alive out there.
     reconcileInstances: (machineId, liveIds) => {
       db.update(instances)
-        .set({ status: 'unknown', updatedAt: new Date() })
+        .set({ status: "unknown", updatedAt: new Date() })
         .where(
           and(
             eq(instances.machineId, machineId),
-            inArray(instances.status, ['running', 'starting']),
+            inArray(instances.status, ["running", "starting"]),
             liveIds.length > 0 ? notInArray(instances.id, liveIds) : undefined
           )
         )
@@ -979,7 +1126,7 @@ const make = (path: string): DbShape => {
         .where(
           and(
             eq(instances.machineId, machineId),
-            eq(instances.status, 'sleeping'),
+            eq(instances.status, "sleeping")
           )
         )
         .run();
@@ -993,7 +1140,7 @@ const make = (path: string): DbShape => {
       // "not running" permanently, where the rail files it under history.
       if (liveIds.length > 0) {
         db.update(instances)
-          .set({ status: 'running', lastError: null, updatedAt: new Date() })
+          .set({ status: "running", lastError: null, updatedAt: new Date() })
           .where(
             and(
               eq(instances.machineId, machineId),
@@ -1003,7 +1150,12 @@ const make = (path: string): DbShape => {
               // `stopped`/`discarded`: those are decisions, and a daemon still
               // holding a process the operator asked to end is a bug to fix on
               // the daemon, not a status to overwrite here.
-              inArray(instances.status, ['starting', 'unknown', 'sleeping', 'error']),
+              inArray(instances.status, [
+                "starting",
+                "unknown",
+                "sleeping",
+                "error",
+              ]),
               inArray(instances.id, liveIds)
             )
           )
@@ -1016,7 +1168,7 @@ const make = (path: string): DbShape => {
         .where(
           and(
             eq(instances.machineId, machineId),
-            inArray(instances.status, ['running', 'starting', 'unknown']),
+            inArray(instances.status, ["running", "starting", "unknown"]),
             liveIds.length > 0 ? notInArray(instances.id, liveIds) : undefined
           )
         )
@@ -1025,7 +1177,8 @@ const make = (path: string): DbShape => {
       const catalog = resumable && new Set(resumable);
       const updatedAt = new Date();
       for (const row of orphans) {
-        const resumes = !catalog || (row.sessionId !== null && catalog.has(row.sessionId));
+        const resumes =
+          !catalog || (row.sessionId !== null && catalog.has(row.sessionId));
         // A session that lost its process but kept its conversation is not
         // broken — it is asleep. It used to land in `error` carrying a marker
         // string that said so in prose, which made every rail draw a red row
@@ -1035,15 +1188,16 @@ const make = (path: string): DbShape => {
         db.update(instances)
           .set(
             resumes
-              ? { status: 'sleeping', lastError: null, updatedAt }
-              : { status: 'error', lastError: RESTART_LOST, updatedAt }
+              ? { status: "sleeping", lastError: null, updatedAt }
+              : { status: "error", lastError: RESTART_LOST, updatedAt }
           )
           .where(eq(instances.id, row.id))
           .run();
       }
       return orphans.map((row) => ({
         row,
-        resumes: !catalog || (row.sessionId !== null && catalog.has(row.sessionId)),
+        resumes:
+          !catalog || (row.sessionId !== null && catalog.has(row.sessionId)),
       }));
     },
     // Every 15 seconds, the machine says what it is actually carrying. This is
@@ -1055,7 +1209,7 @@ const make = (path: string): DbShape => {
           ? []
           : db
               .update(instances)
-              .set({ status: 'running', lastError: null, updatedAt: now })
+              .set({ status: "running", lastError: null, updatedAt: now })
               .where(
                 and(
                   eq(instances.machineId, machineId),
@@ -1065,7 +1219,12 @@ const make = (path: string): DbShape => {
                   // would touch `updatedAt` on every session every 15s, which
                   // would erase the one column that says when a session last
                   // did something.
-                  inArray(instances.status, ['starting', 'unknown', 'sleeping', 'error'])
+                  inArray(instances.status, [
+                    "starting",
+                    "unknown",
+                    "sleeping",
+                    "error",
+                  ])
                 )
               )
               .returning({ id: instances.id })
@@ -1081,7 +1240,7 @@ const make = (path: string): DbShape => {
         .where(
           and(
             eq(instances.machineId, machineId),
-            inArray(instances.status, ['running', 'starting']),
+            inArray(instances.status, ["running", "starting"]),
             liveIds.length > 0 ? notInArray(instances.id, liveIds) : undefined
           )
         )
@@ -1090,14 +1249,18 @@ const make = (path: string): DbShape => {
         // the beat that was already in flight left it. Only `starting` gets that
         // benefit of the doubt — a row that was confirmed `running` and is now
         // absent is news, immediately.
-        .filter((row) => row.status === 'running' || now.getTime() - row.updatedAt.getTime() >= graceMs);
+        .filter(
+          (row) =>
+            row.status === "running" ||
+            now.getTime() - row.updatedAt.getTime() >= graceMs
+        );
 
       for (const row of gone) {
         db.update(instances)
           .set(
             row.sessionId
-              ? { status: 'sleeping', lastError: null, updatedAt: now }
-              : { status: 'error', lastError: RESTART_LOST, updatedAt: now }
+              ? { status: "sleeping", lastError: null, updatedAt: now }
+              : { status: "error", lastError: RESTART_LOST, updatedAt: now }
           )
           .where(eq(instances.id, row.id))
           .run();
@@ -1107,11 +1270,16 @@ const make = (path: string): DbShape => {
     markInstanceLive: (id) =>
       db
         .update(instances)
-        .set({ status: 'running', lastError: null, updatedAt: new Date() })
+        .set({ status: "running", lastError: null, updatedAt: new Date() })
         .where(
           and(
             eq(instances.id, id),
-            inArray(instances.status, ['starting', 'unknown', 'sleeping', 'error'])
+            inArray(instances.status, [
+              "starting",
+              "unknown",
+              "sleeping",
+              "error",
+            ])
           )
         )
         .returning({ id: instances.id })
@@ -1124,14 +1292,19 @@ const make = (path: string): DbShape => {
     sweepBootStatuses: (legacyResumableError) => {
       const toUnknown = db
         .update(instances)
-        .set({ status: 'unknown' })
-        .where(inArray(instances.status, ['running', 'starting']))
+        .set({ status: "unknown" })
+        .where(inArray(instances.status, ["running", "starting"]))
         .returning({ id: instances.id })
         .all().length;
       const toSleeping = db
         .update(instances)
-        .set({ status: 'sleeping', lastError: null })
-        .where(and(eq(instances.status, 'error'), eq(instances.lastError, legacyResumableError)))
+        .set({ status: "sleeping", lastError: null })
+        .where(
+          and(
+            eq(instances.status, "error"),
+            eq(instances.lastError, legacyResumableError)
+          )
+        )
         .returning({ id: instances.id })
         .all().length;
       return { toUnknown, toSleeping };
@@ -1141,19 +1314,29 @@ const make = (path: string): DbShape => {
         .select()
         .from(tools)
         .all()
-        .map(({ id, required, pinnedVersion }) => ({ id, required, pinnedVersion })),
+        .map(({ id, required, pinnedVersion }) => ({
+          id,
+          required,
+          pinnedVersion,
+        })),
     putToolPolicy: (id, { required, pinnedVersion }) => {
       const stored = db.select().from(tools).where(eq(tools.id, id)).get();
       const policy: ToolPolicy = {
         id,
         required: required ?? stored?.required ?? false,
-        pinnedVersion: pinnedVersion === undefined ? (stored?.pinnedVersion ?? null) : pinnedVersion,
+        pinnedVersion:
+          pinnedVersion === undefined
+            ? (stored?.pinnedVersion ?? null)
+            : pinnedVersion,
       };
       db.insert(tools)
         .values(policy)
         .onConflictDoUpdate({
           target: tools.id,
-          set: { required: policy.required, pinnedVersion: policy.pinnedVersion },
+          set: {
+            required: policy.required,
+            pinnedVersion: policy.pinnedVersion,
+          },
         })
         .run();
       return policy;
@@ -1162,14 +1345,19 @@ const make = (path: string): DbShape => {
     // A report with nothing in it says nothing: a daemon that predates the tool
     // catalog must not read as a machine that has just lost every tool on it.
     mergeAgentTools: (machineId, statuses) => {
-      if (statuses.length === 0) return;
+      if (statuses.length === 0) {
+        return;
+      }
       writeAgentTools(machineId, {
         ...agentTools(machineId),
         ...Object.fromEntries(statuses.map((status) => [status.id, status])),
       });
     },
     setAgentToolCell: (machineId, status) => {
-      writeAgentTools(machineId, { ...agentTools(machineId), [status.id]: status });
+      writeAgentTools(machineId, {
+        ...agentTools(machineId),
+        [status.id]: status,
+      });
     },
     fleetConfig: (machineId?: string) => {
       // What that machine's last sync said it holds. Absent for an older daemon
@@ -1182,85 +1370,112 @@ const make = (path: string): DbShape => {
             .where(eq(agents.machineId, machineId))
             .get()?.fleet?.have
         : undefined;
-      const held = (kind: 'skills' | 'plugins', name: string, hash: string): boolean =>
-        have?.[kind]?.[name] === hash;
+      const held = (
+        kind: "skills" | "plugins",
+        name: string,
+        hash: string
+      ): boolean => have?.[kind]?.[name] === hash;
       return {
-      mcp: db
-        .select()
-        .from(mcpServers)
-        .all()
-        .map(({ name, config, enabled }) => ({ name, config, enabled })),
-      marketplaces: db
-        .select()
-        .from(marketplaces)
-        .all()
-        .map(({ name, source }) => ({ name, source })),
-      plugins: db
-        .select()
-        .from(plugins)
-        .all()
-        .map(({ id, enabled }) => ({ id, enabled })),
-      // Only the rows that resolved: a skill with no files is nothing a machine
-      // could converge on, and one whose row says nothing is not sent at all.
-      skills: db
-        .select({ name: skills.name, hash: skills.hash, files: skills.files })
-        .from(skills)
-        .where(eq(skills.enabled, true))
-        .all()
-        .flatMap(({ name, hash, files }) =>
-          hash && files ? [{ name, hash, ...(held('skills', name, hash) ? {} : { files }) }] : []
-        ),
-      // Only the rows a resolve filled in. A plugin the hub could not fetch is
-      // simply absent here, and the daemon installs it the old way — which is
-      // the one path left that needs the machine to reach the source itself.
-      pluginPayloads: db
-        .select({
-          id: plugins.id,
-          hash: plugins.hash,
-          bytes: plugins.bytes,
-          files: plugins.files,
-        })
-        .from(plugins)
-        .where(eq(plugins.enabled, true))
-        .all()
-        .flatMap(({ id, hash, bytes, files }) => {
-          if (!hash || !files) return [];
-          const name = id.split('@')[0] ?? id;
-          return [
-            {
-              name,
-              marketplace: id.split('@')[1] ?? '',
+        mcp: db
+          .select()
+          .from(mcpServers)
+          .all()
+          .map(({ name, config, enabled }) => ({ name, config, enabled })),
+        marketplaces: db
+          .select()
+          .from(marketplaces)
+          .all()
+          .map(({ name, source }) => ({ name, source })),
+        plugins: db
+          .select()
+          .from(plugins)
+          .all()
+          .map(({ id, enabled }) => ({ id, enabled })),
+        // Only the rows that resolved: a skill with no files is nothing a machine
+        // could converge on, and one whose row says nothing is not sent at all.
+        skills: db
+          .select({ name: skills.name, hash: skills.hash, files: skills.files })
+          .from(skills)
+          .where(eq(skills.enabled, true))
+          .all()
+          .flatMap(({ name, hash, files }) =>
+            hash && files
+              ? [
+                  {
+                    name,
+                    hash,
+                    ...(held("skills", name, hash) ? {} : { files }),
+                  },
+                ]
+              : []
+          ),
+        // Only the rows a resolve filled in. A plugin the hub could not fetch is
+        // simply absent here, and the daemon installs it the old way — which is
+        // the one path left that needs the machine to reach the source itself.
+        pluginPayloads: db
+          .select({
+            id: plugins.id,
+            hash: plugins.hash,
+            bytes: plugins.bytes,
+            files: plugins.files,
+          })
+          .from(plugins)
+          .where(eq(plugins.enabled, true))
+          .all()
+          .flatMap(({ id, hash, bytes, files }) => {
+            if (!(hash && files)) {
+              return [];
+            }
+            const name = id.split("@")[0] ?? id;
+            return [
+              {
+                name,
+                marketplace: id.split("@")[1] ?? "",
+                hash,
+                bytes: bytes ?? 0,
+                ...(held("plugins", name, hash) ? {} : { files }),
+              },
+            ];
+          }),
+        // Null rather than absent: a fleet that keeps no memory is what has a
+        // machine give back the copy whiffle wrote it — the linked documents
+        // included, since a set with no main file is not a set.
+        memory: (() => {
+          const stored = getFleetMemory();
+          if (!stored) {
+            return null;
+          }
+          return {
+            hash: stored.hash,
+            content: stored.content,
+            docs: listFleetMemoryDocs().map(({ path, hash, content }) => ({
+              path,
               hash,
-              bytes: bytes ?? 0,
-              ...(held('plugins', name, hash) ? {} : { files }),
-            },
-          ];
-        }),
-      // Null rather than absent: a fleet that keeps no memory is what has a
-      // machine give back the copy whiffle wrote it — the linked documents
-      // included, since a set with no main file is not a set.
-      memory: (() => {
-        const stored = getFleetMemory();
-        if (!stored) return null;
-        return {
-          hash: stored.hash,
-          content: stored.content,
-          docs: listFleetMemoryDocs().map(({ path, hash, content }) => ({ path, hash, content })),
-        };
-      })(),
-      // Always an array, like `skills` above, never omitted: this hub is not
-      // one that predates hooks, so there is no version-skew reason to leave
-      // the field out the way an old daemon's absence is read. A disabled row
-      // is simply not one of them — the same rule a disabled MCP server or
-      // skill already follows.
-      hooks: db.select().from(fleetHooks).where(eq(fleetHooks.enabled, true)).all().map(hookOf),
+              content,
+            })),
+          };
+        })(),
+        // Always an array, like `skills` above, never omitted: this hub is not
+        // one that predates hooks, so there is no version-skew reason to leave
+        // the field out the way an old daemon's absence is read. A disabled row
+        // is simply not one of them — the same rule a disabled MCP server or
+        // skill already follows.
+        hooks: db
+          .select()
+          .from(fleetHooks)
+          .where(eq(fleetHooks.enabled, true))
+          .all()
+          .map(hookOf),
       };
     },
     putMcpServer: ({ name, config, enabled }) => {
       const server: FleetMcpServer = { name, config, enabled: enabled ?? true };
       db.insert(mcpServers)
         .values(server)
-        .onConflictDoUpdate({ target: mcpServers.name, set: { config, enabled: server.enabled } })
+        .onConflictDoUpdate({
+          target: mcpServers.name,
+          set: { config, enabled: server.enabled },
+        })
         .run();
       return server;
     },
@@ -1317,7 +1532,10 @@ const make = (path: string): DbShape => {
       const plugin: FleetPlugin = { id, enabled: enabled ?? true };
       db.insert(plugins)
         .values(plugin)
-        .onConflictDoUpdate({ target: plugins.id, set: { enabled: plugin.enabled } })
+        .onConflictDoUpdate({
+          target: plugins.id,
+          set: { enabled: plugin.enabled },
+        })
         .run();
       return plugin;
     },
@@ -1338,7 +1556,11 @@ const make = (path: string): DbShape => {
         .all()
         .map(skillMeta),
     putSkill: ({ name, source, enabled, hash, bytes, error, files }) => {
-      const stored = db.select().from(skills).where(eq(skills.name, name)).get();
+      const stored = db
+        .select()
+        .from(skills)
+        .where(eq(skills.name, name))
+        .get();
       // A resolve that failed on the source the row already carries keeps the
       // last copy that worked: the machines are serving it, and a repo that was
       // unreachable for a minute is no reason to take a working skill off them.
@@ -1372,7 +1594,12 @@ const make = (path: string): DbShape => {
       db.delete(skills).where(eq(skills.name, name)).run();
     },
     listFleetAgents: () =>
-      db.select().from(fleetAgents).orderBy(fleetAgents.name).all().map(agentFile),
+      db
+        .select()
+        .from(fleetAgents)
+        .orderBy(fleetAgents.name)
+        .all()
+        .map(agentFile),
     putFleetAgent: ({ name, content }) => {
       const row = {
         name,
@@ -1385,7 +1612,12 @@ const make = (path: string): DbShape => {
         .values(row)
         .onConflictDoUpdate({
           target: fleetAgents.name,
-          set: { content: row.content, hash: row.hash, bytes: row.bytes, updatedAt: row.updatedAt },
+          set: {
+            content: row.content,
+            hash: row.hash,
+            bytes: row.bytes,
+            updatedAt: row.updatedAt,
+          },
         })
         .run();
       return agentFile(row);
@@ -1393,9 +1625,14 @@ const make = (path: string): DbShape => {
     deleteFleetAgent: (name) => {
       db.delete(fleetAgents).where(eq(fleetAgents.name, name)).run();
     },
-    listFleetHooks: () => db.select().from(fleetHooks).orderBy(fleetHooks.name).all().map(hookOf),
+    listFleetHooks: () =>
+      db.select().from(fleetHooks).orderBy(fleetHooks.name).all().map(hookOf),
     getFleetHook: (id) => {
-      const row = db.select().from(fleetHooks).where(eq(fleetHooks.id, id)).get();
+      const row = db
+        .select()
+        .from(fleetHooks)
+        .where(eq(fleetHooks.id, id))
+        .get();
       return row ? hookOf(row) : undefined;
     },
     putFleetHook: (hook) => {
@@ -1466,14 +1703,21 @@ const make = (path: string): DbShape => {
         .all()
         .map((row) => row.id);
       db.delete(fleetHookHistory)
-        .where(and(eq(fleetHookHistory.hookId, version.hookId), notInArray(fleetHookHistory.id, keep)))
+        .where(
+          and(
+            eq(fleetHookHistory.hookId, version.hookId),
+            notInArray(fleetHookHistory.id, keep)
+          )
+        )
         .run();
     },
     listFleetHookHistory: (hookId) =>
       db
         .select()
         .from(fleetHookHistory)
-        .where(hookId === undefined ? undefined : eq(fleetHookHistory.hookId, hookId))
+        .where(
+          hookId === undefined ? undefined : eq(fleetHookHistory.hookId, hookId)
+        )
         .orderBy(desc(fleetHookHistory.id))
         .all()
         .map(({ id, hookId: of, name, hash, source, createdAt }) => ({
@@ -1485,8 +1729,14 @@ const make = (path: string): DbShape => {
           createdAt,
         })),
     fleetHookVersion: (id) => {
-      const row = db.select().from(fleetHookHistory).where(eq(fleetHookHistory.id, id)).get();
-      if (!row) return undefined;
+      const row = db
+        .select()
+        .from(fleetHookHistory)
+        .where(eq(fleetHookHistory.id, id))
+        .get();
+      if (!row) {
+        return;
+      }
       return {
         id: row.id,
         hookId: row.hookId,
@@ -1505,12 +1755,21 @@ const make = (path: string): DbShape => {
     },
     getFleetMemory,
     setFleetMemory: (content) => {
-      const row = { id: MEMORY_ID, content, hash: hashText(content), updatedAt: new Date() };
+      const row = {
+        id: MEMORY_ID,
+        content,
+        hash: hashText(content),
+        updatedAt: new Date(),
+      };
       db.insert(fleetMemory)
         .values(row)
         .onConflictDoUpdate({
           target: fleetMemory.id,
-          set: { content: row.content, hash: row.hash, updatedAt: row.updatedAt },
+          set: {
+            content: row.content,
+            hash: row.hash,
+            updatedAt: row.updatedAt,
+          },
         })
         .run();
       return { content: row.content, hash: row.hash, updatedAt: row.updatedAt };
@@ -1520,18 +1779,36 @@ const make = (path: string): DbShape => {
     },
     listFleetMemoryDocs,
     getFleetMemoryDoc: (path) => {
-      const row = db.select().from(fleetMemoryDocs).where(eq(fleetMemoryDocs.path, path)).get();
+      const row = db
+        .select()
+        .from(fleetMemoryDocs)
+        .where(eq(fleetMemoryDocs.path, path))
+        .get();
       return row
-        ? { path: row.path, content: row.content, hash: row.hash, updatedAt: row.updatedAt }
+        ? {
+            path: row.path,
+            content: row.content,
+            hash: row.hash,
+            updatedAt: row.updatedAt,
+          }
         : undefined;
     },
     putFleetMemoryDoc: ({ path, content }) => {
-      const row = { path, content, hash: hashText(content), updatedAt: new Date() };
+      const row = {
+        path,
+        content,
+        hash: hashText(content),
+        updatedAt: new Date(),
+      };
       db.insert(fleetMemoryDocs)
         .values(row)
         .onConflictDoUpdate({
           target: fleetMemoryDocs.path,
-          set: { content: row.content, hash: row.hash, updatedAt: row.updatedAt },
+          set: {
+            content: row.content,
+            hash: row.hash,
+            updatedAt: row.updatedAt,
+          },
         })
         .run();
       return row;
@@ -1540,10 +1817,15 @@ const make = (path: string): DbShape => {
       db.delete(fleetMemoryDocs).where(eq(fleetMemoryDocs.path, path)).run();
     },
     recordFleetMemory: ({ content, hash, source, path }) => {
-      db.insert(fleetMemoryHistory).values({ content, hash, source, path: path ?? null }).run();
+      db.insert(fleetMemoryHistory)
+        .values({ content, hash, source, path: path ?? null })
+        .run();
       // Pruned within the one document's own history: a set of ten would
       // otherwise have each save evict the main file's past nine times over.
-      const of = path === undefined ? isNull(fleetMemoryHistory.path) : eq(fleetMemoryHistory.path, path);
+      const of =
+        path === undefined
+          ? isNull(fleetMemoryHistory.path)
+          : eq(fleetMemoryHistory.path, path);
       const keep = db
         .select({ id: fleetMemoryHistory.id })
         .from(fleetMemoryHistory)
@@ -1552,13 +1834,19 @@ const make = (path: string): DbShape => {
         .limit(HISTORY_LIMIT)
         .all()
         .map((row) => row.id);
-      db.delete(fleetMemoryHistory).where(and(of, notInArray(fleetMemoryHistory.id, keep))).run();
+      db.delete(fleetMemoryHistory)
+        .where(and(of, notInArray(fleetMemoryHistory.id, keep)))
+        .run();
     },
     listFleetMemoryHistory: (path) =>
       db
         .select()
         .from(fleetMemoryHistory)
-        .where(path === undefined ? isNull(fleetMemoryHistory.path) : eq(fleetMemoryHistory.path, path))
+        .where(
+          path === undefined
+            ? isNull(fleetMemoryHistory.path)
+            : eq(fleetMemoryHistory.path, path)
+        )
         .orderBy(desc(fleetMemoryHistory.id))
         .all()
         .map(({ id, hash, source, content, createdAt, path: of }) => ({
@@ -1607,7 +1895,10 @@ const make = (path: string): DbShape => {
               return previous ? { have: previous } : {};
             })(),
           };
-      db.update(agents).set({ fleet: kept }).where(eq(agents.machineId, machineId)).run();
+      db.update(agents)
+        .set({ fleet: kept })
+        .where(eq(agents.machineId, machineId))
+        .run();
     },
     listAgents: () =>
       db
@@ -1628,9 +1919,9 @@ const make = (path: string): DbShape => {
         .from(instances)
         .where(
           and(
-            ne(instances.status, 'discarded'),
+            ne(instances.status, "discarded"),
             or(
-              eq(instances.status, 'running'),
+              eq(instances.status, "running"),
               gt(instances.updatedAt, new Date(Date.now() - STALE_AFTER_MS))
             )
           )
@@ -1645,11 +1936,15 @@ const make = (path: string): DbShape => {
           ...(row.autopilot ? { autopilot: row.autopilot } : {}),
         })),
     getInstancesByIds: (ids) => {
-      if (ids.length === 0) return [];
+      if (ids.length === 0) {
+        return [];
+      }
       return db
         .select()
         .from(instances)
-        .where(and(inArray(instances.id, ids), ne(instances.status, 'discarded')))
+        .where(
+          and(inArray(instances.id, ids), ne(instances.status, "discarded"))
+        )
         .all();
     },
     unnamedSessions: (machineId) =>
@@ -1659,7 +1954,7 @@ const make = (path: string): DbShape => {
         .where(
           and(
             eq(instances.machineId, machineId),
-            ne(instances.status, 'discarded'),
+            ne(instances.status, "discarded"),
             isNull(instances.title),
             isNull(instances.derivedTitle),
             isNotNull(instances.sessionId)
@@ -1668,13 +1963,21 @@ const make = (path: string): DbShape => {
         .all(),
     listProjects: () => db.select().from(projects).all(),
     createProject: ({ id, machineId, name, cwd }) =>
-      db.insert(projects).values({ id, machineId, name, cwd }).returning().get(),
+      db
+        .insert(projects)
+        .values({ id, machineId, name, cwd })
+        .returning()
+        .get(),
     deleteProject: (id) => {
       // The sessions started from it outlive it; they just stop being its.
-      db.update(instances).set({ projectId: null }).where(eq(instances.projectId, id)).run();
+      db.update(instances)
+        .set({ projectId: null })
+        .where(eq(instances.projectId, id))
+        .run();
       db.delete(projects).where(eq(projects.id, id)).run();
     },
-    getCredential: (id) => db.select().from(credentials).where(eq(credentials.id, id)).get()?.blob,
+    getCredential: (id) =>
+      db.select().from(credentials).where(eq(credentials.id, id)).get()?.blob,
     putCredential: (id, blob) => {
       db.insert(credentials)
         .values({ id, blob })
@@ -1684,17 +1987,28 @@ const make = (path: string): DbShape => {
         })
         .run();
     },
-    recordDelegateEvent: (event) => db.insert(delegateEvents).values(event).returning().get(),
+    recordDelegateEvent: (event) =>
+      db.insert(delegateEvents).values(event).returning().get(),
     delegateAsk: (requestId) =>
       db
         .select()
         .from(delegateEvents)
-        .where(and(eq(delegateEvents.kind, 'ask'), eq(delegateEvents.requestId, requestId)))
+        .where(
+          and(
+            eq(delegateEvents.kind, "ask"),
+            eq(delegateEvents.requestId, requestId)
+          )
+        )
         .get(),
     settleDelegateAsk: (requestId, status) => {
       db.update(delegateEvents)
         .set({ status })
-        .where(and(eq(delegateEvents.kind, 'ask'), eq(delegateEvents.requestId, requestId)))
+        .where(
+          and(
+            eq(delegateEvents.kind, "ask"),
+            eq(delegateEvents.requestId, requestId)
+          )
+        )
         .run();
     },
     // By id after the timestamp: an ask and the answer it settles can land in
@@ -1713,7 +2027,9 @@ const make = (path: string): DbShape => {
         .orderBy(delegateEvents.createdAt, delegateEvents.id)
         .all(),
     putUsageBuckets: (machineId, buckets) => {
-      if (buckets.length === 0) return;
+      if (buckets.length === 0) {
+        return;
+      }
       // One transaction for the batch: the agent may send hundreds per tick, and
       // a half-written report is worse than a deferred one.
       db.transaction((tx) => {
@@ -1777,15 +2093,20 @@ const make = (path: string): DbShape => {
         .run();
     },
     listUsageBuckets: (q) =>
-      db.select().from(usageBuckets).where(usageWhere(q)).orderBy(usageBuckets.hourStart).all(),
+      db
+        .select()
+        .from(usageBuckets)
+        .where(usageWhere(q))
+        .orderBy(usageBuckets.hourStart)
+        .all(),
     listUsageLimits: () => db.select().from(usageLimits).all(),
     usageSummary: ({ since, until, harness, machineId, groupBy }) => {
       const key =
-        groupBy === 'day'
+        groupBy === "day"
           ? sql<number>`(${usageBuckets.hourStart} / 86400000) * 86400000`
-          : groupBy === 'model'
+          : groupBy === "model"
             ? usageBuckets.model
-            : groupBy === 'project'
+            : groupBy === "project"
               ? usageBuckets.project
               : usageBuckets.sessionId;
 
@@ -1847,8 +2168,12 @@ const make = (path: string): DbShape => {
         .where(
           and(
             sql`${usageBuckets.inputTokens} + ${usageBuckets.outputTokens} + ${usageBuckets.cacheCreationTokens} + ${usageBuckets.cacheReadTokens} + ${usageBuckets.reasoningTokens} > 0`,
-            harness !== undefined ? eq(usageBuckets.harness, harness as 'claude' | 'opencode') : undefined,
-            machineId !== undefined ? eq(usageBuckets.machineId, machineId) : undefined
+            harness === undefined
+              ? undefined
+              : eq(usageBuckets.harness, harness as "claude" | "opencode"),
+            machineId === undefined
+              ? undefined
+              : eq(usageBuckets.machineId, machineId)
           )
         )
         .groupBy(usageBuckets.model)
@@ -1889,7 +2214,9 @@ const make = (path: string): DbShape => {
         .offset(SUPERVISOR_EVENTS_RETENTION)
         .get();
       if (cutoff) {
-        db.delete(supervisorEvents).where(lte(supervisorEvents.id, cutoff.id)).run();
+        db.delete(supervisorEvents)
+          .where(lte(supervisorEvents.id, cutoff.id))
+          .run();
       }
       return {
         id: row.id,
@@ -1908,7 +2235,9 @@ const make = (path: string): DbShape => {
       db
         .select()
         .from(supervisorEvents)
-        .where(instanceId ? eq(supervisorEvents.instanceId, instanceId) : undefined)
+        .where(
+          instanceId ? eq(supervisorEvents.instanceId, instanceId) : undefined
+        )
         .orderBy(desc(supervisorEvents.createdAt), desc(supervisorEvents.id))
         .limit(limit ?? 100)
         .all()
@@ -1949,9 +2278,16 @@ const make = (path: string): DbShape => {
       const values = {
         id: SUPERVISOR_CONFIG_ID,
         enabled: config.enabled ?? stored?.enabled ?? false,
-        baseUrl: config.baseUrl === undefined ? (stored?.baseUrl ?? null) : config.baseUrl,
-        model: config.model === undefined ? (stored?.model ?? null) : config.model,
-        apiKey: config.apiKey === undefined ? (stored?.apiKey ?? null) : config.apiKey,
+        baseUrl:
+          config.baseUrl === undefined
+            ? (stored?.baseUrl ?? null)
+            : config.baseUrl,
+        model:
+          config.model === undefined ? (stored?.model ?? null) : config.model,
+        apiKey:
+          config.apiKey === undefined
+            ? (stored?.apiKey ?? null)
+            : config.apiKey,
         updatedAt: new Date(),
       };
       db.insert(supervisorConfig)
@@ -1968,7 +2304,8 @@ const make = (path: string): DbShape => {
         })
         .run();
     },
-    listRules: () => db.select().from(rules).orderBy(desc(rules.createdAt)).all().map(ruleOf),
+    listRules: () =>
+      db.select().from(rules).orderBy(desc(rules.createdAt)).all().map(ruleOf),
 
     getRule: (id) => {
       const row = db.select().from(rules).where(eq(rules.id, id)).get();
@@ -2052,7 +2389,11 @@ const make = (path: string): DbShape => {
     noteRuleFire: (ruleId, instanceId, requireAck) => {
       const id = `${ruleId}:${instanceId}`;
       const now = new Date();
-      const before = db.select().from(ruleState).where(eq(ruleState.id, id)).get();
+      const before = db
+        .select()
+        .from(ruleState)
+        .where(eq(ruleState.id, id))
+        .get();
       const next = {
         id,
         ruleId,
@@ -2060,7 +2401,7 @@ const make = (path: string): DbShape => {
         // A rule that wants no acknowledgement still records the fire; it just
         // stays armed-looking, and the engine's own once-per-session check is
         // what keeps it quiet afterwards.
-        status: (requireAck ? 'pending' : 'armed') as 'armed' | 'pending',
+        status: (requireAck ? "pending" : "armed") as "armed" | "pending",
         fireCount: (before?.fireCount ?? 0) + 1,
         totalFires: (before?.totalFires ?? 0) + 1,
         lastFiredAt: now,
@@ -2095,7 +2436,12 @@ const make = (path: string): DbShape => {
       db
         .select()
         .from(ruleState)
-        .where(and(eq(ruleState.instanceId, instanceId), eq(ruleState.status, 'pending')))
+        .where(
+          and(
+            eq(ruleState.instanceId, instanceId),
+            eq(ruleState.status, "pending")
+          )
+        )
         .all()
         .map(ruleStateOf),
 
@@ -2111,16 +2457,24 @@ const make = (path: string): DbShape => {
     ackRule: (ruleId, instanceId, note) => {
       const id = `${ruleId}:${instanceId}`;
       const row = db.select().from(ruleState).where(eq(ruleState.id, id)).get();
-      if (!row || row.status !== 'pending') return undefined;
+      if (!row || row.status !== "pending") {
+        return;
+      }
       const now = new Date();
       db.update(ruleState)
         // Re-armed, not retired: the same rule can catch the same habit again
         // later in the same session, and `fireCount` starts the next escalation
         // from zero. `totalFires` is the history and is left alone.
-        .set({ status: 'armed', fireCount: 0, ackedAt: now, ackNote: note })
+        .set({ status: "armed", fireCount: 0, ackedAt: now, ackNote: note })
         .where(eq(ruleState.id, id))
         .run();
-      return ruleStateOf({ ...row, status: 'armed', fireCount: 0, ackedAt: now, ackNote: note });
+      return ruleStateOf({
+        ...row,
+        status: "armed",
+        fireCount: 0,
+        ackedAt: now,
+        ackNote: note,
+      });
     },
   };
 };

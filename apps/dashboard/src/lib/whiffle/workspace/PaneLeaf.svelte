@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { EffortLevel, PermissionMode } from "@whiffle/core";
   /**
    * One group: a strip of tabs, the identity bar for whichever is showing,
    * and a slot per conversation stacked behind it.
@@ -16,29 +17,33 @@
    * being torn down and rebuilt. Give each tab its own header and that
    * disappears.
    */
-  import { untrack } from 'svelte';
-  import { browser } from '$app/environment';
-  import { page } from '$app/state';
-  import type { EffortLevel, PermissionMode } from '@whiffle/core';
-  import SessionHeader, { type SettingChange } from '../transcript/SessionHeader.svelte';
-  import SessionPane from '../SessionPane.svelte';
-  import PaneTabs from './PaneTabs.svelte';
+  import { untrack } from "svelte";
+  import { browser } from "$app/environment";
+  import { page } from "$app/state";
   import {
-    whiffle,
-    submitCommand,
     commandRecord,
-    streamCapable,
-    relaunchSession,
     type HistorySource,
-  } from '../client.svelte';
-  import { workspace, contextOf, type LeafNode } from './workspace.svelte';
-  import { createSwipe } from './gesture.svelte';
-  import { paneDropTarget, dropHint } from './dnd.svelte';
-  import { slot, paneViews } from './dock.svelte';
-  import { sessionName } from '../session-name';
-  import { models, covers, ensureModels } from '../models.svelte';
-  import { PERMISSION_MODES } from '../permission-modes';
-  import { effortStops as getEffortStops, hasEffortScale } from '../effort-levels';
+    relaunchSession,
+    streamCapable,
+    submitCommand,
+    whiffle,
+  } from "../client.svelte";
+  import {
+    effortStops as getEffortStops,
+    hasEffortScale,
+  } from "../effort-levels";
+  import { covers, ensureModels, models } from "../models.svelte";
+  import { PERMISSION_MODES } from "../permission-modes";
+  import SessionPane from "../SessionPane.svelte";
+  import { sessionName } from "../session-name";
+  import SessionHeader, {
+    type SettingChange,
+  } from "../transcript/SessionHeader.svelte";
+  import { dropHint, paneDropTarget } from "./dnd.svelte";
+  import { paneViews, slot } from "./dock.svelte";
+  import { createSwipe } from "./gesture.svelte";
+  import PaneTabs from "./PaneTabs.svelte";
+  import { contextOf, type LeafNode, workspace } from "./workspace.svelte";
 
   let {
     leaf,
@@ -55,11 +60,11 @@
   const splitEdge = $derived(dropHint.splits(leaf.id));
   const joins = $derived(dropHint.joins(leaf.id));
 
-  const viewId = $derived(leaf.active ?? '');
+  const viewId = $derived(leaf.active ?? "");
   const activeIndex = $derived(leaf.tabs.indexOf(viewId));
   /** A pane's distance from the active tab along the strip; nowhere, with no tab showing. */
   const deltaOf = (paneId: string) =>
-    activeIndex < 0 ? NaN : leaf.tabs.indexOf(paneId) - activeIndex;
+    activeIndex < 0 ? Number.NaN : leaf.tabs.indexOf(paneId) - activeIndex;
   /** Whether the reader's keyboard belongs to this group. */
   const isFocusedLeaf = $derived(workspace.focusedLeafId === leaf.id);
 
@@ -77,13 +82,19 @@
 
   // Seeded with the showing tab so the server and the first client render
   // agree; later tabs are added by the effects below.
-  let mounted = $state<string[]>(untrack(() => (leaf.active ? [leaf.active] : [])));
+  let mounted = $state<string[]>(
+    untrack(() => (leaf.active ? [leaf.active] : []))
+  );
 
   $effect.pre(() => {
     const id = viewId;
-    if (!id) return;
+    if (!id) {
+      return;
+    }
     untrack(() => {
-      if (!mounted.includes(id)) mounted.push(id);
+      if (!mounted.includes(id)) {
+        mounted.push(id);
+      }
     });
   });
 
@@ -102,13 +113,24 @@
    * never behind the two they did not.
    */
   $effect(() => {
-    if (!swipeable) return;
+    if (!swipeable) {
+      return;
+    }
     const here = leaf.active;
-    if (!here) return;
-    const neighbours = [workspace.step(here, 1, leaf.id), workspace.step(here, -1, leaf.id)];
+    if (!here) {
+      return;
+    }
+    const neighbours = [
+      workspace.step(here, 1, leaf.id),
+      workspace.step(here, -1, leaf.id),
+    ];
     const warm = setTimeout(() => {
       untrack(() => {
-        for (const id of neighbours) if (id && !mounted.includes(id)) mounted.push(id);
+        for (const id of neighbours) {
+          if (id && !mounted.includes(id)) {
+            mounted.push(id);
+          }
+        }
       });
     }, 120);
     return () => clearTimeout(warm);
@@ -118,29 +140,38 @@
     const open = new Set(leaf.tabs);
     untrack(() => {
       const keep = mounted.filter((id) => open.has(id));
-      if (keep.length !== mounted.length) mounted = keep;
+      if (keep.length !== mounted.length) {
+        mounted = keep;
+      }
     });
   });
 
   /* ── The header's data ──────────────────────────────────────────── */
 
   const session = $derived(whiffle.session(headerId) ?? null);
-  const machineId = $derived(whiffle.session(headerId)?.machineId ?? '');
+  const machineId = $derived(whiffle.session(headerId)?.machineId ?? "");
   const headerCtx = $derived(contextOf(headerId));
 
   const machineName = $derived(
-    whiffle.machines.find((m) => m.machineId === machineId)?.hostname ?? machineId
+    whiffle.machines.find((m) => m.machineId === machineId)?.hostname ??
+      machineId
   );
 
-  const servedNames = $derived((page.data as { names?: Record<string, string> }).names ?? {});
+  const servedNames = $derived(
+    (page.data as { names?: Record<string, string> }).names ?? {}
+  );
   const title = $derived(sessionName(headerId, servedNames).label);
 
   const stats = $derived(whiffle.statsOf(headerId));
   const activity = $derived(whiffle.activityOf(headerId));
 
-  const machineRow = $derived(whiffle.machines.find((m) => m.machineId === machineId) ?? null);
+  const machineRow = $derived(
+    whiffle.machines.find((m) => m.machineId === machineId) ?? null
+  );
   const harnessReport = $derived(
-    machineRow?.harnesses?.find((report) => report.harness === session?.harness) ?? null
+    machineRow?.harnesses?.find(
+      (report) => report.harness === session?.harness
+    ) ?? null
   );
   const offeredModes = $derived(
     harnessReport
@@ -150,7 +181,9 @@
       : PERMISSION_MODES
   );
   const chosenModel = $derived(
-    session?.model ? (models.offered.find((row) => covers(row, session.model!)) ?? null) : null
+    session?.model
+      ? (models.offered.find((row) => covers(row, session.model!)) ?? null)
+      : null
   );
   const harnessEffort = $derived(harnessReport?.capabilities.effort !== false);
   const showEffort = $derived(harnessEffort && hasEffortScale(chosenModel));
@@ -164,17 +197,25 @@
   });
 
   function onmodel(model: string): SettingChange {
-    if (!machineId) return null;
-    return submitCommand(headerId, machineId, 'set-model', { model });
+    if (!machineId) {
+      return null;
+    }
+    return submitCommand(headerId, machineId, "set-model", { model });
   }
   function onpermission(mode: PermissionMode): SettingChange {
-    if (!machineId) return null;
-    if (mode === 'bypassPermissions') return relaunchSession(headerId, machineId, mode);
-    return submitCommand(headerId, machineId, 'set-permission-mode', { mode });
+    if (!machineId) {
+      return null;
+    }
+    if (mode === "bypassPermissions") {
+      return relaunchSession(headerId, machineId, mode);
+    }
+    return submitCommand(headerId, machineId, "set-permission-mode", { mode });
   }
   function oneffort(level: EffortLevel): SettingChange {
-    if (!machineId) return null;
-    return submitCommand(headerId, machineId, 'set-effort', { effort: level });
+    if (!machineId) {
+      return null;
+    }
+    return submitCommand(headerId, machineId, "set-effort", { effort: level });
   }
 </script>
 
@@ -183,44 +224,44 @@
      composer with the keyboard should move focus too. -->
 <section
   class="leaf"
-  class:leaf-focused={isFocusedLeaf}
   onfocusincapture={() => workspace.focus(leaf.id)}
   onpointerdowncapture={() => workspace.focus(leaf.id)}
+  class:leaf-focused={isFocusedLeaf}
 >
   <!-- The focus mark is graphite, never the accent: the one loud colour in
        this product means a session is asking for something, and "you are
        typing here" must not compete with it. -->
-  <span class="rail" aria-hidden="true"></span>
+  <span aria-hidden="true" class="rail"></span>
 
   <PaneTabs {leaf} />
 
   {#if viewId}
     <SessionHeader
-      {title}
-      seed={session?.cwd || headerCtx?.cwd || headerId}
-      harness={session?.harness ?? headerCtx?.harness ?? 'claude'}
-      {machineName}
-      cwd={session?.cwd || headerCtx?.cwd || ''}
       {activity}
-      model={session?.model ?? null}
-      permissionMode={session?.permissionMode ?? null}
-      effort={session?.effort ?? null}
-      mcpCount={session?.mcp?.length ?? null}
-      turns={stats.turns}
-      totalTokens={stats.totalTokens}
-      maxTokens={stats.maxTokens}
       cost={stats.cost}
-      view={paneViews[headerId] ?? 'chat'}
-      onview={(v) => (paneViews[headerId] = v)}
-      {offeredModes}
+      cwd={session?.cwd || headerCtx?.cwd || ''}
+      effort={session?.effort ?? null}
       effortStops={effortStopsForModel}
-      {showEffort}
+      harness={session?.harness ?? headerCtx?.harness ?? 'claude'}
       {harnessEffort}
+      {machineName}
+      maxTokens={stats.maxTokens}
+      mcpCount={session?.mcp?.length ?? null}
+      model={session?.model ?? null}
+      {offeredModes}
+      {oneffort}
       {onmodel}
       {onpermission}
-      {oneffort}
-      trackedCommand={commandRecord}
+      onview={(v) => (paneViews[headerId] = v)}
+      permissionMode={session?.permissionMode ?? null}
+      seed={session?.cwd || headerCtx?.cwd || headerId}
+      {showEffort}
       streaming={streamCapable()}
+      {title}
+      totalTokens={stats.totalTokens}
+      trackedCommand={commandRecord}
+      turns={stats.turns}
+      view={paneViews[headerId] ?? 'chat'}
     />
   {/if}
 
@@ -230,9 +271,9 @@
        read the same 25% band, so the picture cannot promise something the
        drop will not do. -->
   {#if splitEdge}
-    <div class="drop-preview drop-{splitEdge}" aria-hidden="true"></div>
+    <div aria-hidden="true" class="drop-preview drop-{splitEdge}"></div>
   {:else if joins}
-    <div class="drop-preview drop-whole" aria-hidden="true"></div>
+    <div aria-hidden="true" class="drop-preview drop-whole"></div>
   {/if}
 
   <!-- Where the strip can be swiped, the two neighbours are parked either
@@ -247,10 +288,10 @@
       {@const ctx = contextOf(paneId)}
       <div
         class="pane"
-        class:pane-hidden={!shown}
-        inert={!isActive}
-        data-pane={paneId}
         data-delta={delta}
+        data-pane={paneId}
+        inert={!isActive}
+        class:pane-hidden={!shown}
         use:slot={{ id: paneId, shown }}
       >
         <!-- The server paints the conversation here so a reload shows it
@@ -258,21 +299,21 @@
              PaneHost mounts the live pane into the slot. -->
         {#if !browser}
           <SessionPane
-            viewId={paneId}
             browsing={ctx?.machine ?? null}
             browsingCwd={ctx?.cwd ?? ''}
             browsingHarness={ctx?.harness ?? 'claude'}
-            serverTail={paneId === page.params.id
-              ? ((page.data as { tail?: unknown }).tail ?? null)
-              : null}
+            focused={false}
+            hideHeader
+            onview={() => {}}
             serverHistory={paneId === page.params.id
               ? ((page.data as { history?: Promise<HistorySource | null> | null }).history ?? null)
               : null}
-            visible={shown}
-            focused={false}
-            hideHeader
+            serverTail={paneId === page.params.id
+              ? ((page.data as { tail?: unknown }).tail ?? null)
+              : null}
             view={paneViews[paneId] ?? 'chat'}
-            onview={() => {}}
+            viewId={paneId}
+            visible={shown}
           />
         {/if}
       </div>
@@ -360,13 +401,13 @@
   .pane:not(.pane-hidden) {
     will-change: transform;
   }
-  .pane[data-delta='-1'] {
+  .pane[data-delta="-1"] {
     transform: translate3d(-100%, 0, 0);
   }
-  .pane[data-delta='0'] {
+  .pane[data-delta="0"] {
     transform: translate3d(0, 0, 0);
   }
-  .pane[data-delta='1'] {
+  .pane[data-delta="1"] {
     transform: translate3d(100%, 0, 0);
   }
 

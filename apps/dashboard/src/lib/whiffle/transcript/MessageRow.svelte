@@ -1,26 +1,33 @@
 <script lang="ts">
+  import { Badge } from "$lib/components/ui/badge";
+  import {
+    canResend,
+    commandRecord,
+    restoreDraft,
+    retrySend,
+  } from "../client.svelte";
   /** Dispatches one stand-alone transcript message to its renderer by type. */
-  import type { Message } from '../types';
-  import Who from './Who.svelte';
-  import MessageBody from './MessageBody.svelte';
-  import Thinking from './Thinking.svelte';
-  import Peer from './Peer.svelte';
-  import SystemLine from './SystemLine.svelte';
-  import { Badge } from '$lib/components/ui/badge';
-  import { canResend, commandRecord, retrySend, restoreDraft } from '../client.svelte';
+  import type { Message } from "../types";
+  import MessageBody from "./MessageBody.svelte";
+  import Peer from "./Peer.svelte";
+  import SystemLine from "./SystemLine.svelte";
+  import Thinking from "./Thinking.svelte";
+  import Who from "./Who.svelte";
 
   /** A token-dressed micro count badge — shadcn Badge, off the stock 4/8/12
    *  ladder and onto the DESIGN.md scale so it never reads as stock shadcn. */
   const chipClass =
-    'h-auto rounded-[var(--radius-mark)] border-transparent bg-[var(--surface-sunken)] ' +
-    'px-[var(--space-2)] py-px text-[length:var(--text-xs)] font-[var(--weight-body)] ' +
-    '!text-[color:var(--ink-muted)]';
+    "h-auto rounded-[var(--radius-mark)] border-transparent bg-[var(--surface-sunken)] " +
+    "px-[var(--space-2)] py-px text-[length:var(--text-xs)] font-[var(--weight-body)] " +
+    "!text-[color:var(--ink-muted)]";
 
-  let { message, agentName }: { message: Message; agentName: string } = $props();
+  let { message, agentName }: { message: Message; agentName: string } =
+    $props();
 
   const kind = $derived(message.type);
   const hidden = $derived(
-    kind === 'result.success' || (kind === 'assistant' && !message.content.trim())
+    kind === "result.success" ||
+      (kind === "assistant" && !message.content.trim())
   );
 
   /*
@@ -57,16 +64,20 @@
    * renders solid: absence of evidence is a solid message, never a ghost.
    */
   const record = $derived(
-    kind === 'user' && message.metadata?.sentAs ? commandRecord(message.metadata.sentAs) : null
+    kind === "user" && message.metadata?.sentAs
+      ? commandRecord(message.metadata.sentAs)
+      : null
   );
-  const ghost = $derived(record?.stage === 'submitted');
+  const ghost = $derived(record?.stage === "submitted");
   /**
    * `sendFailed` outlives the record's own five-minute sweep (see its doc in
    * types.ts), so a message that failed does not quietly fade back to solid
    * once the ledger has forgotten it — the stamp is read even after `record`
    * itself goes back to `null`.
    */
-  const failed = $derived(record?.stage === 'failed' || !!message.metadata?.sendFailed);
+  const failed = $derived(
+    record?.stage === "failed" || !!message.metadata?.sendFailed
+  );
   const reason = $derived(message.metadata?.sendFailed ?? record?.reason);
 
   /**
@@ -83,7 +94,9 @@
    * stays either way — the failure is still the truth, it is only the offer to
    * undo it that has expired.
    */
-  const recoverable = $derived(!!message.metadata?.sentAs && canResend(message.metadata.sentAs));
+  const recoverable = $derived(
+    !!message.metadata?.sentAs && canResend(message.metadata.sentAs)
+  );
 
   /**
    * Whether re-sending is provably safe. A refused or throwing dispatch never
@@ -95,15 +108,19 @@
   const undelivered = $derived(record?.undelivered === true);
 
   function retry(): void {
-    if (message.metadata?.sentAs) retrySend(message.metadata.sentAs);
+    if (message.metadata?.sentAs) {
+      retrySend(message.metadata.sentAs);
+    }
   }
   function edit(): void {
-    if (message.metadata?.sentAs) restoreDraft(message.metadata.sentAs);
+    if (message.metadata?.sentAs) {
+      restoreDraft(message.metadata.sentAs);
+    }
   }
 </script>
 
 {#if hidden}
-  <!-- A successful result has no line; an empty assistant frame carried only a tool call. -->
+<!-- A successful result has no line; an empty assistant frame carried only a tool call. -->
 {:else if kind === 'user'}
   <!-- The reader's own turn is the one thing worth finding on a fast scroll, so
        it is the one thing that carries a surface: a sunken well. User messages
@@ -111,28 +128,37 @@
        landmarks. The agent's turns stay bare on the field. -->
   <section
     class="turn you"
-    class:ghost
-    class:failed
     style="--ghost-presence: {GHOST.presence}; --ghost-settle: {GHOST.settleMs}ms; --ghost-fail-delay: {GHOST.failDelayMs}ms; --ghost-fail-reveal: {GHOST.failRevealMs}ms"
+    class:failed
+    class:ghost
   >
     <Who
-      you
       name="You"
-      timestamp={ghost || failed ? undefined : message.timestamp}
       note={ghost ? 'sending…' : failed ? 'not sent' : undefined}
+      timestamp={ghost || failed ? undefined : message.timestamp}
+      you
     />
     <MessageBody source={message.content} />
     {#if message.metadata?.attachments?.length || message.metadata?.images?.length}
       <div class="chips">
         {#each message.metadata.attachments ?? [] as att (att.name)}
-          <Badge variant="secondary" class={chipClass}>{att.name} · {att.chars} chars</Badge>
+          <Badge class={chipClass} variant="secondary"
+            >{att.name}
+            · {att.chars} chars</Badge
+          >
         {/each}
         {#each message.metadata.images ?? [] as img, i (img.dataUri ?? `${img.mediaType}-${i}`)}
           {#if img.dataUri}
-            <img class="shot" src={img.dataUri} alt="Image {i + 1} sent with this message" />
+            <img
+              alt="Image {i + 1} sent with this message"
+              class="shot"
+              src={img.dataUri}
+            >
           {:else}
             <!-- A stored transcript can name an image it no longer carries. -->
-            <Badge variant="secondary" class={chipClass}>Image {i + 1} · {img.mediaType}</Badge>
+            <Badge class={chipClass} variant="secondary"
+              >Image {i + 1} · {img.mediaType}</Badge
+            >
           {/if}
         {/each}
       </div>
@@ -145,16 +171,19 @@
       <div class="failure-inner">
         {#if failed}
           <p class="reason">
-            Couldn't send that message.{reason ? ` ${reason}` : ''}{recoverable && !undelivered
+            Couldn't send that message.{reason ? ` ${reason}` : ''}
+            {recoverable && !undelivered
               ? ' It may still have reached the agent — sending it again could repeat it.'
               : ''}
           </p>
           {#if recoverable}
             <div class="actions">
-              <button type="button" class="pressable action" onclick={retry}>
+              <button class="pressable action" onclick={retry} type="button">
                 {undelivered ? 'Try again' : 'Send anyway'}
               </button>
-              <button type="button" class="pressable action" onclick={edit}>Edit</button>
+              <button class="pressable action" onclick={edit} type="button">
+                Edit
+              </button>
             </div>
           {/if}
         {/if}
@@ -238,7 +267,8 @@
     grid-template-rows: 0fr;
     opacity: 0;
     transition:
-      grid-template-rows var(--ghost-fail-reveal) var(--e-in) var(--ghost-fail-delay),
+      grid-template-rows var(--ghost-fail-reveal) var(--e-in)
+      var(--ghost-fail-delay),
       opacity var(--ghost-fail-reveal) var(--e-in) var(--ghost-fail-delay),
       margin-top var(--ghost-fail-reveal) var(--e-in) var(--ghost-fail-delay);
   }

@@ -4,28 +4,33 @@
    * happening — read from the repo's own files, never from a store of
    * Whiffle's own.
    */
-  import { untrack } from 'svelte';
-  import { goto } from '$app/navigation';
-  import { Markdown } from '$lib/components/ui/markdown';
-  import { Alert, AlertDescription } from '$lib/components/ui/alert';
-  import * as AlertDialog from '$lib/components/ui/alert-dialog';
-  import * as Popover from '$lib/components/ui/popover';
-  import * as Select from '$lib/components/ui/select';
-  import { Button } from '$lib/components/ui/button';
-  import { Card } from '$lib/components/ui/card';
-  import { Input } from '$lib/components/ui/input';
-  import { Textarea } from '$lib/components/ui/textarea';
-  import MemoryCard from '$lib/components/features/MemoryCard.svelte';
-  import { whiffle, deleteProject, machineFs, spawnSession } from '$lib/whiffle/client.svelte';
-  import type { ProjectRow } from '$lib/whiffle/client.svelte';
-  import { readDocs, type Doc } from '$lib/whiffle/docs';
-  import { spawnPrefs, rememberSpawn } from '$lib/whiffle/spawnPrefs.svelte';
-  import { machineLabel } from '$lib/whiffle/machine';
-  import OsMark from '$lib/whiffle/OsMark.svelte';
-  import LiveSessionRow from '$lib/whiffle/LiveSessionRow.svelte';
-  import StoredSessionRow from '$lib/whiffle/StoredSessionRow.svelte';
-  import MachineInventory from '$lib/whiffle/MachineInventory.svelte';
-  import type { PageData } from './$types';
+  import { untrack } from "svelte";
+  import { goto } from "$app/navigation";
+  import MemoryCard from "$lib/components/features/MemoryCard.svelte";
+  import { Alert, AlertDescription } from "$lib/components/ui/alert";
+  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { Button } from "$lib/components/ui/button";
+  import { Card } from "$lib/components/ui/card";
+  import { Input } from "$lib/components/ui/input";
+  import { Markdown } from "$lib/components/ui/markdown";
+  import * as Popover from "$lib/components/ui/popover";
+  import * as Select from "$lib/components/ui/select";
+  import { Textarea } from "$lib/components/ui/textarea";
+  import type { ProjectRow } from "$lib/whiffle/client.svelte";
+  import {
+    deleteProject,
+    machineFs,
+    spawnSession,
+    whiffle,
+  } from "$lib/whiffle/client.svelte";
+  import { type Doc, readDocs } from "$lib/whiffle/docs";
+  import LiveSessionRow from "$lib/whiffle/LiveSessionRow.svelte";
+  import MachineInventory from "$lib/whiffle/MachineInventory.svelte";
+  import { machineLabel } from "$lib/whiffle/machine";
+  import OsMark from "$lib/whiffle/OsMark.svelte";
+  import StoredSessionRow from "$lib/whiffle/StoredSessionRow.svelte";
+  import { rememberSpawn, spawnPrefs } from "$lib/whiffle/spawnPrefs.svelte";
+  import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
 
@@ -38,7 +43,7 @@
 
   let docs = $state<Doc[]>([]);
   let open = $state<Doc | null>(null);
-  let content = $state('');
+  let content = $state("");
   let draft = $state<string | null>(null);
   let docsError = $state<string | null>(null);
   let docError = $state<string | null>(null);
@@ -49,23 +54,26 @@
    * lands between lines instead of through one. What is left over fades under
    * the card's edge until "Read more" lifts it.
    */
-  const COLLAPSED_DOC = 'calc(1.5rem * 24)';
+  const COLLAPSED_DOC = "calc(1.5rem * 24)";
   let docBody = $state<HTMLElement | null>(null);
   let expanded = $state(false);
   let clipped = $state(false);
   let showMore = $state(false);
   let forgetOpen = $state(false);
   let spawnOpen = $state(false);
-  let spawnPrompt = $state('');
+  let spawnPrompt = $state("");
 
-  const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+  const message = (error: unknown) =>
+    error instanceof Error ? error.message : String(error);
 
-  let loadedFor = '';
+  let loadedFor = "";
 
   $effect(() => {
     const current = project;
-    const ready = whiffle.status === 'connected';
-    if (!current || !ready || loadedFor === current.id) return;
+    const ready = whiffle.status === "connected";
+    if (!(current && ready) || loadedFor === current.id) {
+      return;
+    }
     loadedFor = current.id;
     untrack(() => {
       void loadDocs(current);
@@ -77,32 +85,38 @@
     docsError = null;
     try {
       docs = await readDocs(target.machineId, target.cwd);
-      if (docs.length > 0) await openDoc(docs[0]);
+      if (docs.length > 0) {
+        await openDoc(docs[0]);
+      }
     } catch (error) {
       docsError = message(error);
     }
   }
 
   async function openDoc(doc: Doc) {
-    if (!project) return;
+    if (!project) {
+      return;
+    }
     open = doc;
     draft = null;
     docError = null;
-    content = '';
+    content = "";
     expanded = false;
     try {
-      content = await machineFs<string>(project.machineId, 'read', doc.path);
+      content = await machineFs<string>(project.machineId, "read", doc.path);
     } catch (error) {
       docError = message(error);
     }
   }
 
   async function save() {
-    if (!project || !open || draft === null) return;
+    if (!(project && open) || draft === null) {
+      return;
+    }
     saving = true;
     docError = null;
     try {
-      await machineFs(project.machineId, 'write', open.path, draft);
+      await machineFs(project.machineId, "write", open.path, draft);
       content = draft;
       draft = null;
     } catch (error) {
@@ -116,29 +130,39 @@
   let claudeEditing = $state(false);
   let claudeError = $state<string | null>(null);
 
-  const claudePath = $derived(project ? `${project.cwd}/CLAUDE.md` : '');
-  const claudeOnline = $derived(machine?.status === 'online');
+  const claudePath = $derived(project ? `${project.cwd}/CLAUDE.md` : "");
+  const claudeOnline = $derived(machine?.status === "online");
 
   async function loadClaude(target: ProjectRow) {
     claude = null;
     claudeEditing = false;
     claudeError = null;
     try {
-      claude = await machineFs<string>(target.machineId, 'read', `${target.cwd}/CLAUDE.md`);
+      claude = await machineFs<string>(
+        target.machineId,
+        "read",
+        `${target.cwd}/CLAUDE.md`
+      );
     } catch (error) {
-      if (!message(error).includes('does not exist')) claudeError = message(error);
+      if (!message(error).includes("does not exist")) {
+        claudeError = message(error);
+      }
     }
   }
 
   async function saveClaude(text: string): Promise<boolean> {
-    if (!project) return false;
+    if (!project) {
+      return false;
+    }
     claudeError = null;
     try {
-      await machineFs(project.machineId, 'write', claudePath, text);
+      await machineFs(project.machineId, "write", claudePath, text);
       claude = text;
       // CLAUDE.md is in the docs nav too; the viewer must not go on showing
       // what the rail just replaced.
-      if (open?.path === claudePath) content = text;
+      if (open?.path === claudePath) {
+        content = text;
+      }
       return true;
     } catch (error) {
       claudeError = message(error);
@@ -160,7 +184,9 @@
   const storedVisible = $derived(showMore ? stored : stored.slice(0, 8));
 
   function startSession(scratch: boolean) {
-    if (!project) return;
+    if (!project) {
+      return;
+    }
     const perm = spawnPrefs.permissionMode;
     const mod = spawnPrefs.model;
     // This start has no pickers of its own — it runs on what the new-session
@@ -179,31 +205,39 @@
       scratch: scratch ? {} : undefined,
     });
     rememberSpawn({ model: mod, permissionMode: perm, effort: level });
-    spawnPrompt = '';
+    spawnPrompt = "";
     spawnOpen = false;
     void goto(`/session/${instanceId}`);
   }
 
   async function forget() {
-    if (!project) return;
+    if (!project) {
+      return;
+    }
     await deleteProject(project.id);
     forgetOpen = false;
-    await goto('/session');
+    await goto("/session");
   }
 
   function docListKeydown(event: KeyboardEvent) {
-    if (!docs.length) return;
+    if (!docs.length) {
+      return;
+    }
     const idx = open ? docs.findIndex((d) => d.path === open?.path) : -1;
-    if (event.key === 'ArrowDown') {
+    if (event.key === "ArrowDown") {
       event.preventDefault();
       const next = Math.min(idx + 1, docs.length - 1);
       void openDoc(docs[next]);
-      (event.currentTarget as HTMLElement).querySelectorAll('button')[next]?.focus();
-    } else if (event.key === 'ArrowUp') {
+      (event.currentTarget as HTMLElement)
+        .querySelectorAll("button")
+        [next]?.focus();
+    } else if (event.key === "ArrowUp") {
       event.preventDefault();
       const prev = Math.max(idx - 1, 0);
       void openDoc(docs[prev]);
-      (event.currentTarget as HTMLElement).querySelectorAll('button')[prev]?.focus();
+      (event.currentTarget as HTMLElement)
+        .querySelectorAll("button")
+        [prev]?.focus();
     }
   }
 </script>
@@ -223,10 +257,12 @@
       <div class="flex min-w-0 flex-1 flex-col gap-1">
         <h1 class="text-display">{project.name}</h1>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span class="truncate font-mono text-micro text-muted-foreground">{project.cwd}</span>
+          <span class="truncate font-mono text-micro text-muted-foreground"
+            >{project.cwd}</span
+          >
           {#if machine}
             <span class="flex items-center gap-1.5">
-              <OsMark os={machine.os} class="size-4 text-muted-foreground" />
+              <OsMark class="size-4 text-muted-foreground" os={machine.os} />
               <span class="text-micro text-muted-foreground">
                 {machineLabel(machine.hostname)}
               </span>
@@ -245,7 +281,7 @@
               <Button {...props} class="pressable">New session</Button>
             {/snippet}
           </Popover.Trigger>
-          <Popover.Content class="w-80 p-0" align="end">
+          <Popover.Content align="end" class="w-80 p-0">
             <form
               class="flex flex-col gap-3 p-4"
               onsubmit={(e) => { e.preventDefault(); startSession(false); }}
@@ -253,38 +289,38 @@
               <label class="flex flex-col gap-1 text-caption">
                 First prompt (optional)
                 <Input
-                  bind:value={spawnPrompt}
                   autocomplete="off"
-                  spellcheck="false"
-                  placeholder="What should this session do?"
                   class="text-sm"
+                  placeholder="What should this session do?"
+                  spellcheck="false"
+                  bind:value={spawnPrompt}
                 />
               </label>
               <div class="flex items-center justify-end gap-2">
                 <Button
+                  onclick={() => startSession(false)}
+                  size="sm"
                   type="button"
                   variant="ghost"
-                  size="sm"
-                  onclick={() => startSession(false)}
                 >
                   Start empty
                 </Button>
-                <Button type="submit" size="sm">Start</Button>
+                <Button size="sm" type="submit">Start</Button>
               </div>
             </form>
           </Popover.Content>
         </Popover.Root>
         <Button
-          variant="outline"
           class="pressable"
           onclick={() => startSession(true)}
+          variant="outline"
         >
           Side quest
         </Button>
         <AlertDialog.Root bind:open={forgetOpen}>
           <AlertDialog.Trigger>
             {#snippet child({ props })}
-              <Button {...props} variant="ghost" class="text-muted-foreground">
+              <Button {...props} class="text-muted-foreground" variant="ghost">
                 Forget project&hellip;
               </Button>
             {/snippet}
@@ -293,7 +329,8 @@
             <AlertDialog.Header>
               <AlertDialog.Title>Forget {project.name}?</AlertDialog.Title>
               <AlertDialog.Description>
-                The grouping is removed. The checkout and its sessions stay on disk.
+                The grouping is removed. The checkout and its sessions stay on
+                disk.
               </AlertDialog.Description>
             </AlertDialog.Header>
             <AlertDialog.Footer>
@@ -306,37 +343,46 @@
     </header>
 
     <!-- Body: columns at >=768 -->
-    <div class="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6 lg:flex-row lg:gap-6 lg:overflow-hidden">
+    <div
+      class="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6 lg:flex-row lg:gap-6 lg:overflow-hidden"
+    >
       <!-- Main column: docs -->
       <div class="flex min-w-0 flex-1 flex-col gap-4 lg:overflow-y-auto">
         {#if docs.length === 0 && !docsError}
-          <Card class="rounded-[var(--radius-panel)] p-[var(--space-6)] shadow-md">
+          <Card
+            class="rounded-[var(--radius-panel)] p-[var(--space-6)] shadow-md"
+          >
             <p class="text-body text-muted-foreground">
-              No markdown yet. Add a README.md at the top of the checkout and it shows up here.
+              No markdown yet. Add a README.md at the top of the checkout and it
+              shows up here.
             </p>
           </Card>
         {:else if docsError}
           <Alert class="border-warning/40 bg-warning/10 text-warning">
-            <AlertDescription class="text-body text-warning">{docsError}</AlertDescription>
+            <AlertDescription class="text-body text-warning"
+              >{docsError}</AlertDescription
+            >
           </Alert>
         {:else}
           <!-- Doc nav: Select on mobile -->
           <div class="block md:hidden">
             {#if docs.length > 0}
               <Select.Root
-                type="single"
-                value={open?.path ?? ''}
                 onValueChange={(val) => {
                   const doc = docs.find((d) => d.path === val);
                   if (doc) void openDoc(doc);
                 }}
+                type="single"
+                value={open?.path ?? ''}
               >
                 <Select.Trigger class="w-full font-mono text-sm">
                   {open?.name ?? 'Select a document'}
                 </Select.Trigger>
                 <Select.Content>
                   {#each docs as doc (doc.path)}
-                    <Select.Item value={doc.path} class="font-mono text-sm">{doc.name}</Select.Item>
+                    <Select.Item class="font-mono text-sm" value={doc.path}
+                      >{doc.name}</Select.Item
+                    >
                   {/each}
                 </Select.Content>
               </Select.Root>
@@ -346,21 +392,19 @@
           <div class="flex min-h-0 flex-1 gap-4 xl:gap-0">
             <!-- 3-col ultrawide: doc nav list | document | rail -->
             <nav
-              class="hidden shrink-0 flex-col overflow-y-auto pr-2 xl:flex xl:w-48"
               aria-label="Project docs"
+              class="hidden shrink-0 flex-col overflow-y-auto pr-2 xl:flex xl:w-48"
             >
               <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
               <div
+                aria-label="Docs"
                 class="flex flex-col gap-0.5"
+                onkeydown={docListKeydown}
                 role="listbox"
                 tabindex="0"
-                aria-label="Docs"
-                onkeydown={docListKeydown}
               >
                 {#each docs as doc (doc.path)}
                   <button
-                    type="button"
-                    role="option"
                     aria-selected={open?.path === doc.path}
                     class="truncate rounded-[var(--radius-control)] px-3 py-1.5 text-left font-mono text-micro transition-colors
                       hover:bg-accent
@@ -368,6 +412,8 @@
                         ? 'bg-accent text-accent-foreground font-medium'
                         : 'text-muted-foreground'}"
                     onclick={() => openDoc(doc)}
+                    role="option"
+                    type="button"
                   >
                     {doc.name}
                   </button>
@@ -378,21 +424,19 @@
             <!-- 2-col (768-1919): doc nav is horizontal above reading pane -->
             <div class="flex min-w-0 flex-1 flex-col gap-4">
               <nav
-                class="hidden shrink-0 gap-1 overflow-x-auto md:flex xl:hidden"
                 aria-label="Project docs"
+                class="hidden shrink-0 gap-1 overflow-x-auto md:flex xl:hidden"
               >
                 <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
                 <div
+                  aria-label="Docs"
                   class="flex gap-1"
+                  onkeydown={docListKeydown}
                   role="listbox"
                   tabindex="0"
-                  aria-label="Docs"
-                  onkeydown={docListKeydown}
                 >
                   {#each docs as doc (doc.path)}
                     <button
-                      type="button"
-                      role="option"
                       aria-selected={open?.path === doc.path}
                       class="shrink-0 truncate rounded-[var(--radius-control)] px-3 py-1.5 font-mono text-micro transition-colors
                         hover:bg-accent
@@ -400,6 +444,8 @@
                           ? 'bg-accent text-accent-foreground font-medium'
                           : 'text-muted-foreground'}"
                       onclick={() => openDoc(doc)}
+                      role="option"
+                      type="button"
                     >
                       {doc.name}
                     </button>
@@ -408,21 +454,46 @@
               </nav>
 
               {#if open}
-                <Card class="gap-0 rounded-[var(--radius-panel)] py-0 shadow-md">
-                  <header class="flex items-center gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-2)]">
-                    <span class="min-w-0 truncate font-mono text-micro text-muted-foreground">{open.name}</span>
+                <Card
+                  class="gap-0 rounded-[var(--radius-panel)] py-0 shadow-md"
+                >
+                  <header
+                    class="flex items-center gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-2)]"
+                  >
+                    <span
+                      class="min-w-0 truncate font-mono text-micro text-muted-foreground"
+                      >{open.name}</span
+                    >
                     {#if docError}
-                      <span class="truncate text-micro text-error" role="alert">{docError}</span>
+                      <span class="truncate text-micro text-error" role="alert"
+                        >{docError}</span
+                      >
                     {/if}
                     {#if draft === null}
-                      <Button variant="outline" size="sm" class="ml-auto shrink-0" onclick={() => (draft = content)}>
+                      <Button
+                        class="ml-auto shrink-0"
+                        onclick={() => (draft = content)}
+                        size="sm"
+                        variant="outline"
+                      >
                         Edit
                       </Button>
                     {:else}
-                      <Button variant="ghost" size="sm" class="ml-auto shrink-0" onclick={() => (draft = null)}>
+                      <Button
+                        class="ml-auto shrink-0"
+                        onclick={() => (draft = null)}
+                        size="sm"
+                        variant="ghost"
+                      >
                         Cancel
                       </Button>
-                      <Button variant="outline" size="sm" class="shrink-0" disabled={saving} onclick={save}>
+                      <Button
+                        class="shrink-0"
+                        disabled={saving}
+                        onclick={save}
+                        size="sm"
+                        variant="outline"
+                      >
                         {saving ? 'Saving\u2026' : 'Save'}
                       </Button>
                     {/if}
@@ -433,11 +504,13 @@
                          rather than being sliced through by the card's edge. -->
                     <div class="relative border-t border-border">
                       <div
-                        bind:this={docBody}
                         class="overflow-y-auto px-[var(--space-6)] py-[var(--space-4)] md:px-[var(--space-7)]"
                         style="max-height: {expanded ? '70vh' : COLLAPSED_DOC}"
+                        bind:this={docBody}
                       >
-                        <div class="prose prose-sm dark:prose-invert max-w-[72ch]">
+                        <div
+                          class="prose prose-sm dark:prose-invert max-w-[72ch]"
+                        >
                           <Markdown source={content} />
                         </div>
                       </div>
@@ -449,20 +522,20 @@
                     </div>
                     {#if clipped || expanded}
                       <button
-                        type="button"
                         class="flex min-h-9 w-full items-center justify-center rounded-b-[var(--radius-panel)] text-caption
                           transition-colors hover:bg-accent hover:text-accent-foreground"
                         onclick={() => (expanded = !expanded)}
+                        type="button"
                       >
                         {expanded ? 'Show less' : 'Read more'}
                       </button>
                     {/if}
                   {:else}
                     <Textarea
-                      bind:value={draft}
-                      spellcheck="false"
                       aria-label={open.name}
                       class="h-[60vh] min-h-0 rounded-none border-x-0 border-b-0 border-t border-border bg-transparent px-[var(--space-6)] py-[var(--space-4)] font-mono text-[length:var(--text-base)] text-foreground focus-visible:ring-inset md:px-[var(--space-7)]"
+                      spellcheck="false"
+                      bind:value={draft}
                     />
                   {/if}
                 </Card>
@@ -473,29 +546,39 @@
       </div>
 
       <!-- Right rail (320-380px on lg; stacked on mobile) -->
-      <aside class="mt-6 flex w-full shrink-0 flex-col gap-4 lg:mt-0 lg:w-[340px] lg:overflow-y-auto xl:w-[360px]">
+      <aside
+        class="mt-6 flex w-full shrink-0 flex-col gap-4 lg:mt-0 lg:w-[340px] lg:overflow-y-auto xl:w-[360px]"
+      >
         <!-- Sessions -->
         <Card class="gap-0 rounded-[var(--radius-panel)] py-0 shadow-md">
           <header class="px-[var(--space-4)] py-[var(--space-3)]">
             <h2 class="text-title">Sessions</h2>
           </header>
-          <div class="flex flex-col gap-1.5 px-[var(--space-3)] pb-[var(--space-3)]">
+          <div
+            class="flex flex-col gap-1.5 px-[var(--space-3)] pb-[var(--space-3)]"
+          >
             {#each live as instance (instance.id)}
-              <LiveSessionRow {instance} groupCwd={project.cwd} />
+              <LiveSessionRow groupCwd={project.cwd} {instance} />
             {/each}
             {#each storedVisible as info (info.sessionId)}
-              <StoredSessionRow machineId={project.machineId} {info} groupCwd={project.cwd} />
+              <StoredSessionRow
+                groupCwd={project.cwd}
+                {info}
+                machineId={project.machineId}
+              />
             {:else}
               {#if live.length === 0}
-                <p class="px-1 py-2 text-caption">Nothing running, nothing recorded yet.</p>
+                <p class="px-1 py-2 text-caption">
+                  Nothing running, nothing recorded yet.
+                </p>
               {/if}
             {/each}
             {#if stored.length > 8 && !showMore}
               <Button
-                variant="ghost"
-                size="sm"
                 class="self-start text-muted-foreground"
                 onclick={() => (showMore = true)}
+                size="sm"
+                variant="ghost"
               >
                 Show {stored.length - 8} more
               </Button>
@@ -507,24 +590,29 @@
              which is where a 360px rail cannot compete — so the rail only says
              it is there and opens the editor. One reader on screen. -->
         <MemoryCard
-          path="CLAUDE.md"
           content={claude}
-          bind:editing={claudeEditing}
-          save={claudeOnline ? saveClaude : undefined}
-          summary="Project memory — every session started here reads it."
           emptyText={claudeOnline
             ? 'No CLAUDE.md in this project — click to create it.'
             : `No machine online — ${machine ? machineLabel(machine.hostname) : project.machineId} has to be up to read this file.`}
+          path="CLAUDE.md"
+          save={claudeOnline ? saveClaude : undefined}
+          summary="Project memory — every session started here reads it."
+          bind:editing={claudeEditing}
         >
           {#snippet meta()}
             {#if claudeError}
-              <span class="min-w-0 truncate text-micro text-error" role="alert">{claudeError}</span>
+              <span class="min-w-0 truncate text-micro text-error" role="alert"
+                >{claudeError}</span
+              >
             {/if}
           {/snippet}
           {#snippet footer()}
             {#if claudeEditing}
-              <p class="border-t border-border px-4 py-2 text-micro text-muted-foreground">
-                This file is the repo's own — commit it to share it. Git is its sync; Whiffle does not replicate it.
+              <p
+                class="border-t border-border px-4 py-2 text-micro text-muted-foreground"
+              >
+                This file is the repo's own — commit it to share it. Git is its
+                sync; Whiffle does not replicate it.
               </p>
             {/if}
           {/snippet}
@@ -533,8 +621,8 @@
         <!-- Machine inventory -->
         {#if project && machine}
           <MachineInventory
-            machines={machine ? [machine] : []}
             kind="mcp"
+            machines={machine ? [machine] : []}
             taken={[]}
           />
         {/if}

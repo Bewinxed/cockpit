@@ -1,27 +1,27 @@
 <script lang="ts">
-	import { Accordion as AccordionPrimitive } from "bits-ui";
-	import { cn, type WithoutChild } from "$lib/utils.js";
+  import { Accordion as AccordionPrimitive } from "bits-ui";
+  import { cn, type WithoutChild } from "$lib/utils.js";
 
-	let {
-		ref = $bindable(null),
-		class: className,
-		children,
-		...restProps
-	}: WithoutChild<AccordionPrimitive.ContentProps> = $props();
+  let {
+    ref = $bindable(null),
+    class: className,
+    children,
+    ...restProps
+  }: WithoutChild<AccordionPrimitive.ContentProps> = $props();
 </script>
 
 <AccordionPrimitive.Content
-	bind:ref
-	data-slot="accordion-content"
-	class="px-4 text-sm data-open:animate-accordion-down data-closed:animate-accordion-up overflow-hidden"
-	{...restProps}
+  class="px-4 text-sm data-open:animate-accordion-down data-closed:animate-accordion-up overflow-hidden"
+  data-slot="accordion-content"
+  bind:ref
+  {...restProps}
 >
-	<div
-		class={cn(
+  <div
+    class={cn(
 			"pt-0 pb-4 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
 			className
 		)}
-	>
-		{@render children?.()}
-	</div>
+  >
+    {@render children?.()}
+  </div>
 </AccordionPrimitive.Content>

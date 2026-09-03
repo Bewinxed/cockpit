@@ -1,35 +1,39 @@
-export { probeAuth } from './auth';
-export { buildInfo } from './build';
-export { ConnectionLost, runDaemon, startDaemon, type RegisterPayload } from './daemon';
+export { probeAuth } from "./auth";
+export { buildInfo } from "./build";
 export {
-  browseMdns,
-  firstToAnswer,
-  MDNS_BROWSE_MS,
-  probeHub,
-  PROBE_TIMEOUT_MS,
-  rediscoverHub,
-  tailscaleCandidates,
-  toHttpBase,
-  toWsUrl,
-  type RediscoverProbes,
-} from './discovery';
-export { machineId } from './machine-id';
-export { SessionSupervisor, type FrameSink } from './session';
+  ConnectionLost,
+  type RegisterPayload,
+  runDaemon,
+  startDaemon,
+} from "./daemon";
 export {
   checkDeploy,
   DEPLOY_BRANCH,
   DEPLOY_MARKER,
   DEPLOY_POLL_MS,
+  type DeployMarker,
+  type DeployState,
   deployInfo,
   deployRoot,
   describeDeploy,
   forgetLatestDeploy,
-  latestDeploy,
   isDeployClone,
+  latestDeploy,
   readDeployMarker,
-  type DeployMarker,
-  type DeployState,
-} from './deploy';
+} from "./deploy";
+export {
+  browseMdns,
+  firstToAnswer,
+  MDNS_BROWSE_MS,
+  PROBE_TIMEOUT_MS,
+  probeHub,
+  type RediscoverProbes,
+  rediscoverHub,
+  tailscaleCandidates,
+  toHttpBase,
+  toWsUrl,
+} from "./discovery";
+export { machineId } from "./machine-id";
 export {
   checkVersion,
   isNewer,
@@ -38,11 +42,12 @@ export {
   registryUpdate,
   registryUrl,
   type VersionCheck,
-} from './registry';
+} from "./registry";
+export { type FrameSink, SessionSupervisor } from "./session";
 export {
+  type DeployWatchOptions,
   deploymentState,
+  type UpdateOptions,
   updateCheckout,
   watchDeployment,
-  type DeployWatchOptions,
-  type UpdateOptions,
-} from './update';
+} from "./update";

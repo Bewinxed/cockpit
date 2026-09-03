@@ -12,21 +12,21 @@
  * (endpoint derivation) for the reasoning behind every shape below.
  */
 
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-import type { BuildInfo } from './index';
+import { homedir } from "node:os";
+import { join } from "node:path";
+import type { BuildInfo } from "./index";
 
 /**
  * Capability string a sessiond speaks, exchanged in `attach`/`welcome`
  * exactly as {@link import('./stream').STREAM_V1} is today (design §5). A
  * breaking revision is a new string, never a change to this one's meaning.
  */
-export const SESSIOND_V1 = 'sessiond.v1';
+export const SESSIOND_V1 = "sessiond.v1";
 
 /** What sessiond spawns: built entirely agent-side and handed over opaque (design §3.2). */
 export interface ProcSpec {
-  command: string;
   args: string[];
+  command: string;
   cwd?: string;
   env?: Record<string, string>;
 }
@@ -37,33 +37,33 @@ export interface ProcSpec {
  * map (design §8) without sessiond ever seeing the harness it belongs to.
  */
 export interface SessiondSpawn {
-  type: 'spawn';
   commandId: string;
   procId: string;
   spec: ProcSpec;
+  type: "spawn";
 }
 
 /** agent → sessiond: bytes on the child's stdin. Opaque — sessiond never parses them. */
 export interface SessiondWrite {
-  type: 'write';
   commandId: string;
-  procId: string;
   data: string;
+  procId: string;
+  type: "write";
 }
 
 /** agent → sessiond: a signal for the child, by name (design §3.4 — "Signal names are the whole vocabulary"). */
 export interface SessiondSignal {
-  type: 'signal';
   commandId: string;
   procId: string;
   sig: NodeJS.Signals;
+  type: "signal";
 }
 
 /** agent → sessiond: close the child's stdin (the SDK's own EOF + grace path). */
 export interface SessiondStdinEnd {
-  type: 'stdin_end';
   commandId: string;
   procId: string;
+  type: "stdin_end";
 }
 
 /**
@@ -72,24 +72,19 @@ export interface SessiondStdinEnd {
  * Ledger Protocol's {@link import('./stream').StreamSubscribe}.
  */
 export interface SessiondSubscribe {
-  type: 'subscribe';
-  procId: string;
   afterSeq?: number;
+  procId: string;
+  type: "subscribe";
 }
 
 /** agent → sessiond: what is alive, right now. */
 export interface SessiondList {
-  type: 'list';
+  type: "list";
 }
 
 /** One child as sessiond currently knows it. */
 export interface SessiondProcInfo {
-  procId: string;
-  pid: number;
   alive: boolean;
-  exitCode?: number;
-  /** The ring's current head seq for this child. */
-  head: number;
   /**
    * Where the child was spawned, echoed back from its {@link ProcSpec}.
    *
@@ -99,6 +94,11 @@ export interface SessiondProcInfo {
    * session the hub had written off was left running with nobody pumping it.
    */
   cwd?: string;
+  exitCode?: number;
+  /** The ring's current head seq for this child. */
+  head: number;
+  pid: number;
+  procId: string;
 }
 
 /**
@@ -107,31 +107,31 @@ export interface SessiondProcInfo {
  * never replayed against.
  */
 export interface SessiondWelcome {
-  type: 'welcome';
-  epoch: string;
-  capabilities: readonly string[];
   build: BuildInfo;
+  capabilities: readonly string[];
+  epoch: string;
   procs: SessiondProcInfo[];
+  type: "welcome";
 }
 
 /** sessiond → agent: one line of a child's stdout, sequenced within its epoch. */
 export interface SessiondLine {
-  seq: number;
-  procId: string;
   data: string;
+  procId: string;
+  seq: number;
 }
 
 /** sessiond → agent, live fan-out of one sequenced line. */
 export interface SessiondDelta {
-  type: 'proc.line';
   event: SessiondLine;
+  type: "proc.line";
 }
 
 /** sessiond → agent when the requested gap is inside the ring: contiguous, ascending. */
 export interface SessiondBacklog {
-  type: 'proc.backlog';
-  procId: string;
   events: SessiondLine[];
+  procId: string;
+  type: "proc.backlog";
 }
 
 /**
@@ -140,17 +140,17 @@ export interface SessiondBacklog {
  * (design §6); the agent forwards a `sessiond_stream_gap` system frame.
  */
 export interface SessiondReset {
-  type: 'proc.reset';
-  procId: string;
   nextSeq: number;
+  procId: string;
+  type: "proc.reset";
 }
 
 /** sessiond → agent: a child exited. Delivered once per procId per epoch. */
 export interface SessiondExit {
-  type: 'proc.exit';
-  procId: string;
   exitCode: number | null;
+  procId: string;
   signal: NodeJS.Signals | null;
+  type: "proc.exit";
 }
 
 /**
@@ -160,10 +160,10 @@ export interface SessiondExit {
  * treats that as a capability probe result, not an error.
  */
 export interface SessiondAck {
-  type: 'ack';
   commandId: string;
-  stage: 'accepted' | 'applied' | 'failed';
   reason?: string;
+  stage: "accepted" | "applied" | "failed";
+  type: "ack";
 }
 
 export type SessiondClientMessage =
@@ -201,20 +201,20 @@ export type SessiondServerMessage =
  */
 export const sessiondEndpoint = (): string => {
   switch (process.platform) {
-    case 'win32': {
-      const user = process.env.USERNAME ?? process.env.USER ?? 'default';
+    case "win32": {
+      const user = process.env.USERNAME ?? process.env.USER ?? "default";
       return `\\\\.\\pipe\\whiffle-sessiond-${user}`;
     }
-    case 'darwin':
-      return join(homedir(), '.whiffle', 'sessiond.sock');
+    case "darwin":
+      return join(homedir(), ".whiffle", "sessiond.sock");
     default: {
       // linux, and every other platform Node reports: same derivation as
       // linux's documented case, since XDG_RUNTIME_DIR is the same signal
       // wherever it is set.
       const runtimeDir = process.env.XDG_RUNTIME_DIR;
       return runtimeDir
-        ? join(runtimeDir, 'whiffle', 'sessiond.sock')
-        : join(homedir(), '.whiffle', 'sessiond.sock');
+        ? join(runtimeDir, "whiffle", "sessiond.sock")
+        : join(homedir(), ".whiffle", "sessiond.sock");
     }
   }
 };

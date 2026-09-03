@@ -1,3 +1,4 @@
+import Root from "./alert-dialog.svelte";
 import Action from "./alert-dialog-action.svelte";
 import Cancel from "./alert-dialog-cancel.svelte";
 import Content from "./alert-dialog-content.svelte";
@@ -9,32 +10,31 @@ import Overlay from "./alert-dialog-overlay.svelte";
 import Portal from "./alert-dialog-portal.svelte";
 import Title from "./alert-dialog-title.svelte";
 import Trigger from "./alert-dialog-trigger.svelte";
-import Root from "./alert-dialog.svelte";
 
 export {
-	Root,
-	Title,
-	Action,
-	Cancel,
-	Portal,
-	Footer,
-	Header,
-	Trigger,
-	Overlay,
-	Content,
-	Description,
-	Media,
-	//
-	Root as AlertDialog,
-	Title as AlertDialogTitle,
-	Action as AlertDialogAction,
-	Cancel as AlertDialogCancel,
-	Portal as AlertDialogPortal,
-	Footer as AlertDialogFooter,
-	Header as AlertDialogHeader,
-	Trigger as AlertDialogTrigger,
-	Overlay as AlertDialogOverlay,
-	Content as AlertDialogContent,
-	Description as AlertDialogDescription,
-	Media as AlertDialogMedia,
+  Action,
+  Action as AlertDialogAction,
+  Cancel,
+  Cancel as AlertDialogCancel,
+  Content,
+  Content as AlertDialogContent,
+  Description,
+  Description as AlertDialogDescription,
+  Footer,
+  Footer as AlertDialogFooter,
+  Header,
+  Header as AlertDialogHeader,
+  Media,
+  Media as AlertDialogMedia,
+  Overlay,
+  Overlay as AlertDialogOverlay,
+  Portal,
+  Portal as AlertDialogPortal,
+  Root,
+  //
+  Root as AlertDialog,
+  Title,
+  Title as AlertDialogTitle,
+  Trigger,
+  Trigger as AlertDialogTrigger,
 };

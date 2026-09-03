@@ -1,4 +1,4 @@
-<script module lang="ts">
+<script lang="ts" module>
   /**
    * One clock for the whole board. A row that ticked for itself would put a
    * timer per session on a card of thirty, and they all read the same second.
@@ -8,36 +8,46 @@
   let ticker: ReturnType<typeof setInterval> | undefined;
 
   function watchClock(): () => void {
-    if (watchers++ === 0) ticker = setInterval(() => (now = Date.now()), 1000);
+    if (watchers++ === 0) {
+      ticker = setInterval(() => (now = Date.now()), 1000);
+    }
     return () => {
-      if (--watchers === 0) clearInterval(ticker);
+      if (--watchers === 0) {
+        clearInterval(ticker);
+      }
     };
   }
 </script>
 
 <script lang="ts">
   /** One live session, as the session index and a project home both list it. */
-  import { onMount } from 'svelte';
-  import { dragSession } from './workspace/dnd.svelte';
-  import { fly } from 'svelte/transition';
-  import { quintOut } from 'svelte/easing';
-  import { Badge } from '$lib/components/ui/badge';
-  import { markHue, sessionSprite } from './mark';
-  import { formatDuration } from '$lib/utils/time';
-  import { ACTIVITY_LABEL, SLEEPING_HINT, UNKNOWN_HINT } from './activity';
-  import ActivityDot from './ActivityDot.svelte';
-  import { whiffle, isFailed, isResumable, isStale, type InstanceRow } from './client.svelte';
-  import { identityVar } from './folder-prefs.svelte';
-  import { sessionTitle } from './links';
-  import LiveSessionMenu from './LiveSessionMenu.svelte';
-  import TaskRing from './TaskRing.svelte';
-  import { taskProgress, tasksOf } from './tasks.svelte';
+  import { onMount } from "svelte";
+  import { quintOut } from "svelte/easing";
+  import { fly } from "svelte/transition";
+  import { Badge } from "$lib/components/ui/badge";
+  import { formatDuration } from "$lib/utils/time";
+  import ActivityDot from "./ActivityDot.svelte";
+  import { ACTIVITY_LABEL, SLEEPING_HINT, UNKNOWN_HINT } from "./activity";
+  import {
+    type InstanceRow,
+    isFailed,
+    isResumable,
+    isStale,
+    whiffle,
+  } from "./client.svelte";
+  import { identityVar } from "./folder-prefs.svelte";
+  import LiveSessionMenu from "./LiveSessionMenu.svelte";
+  import { sessionTitle } from "./links";
+  import { markHue, sessionSprite } from "./mark";
+  import TaskRing from "./TaskRing.svelte";
+  import { taskProgress, tasksOf } from "./tasks.svelte";
+  import { dragSession } from "./workspace/dnd.svelte";
 
   interface Props {
-    instance: InstanceRow;
     /** The card's own path, where it has one: a row in it repeating that path
      *  says nothing, so the row keeps quiet and the card speaks for it. */
     groupCwd?: string;
+    instance: InstanceRow;
   }
 
   let { instance, groupCwd }: Props = $props();
@@ -55,38 +65,41 @@
   const failed = $derived(isFailed(instance));
   /** The hub can't reach this row's machine — distinct from idle and asleep. */
   const stale = $derived(isStale(instance));
-  const quest = $derived(instance.kind === 'scratch');
+  const quest = $derived(instance.kind === "scratch");
   /** Sleeping and stale no longer get a word here — `ActivityDot` carries
    *  both as its own glyph now (leaf Y1), so this label is only ever seen as
    *  a `Badge`'s text, for the states that still get one. */
-  const label = $derived(failed ? 'Failed' : ACTIVITY_LABEL[activity]);
+  const label = $derived(failed ? "Failed" : ACTIVITY_LABEL[activity]);
 
   /** The Quiet Ledger status the row's state pill wears: fail red, needs-you
    *  amber, working blue-live, everything else at rest bare-idle. */
   const pillStatus = $derived(
     failed
-      ? 'fail'
-      : activity === 'blocked'
-        ? 'attn'
-        : activity === 'working'
-          ? 'live'
-          : 'idle'
+      ? "fail"
+      : activity === "blocked"
+        ? "attn"
+        : activity === "working"
+          ? "live"
+          : "idle"
   );
 
   /** StatusPill ported to ui/badge, token-dressed to the Quiet Ledger pill
    *  recipe: a tint carries live/attn/done/fail, idle carries NO fill (bare
    *  muted label). */
   const PILL_FILL: Record<string, string> = {
-    live: 'bg-[var(--status-live-bg)] text-[var(--status-live-ink)]',
-    attn: 'bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]',
-    done: 'bg-[var(--status-done-bg)] text-[var(--status-done-ink)]',
-    fail: 'bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]',
+    live: "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]",
+    attn: "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]",
+    done: "bg-[var(--status-done-bg)] text-[var(--status-done-ink)]",
+    fail: "bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]",
   };
-  function pillClass(status: 'live' | 'attn' | 'done' | 'fail' | 'idle'): string {
+  function pillClass(
+    status: "live" | "attn" | "done" | "fail" | "idle"
+  ): string {
     const base =
-      'h-[var(--c-pill-h)] rounded-[var(--radius-pill)] border-0 text-[length:var(--c-pill-fs)] leading-none whitespace-nowrap';
-    if (status === 'idle')
+      "h-[var(--c-pill-h)] rounded-[var(--radius-pill)] border-0 text-[length:var(--c-pill-fs)] leading-none whitespace-nowrap";
+    if (status === "idle") {
       return `${base} gap-0 bg-transparent p-0 font-[450] text-[var(--status-idle-ink)]`;
+    }
     return `${base} gap-[var(--c-pill-gap)] px-2.5 py-0 font-medium ${PILL_FILL[status]}`;
   }
 
@@ -98,7 +111,9 @@
   // frames keep them current. A row that fetched for itself would make a card
   // of thirty sessions thirty round trips in one frame.
   const plan = $derived(tasksOf(instance.id));
-  const progress = $derived(plan && plan.tasks.length > 0 ? taskProgress(plan) : null);
+  const progress = $derived(
+    plan && plan.tasks.length > 0 ? taskProgress(plan) : null
+  );
 
   /**
    * A session running an open-ended ask writes no plan, and a run of any length
@@ -106,10 +121,14 @@
    * turns to say the session is alive, and how long it has been on the step it
    * is on. No fraction is invented — there is nothing to take a fraction of.
    */
-  const unmeasured = $derived(!progress && !failed && !sleeping && !stale && activity === 'working');
+  const unmeasured = $derived(
+    !(progress || failed || sleeping || stale) && activity === "working"
+  );
 
   $effect(() => {
-    if (!unmeasured) return;
+    if (!unmeasured) {
+      return;
+    }
     return watchClock();
   });
 
@@ -117,17 +136,23 @@
   // out from this browser must not read as a run that started in the future.
   const pulseAt = $derived(whiffle.pulseAt(instance.id));
   const onStepFor = $derived(
-    unmeasured && pulseAt !== undefined ? formatDuration(Math.max(0, now - pulseAt)) : null
+    unmeasured && pulseAt !== undefined
+      ? formatDuration(Math.max(0, now - pulseAt))
+      : null
   );
 
   const title = $derived.by(() => {
     const info = instance.sessionId
-      ? whiffle.catalogOf(instance.machineId).find((row) => row.sessionId === instance.sessionId)
+      ? whiffle
+          .catalogOf(instance.machineId)
+          .find((row) => row.sessionId === instance.sessionId)
       : undefined;
-    if (info) return sessionTitle(info);
+    if (info) {
+      return sessionTitle(info);
+    }
     // What its spawn said it is for — a delegate's brief, first line — before
     // the fallback, since a delegate is never in the catalog to begin with.
-    return instance.title ?? 'untitled session';
+    return instance.title ?? "untitled session";
   });
 
   // The label swaps only when the session's state actually changes — a row that
@@ -138,12 +163,12 @@
 
 <LiveSessionMenu {instance}>
   <a
-    use:dragSession={{ sessionId: instance.id, from: null }}
-    href="/session/{instance.id}"
-    title={sleeping ? SLEEPING_HINT : stale ? UNKNOWN_HINT : undefined}
     class="group flex min-h-9 flex-col justify-center gap-0.5 rounded-[var(--radius-control)] px-4 py-1.5
       transition-colors duration-150 ease-out hover:bg-accent hover:text-accent-foreground
       {failed || activity === 'blocked' ? 'bg-error/10' : ''}"
+    href="/session/{instance.id}"
+    title={sleeping ? SLEEPING_HINT : stale ? UNKNOWN_HINT : undefined}
+    use:dragSession={{ sessionId: instance.id, from: null }}
   >
     <!-- The row's band is the card's full width, so the whole strip is the
          hover target; what it *says* stops at a scannable measure, or an
@@ -166,12 +191,19 @@
       <!-- A quest is named beside its title rather than glyphed in front of it:
            the lead slot belongs to state, and the titles keep their column. -->
       {#if quest}
-        <Badge variant="secondary" class="shrink-0 text-micro font-normal">side quest</Badge>
+        <Badge class="shrink-0 text-micro font-normal" variant="secondary"
+          >side quest</Badge
+        >
       {/if}
       <!-- A leaf delegate cannot fan out: the operator reads at a glance that
            nothing will ever nest beneath this row. -->
       {#if instance.canDelegate === false}
-        <Badge variant="outline" class="shrink-0 text-micro font-normal" title="Spawned with can_delegate=false — it cannot delegate or start sessions">leaf</Badge>
+        <Badge
+          class="shrink-0 text-micro font-normal"
+          title="Spawned with can_delegate=false — it cannot delegate or start sessions"
+          variant="outline"
+          >leaf</Badge
+        >
       {/if}
       <!-- Where it runs, second — and beside the title rather than in a column
            of its own: on a wide track a path pinned right sits half a card away
@@ -183,7 +215,8 @@
         <span
           class="hidden min-w-24 shrink-[3] truncate font-mono text-micro text-muted-foreground [direction:rtl] sm:block"
           title={instance.cwd}
-        ><bdi>{instance.cwd}</bdi></span>
+          ><bdi>{instance.cwd}</bdi></span
+        >
       {/if}
       <!-- How far its plan has got, at a glance and nothing more: the row is
            already a link, and a control inside one is two targets sharing a
@@ -194,12 +227,15 @@
           class="ml-auto flex shrink-0 items-center gap-1.5 text-micro text-muted-foreground tabular-nums"
           data-tabular
         >
-          <span class="identity-ink flex items-center" style={identityVar(instance.cwd)}>
-            <TaskRing done={progress.done} total={progress.total} size="sm" />
+          <span
+            class="identity-ink flex items-center"
+            style={identityVar(instance.cwd)}
+          >
+            <TaskRing done={progress.done} size="sm" total={progress.total} />
           </span>
           {progress.done}/{progress.total}
         </span>
-        <!-- No plan to measure, but the session is running: a turning arc and how
+      <!-- No plan to measure, but the session is running: a turning arc and how
              long it has been on this step, which is what is actually known. -->
       {:else if unmeasured}
         <span
@@ -209,10 +245,15 @@
             ? `Working — no task plan; ${onStepFor} on this step`
             : 'Working — no task plan'}
         >
-          <span class="identity-ink flex items-center" style={identityVar(instance.cwd)}>
+          <span
+            class="identity-ink flex items-center"
+            style={identityVar(instance.cwd)}
+          >
             <TaskRing indeterminate size="sm" />
           </span>
-          {#if onStepFor}{onStepFor}{/if}
+          {#if onStepFor}
+            {onStepFor}
+          {/if}
         </span>
       {/if}
       <!-- The state: sleeping and stale get `ActivityDot`'s own glyph, not a
@@ -239,7 +280,9 @@
       </span>
     </span>
     {#if activity === 'working' && tool}
-      <span class="flex max-w-3xl items-baseline gap-2 pl-8 text-micro text-muted-foreground">
+      <span
+        class="flex max-w-3xl items-baseline gap-2 pl-8 text-micro text-muted-foreground"
+      >
         <span class="shrink-0">{tool.name}</span>
         <span class="truncate font-mono">{tool.glance}</span>
       </span>
@@ -268,11 +311,25 @@
     display: block;
     color: var(--mark-glyph);
   }
-  .mark.m2 { background-color: var(--mark-2); }
-  .mark.m3 { background-color: var(--mark-3); }
-  .mark.m4 { background-color: var(--mark-4); }
-  .mark.m5 { background-color: var(--mark-5); }
-  .mark.m6 { background-color: var(--mark-6); }
-  .mark.m7 { background-color: var(--mark-7); }
-  .mark.m8 { background-color: var(--mark-8); }
+  .mark.m2 {
+    background-color: var(--mark-2);
+  }
+  .mark.m3 {
+    background-color: var(--mark-3);
+  }
+  .mark.m4 {
+    background-color: var(--mark-4);
+  }
+  .mark.m5 {
+    background-color: var(--mark-5);
+  }
+  .mark.m6 {
+    background-color: var(--mark-6);
+  }
+  .mark.m7 {
+    background-color: var(--mark-7);
+  }
+  .mark.m8 {
+    background-color: var(--mark-8);
+  }
 </style>

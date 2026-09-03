@@ -7,12 +7,12 @@
  *
  *   node mocks/build-designmd.mjs
  */
-import { readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(HERE, '..');
+const ROOT = join(HERE, "..");
 
 // CENSUS NUMBERS ARE GENERATED, NEVER TRANSCRIBED.
 // Four numbers in this document went stale — weights 500:208 vs 204, sizes
@@ -22,43 +22,59 @@ const ROOT = join(HERE, '..');
 // the reports. These are read out of the reports at build time so they cannot
 // drift, and verify.sh rebuilds and diffs the document.
 const report = (name) => {
-  try { return readFileSync(join(HERE, name), 'utf8'); } catch { return ''; }
+  try {
+    return readFileSync(join(HERE, name), "utf8");
+  } catch {
+    return "";
+  }
 };
 const pick = (text, re, fallback) => {
   const m = text.match(re);
   return m ? m[1] : fallback;
 };
-const tc = report('typecheck-report.txt');
-const cc = report('clipcheck-report.txt');
-const sc = report('satcensus-report.txt');
-const kb = report('keyboard-report.txt');
+const tc = report("typecheck-report.txt");
+const cc = report("clipcheck-report.txt");
+const sc = report("satcensus-report.txt");
+const kb = report("keyboard-report.txt");
 const CENSUS = {
-  weights: pick(tc, /computed font-weights:\s*(\{[^}]*\})/, '(report missing)'),
-  sizes: pick(tc, /computed font-sizes\s*:\s*(\{[^}]*\})/, '(report missing)'),
-  leading: pick(cc, /computed leading ratios seen:\s*(.*?)\s*\(\* =/, '(report missing)'),
-  satLight: pick(sc, /=\s*([\d.]+)% of the surface/, '?'),
-  satRegion: pick(sc, /largest region\s*:\s*\d+ px = ([\d.]+)%/, '?'),
+  weights: pick(tc, /computed font-weights:\s*(\{[^}]*\})/, "(report missing)"),
+  sizes: pick(tc, /computed font-sizes\s*:\s*(\{[^}]*\})/, "(report missing)"),
+  leading: pick(
+    cc,
+    /computed leading ratios seen:\s*(.*?)\s*\(\* =/,
+    "(report missing)"
+  ),
+  satLight: pick(sc, /[=]\s*([\d.]+)% of the surface/, "?"),
+  satRegion: pick(sc, /largest region\s*:\s*\d+ px = ([\d.]+)%/, "?"),
   ringRange: (() => {
     const all = [...kb.matchAll(/ring ([\d.]+):1/g)].map((m) => Number(m[1]));
-    return all.length ? `${Math.min(...all).toFixed(2)}–${Math.max(...all).toFixed(2)}:1` : '(report missing)';
+    return all.length
+      ? `${Math.min(...all).toFixed(2)}–${Math.max(...all).toFixed(2)}:1`
+      : "(report missing)";
   })(),
   stops: (() => {
     const g = (f) => {
-      const all = [...kb.matchAll(new RegExp(f + '\\s+@\\d+ \\w+\\s+(\\d+) tab stops', 'g'))]
-        .map((m) => Number(m[1]));
-      return all.length ? `${Math.min(...all)}–${Math.max(...all)}` : '?';
+      const all = [
+        ...kb.matchAll(
+          new RegExp(f + "\\s+@\\d+ \\w+\\s+(\\d+) tab stops", "g")
+        ),
+      ].map((m) => Number(m[1]));
+      return all.length ? `${Math.min(...all)}–${Math.max(...all)}` : "?";
     };
-    return `${g('v2-fleet')} (fleet), ${g('v3-assistant')} (assistant), ${g('v4-transcript')} (transcript)`;
+    return `${g("v2-fleet")} (fleet), ${g("v3-assistant")} (assistant), ${g("v4-transcript")} (transcript)`;
   })(),
 };
 
-const palette = readFileSync(join(HERE, 'palette-263-muted-analogous.css'), 'utf8').trim();
-const tokens = readFileSync(join(HERE, 'tokens.css'), 'utf8');
+const palette = readFileSync(
+  join(HERE, "palette-263-muted-analogous.css"),
+  "utf8"
+).trim();
+const tokens = readFileSync(join(HERE, "tokens.css"), "utf8");
 
 // the tier-2/tier-3 slice of tokens.css, quoted as-is
 const derived = tokens
-  .slice(tokens.indexOf('/* ------------------------------- TIER 2'))
-  .replace(/\n\/\* Contrast report[\s\S]*$/, '')
+  .slice(tokens.indexOf("/* ------------------------------- TIER 2"))
+  .replace(/\n\/\* Contrast report[\s\S]*$/, "")
   .trim();
 
 const md = `# Design: Quiet Ledger
@@ -607,5 +623,5 @@ other state change is instantaneous.
   scale and leading are not yet specified here.
 `;
 
-writeFileSync(join(ROOT, 'DESIGN.md'), md);
+writeFileSync(join(ROOT, "DESIGN.md"), md);
 console.log(`WROTE DESIGN.md (${md.length} bytes)`);

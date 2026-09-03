@@ -8,7 +8,7 @@
    * 14 − 9 = 5 cannot split evenly, so the glyph landed 2px from one edge and
    * 3px from the other and read visibly off-centre. 18 − 12 = 6 splits 3/3.
    */
-  import { IconUser, IconAgent } from '$lib/icons';
+  import { IconAgent, IconUser } from "$lib/icons";
 
   let {
     you = false,
@@ -33,18 +33,29 @@
   const valid = $derived(at !== null && !Number.isNaN(at.getTime()));
   const clock = $derived(
     valid
-      ? at!.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
-      : ''
+      ? at!.toLocaleTimeString(undefined, {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        })
+      : ""
   );
 </script>
 
 <h2 class="who">
-  <span class="dot {you ? 'u' : 'a'}" aria-hidden="true">
-    {#if you}<IconUser />{:else}<IconAgent />{/if}
+  <span aria-hidden="true" class="dot {you ? 'u' : 'a'}">
+    {#if you}
+      <IconUser />
+    {:else}
+      <IconAgent />
+    {/if}
   </span>
   <span class="role">{name}</span>
-  {#if valid}<time class="when" datetime={at!.toISOString()}>{clock}</time>
-  {:else if note}<span class="note">{note}</span>{/if}
+  {#if valid}
+    <time class="when" datetime={at!.toISOString()}>{clock}</time>
+  {:else if note}
+    <span class="note">{note}</span>
+  {/if}
 </h2>
 
 <style>

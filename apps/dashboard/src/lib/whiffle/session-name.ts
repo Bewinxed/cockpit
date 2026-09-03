@@ -4,10 +4,10 @@
  * session than the others, and none of them flashes through the id, the
  * folder and a mid-transcript message on the way to the real title.
  */
-import { whiffle } from './client.svelte';
-import { resolveSessionTitle } from './links';
-import { workingSet } from './working-set.svelte';
-import { contextOf } from './workspace/workspace.svelte';
+import { whiffle } from "./client.svelte";
+import { resolveSessionTitle } from "./links";
+import { workingSet } from "./working-set.svelte";
+import { contextOf } from "./workspace/workspace.svelte";
 
 export interface SessionName {
   label: string;
@@ -35,9 +35,10 @@ export function sessionName(
   const view = whiffle.session(id);
   const ctx = contextOf(id);
   const title = row?.title;
-  const settled = !!view && !view.loading && !view.hydrating && view.messages.length > 0;
+  const settled =
+    !!view && !view.loading && !view.hydrating && view.messages.length > 0;
   const firstMessage = settled
-    ? view.messages.find((m) => m.type === 'user' && m.content.trim())?.content
+    ? view.messages.find((m) => m.type === "user" && m.content.trim())?.content
     : undefined;
   const named = !!title?.trim() || !!firstMessage?.trim();
   const answered = !!row && (!!title?.trim() || settled);
@@ -52,7 +53,9 @@ export function sessionName(
     // name the server resolved stands in after it, until the fleet and the
     // transcript have both answered; falling back to the folder for that
     // moment is the flash the remembered title removes.
-    label: answered ? resolved : (workingSet.titleOf(id) ?? served[id] ?? resolved),
+    label: answered
+      ? resolved
+      : (workingSet.titleOf(id) ?? served[id] ?? resolved),
     named,
   };
 }

@@ -1,5 +1,5 @@
-import type { EffortLevel, PermissionMode } from '@whiffle/core';
-import { MODEL_DEFAULT } from './models.svelte';
+import type { EffortLevel, PermissionMode } from "@whiffle/core";
+import { MODEL_DEFAULT } from "./models.svelte";
 
 /**
  * What the new-session form was last set to. A user who picks Fable and a
@@ -8,34 +8,45 @@ import { MODEL_DEFAULT } from './models.svelte';
  * again for every session. Kept out of the model store because a permission
  * mode is not a model concern.
  */
-const KEY = 'whiffle-spawn-prefs';
+const KEY = "whiffle-spawn-prefs";
 
 interface SpawnPrefs {
-  model: string;
-  permissionMode: PermissionMode;
   /**
    * `null` is a choice too, and the one to start from: only the model knows
    * which stops it has, so a form that opened on a level would be asserting one
    * before it has anything to assert it against.
    */
   effort: EffortLevel | null;
+  model: string;
+  permissionMode: PermissionMode;
 }
 
-const FALLBACK: SpawnPrefs = { model: MODEL_DEFAULT, permissionMode: 'default', effort: null };
+const FALLBACK: SpawnPrefs = {
+  model: MODEL_DEFAULT,
+  permissionMode: "default",
+  effort: null,
+};
 
 const load = (): SpawnPrefs => {
-  if (typeof localStorage === 'undefined') return FALLBACK;
+  if (typeof localStorage === "undefined") {
+    return FALLBACK;
+  }
   try {
     const stored = localStorage.getItem(KEY);
-    if (!stored) return FALLBACK;
+    if (!stored) {
+      return FALLBACK;
+    }
     const parsed = JSON.parse(stored) as Partial<SpawnPrefs>;
     return {
-      model: typeof parsed.model === 'string' ? parsed.model : FALLBACK.model,
+      model: typeof parsed.model === "string" ? parsed.model : FALLBACK.model,
       permissionMode:
-        typeof parsed.permissionMode === 'string'
+        typeof parsed.permissionMode === "string"
           ? (parsed.permissionMode as PermissionMode)
           : FALLBACK.permissionMode,
-      effort: typeof parsed.effort === 'string' ? (parsed.effort as EffortLevel) : FALLBACK.effort,
+      effort:
+        typeof parsed.effort === "string"
+          ? (parsed.effort as EffortLevel)
+          : FALLBACK.effort,
     };
   } catch {
     return FALLBACK;
@@ -61,7 +72,9 @@ export function rememberSpawn(prefs: SpawnPrefs): void {
   store.model = prefs.model;
   store.permissionMode = prefs.permissionMode;
   store.effort = prefs.effort;
-  if (typeof localStorage === 'undefined') return;
+  if (typeof localStorage === "undefined") {
+    return;
+  }
   try {
     localStorage.setItem(KEY, JSON.stringify(store));
   } catch {

@@ -1,21 +1,21 @@
 <script lang="ts">
-	import { cn, type WithElementRef } from "$lib/utils.js";
-	import type { HTMLAttributes } from "svelte/elements";
+  import type { HTMLAttributes } from "svelte/elements";
+  import { cn, type WithElementRef } from "$lib/utils.js";
 
-	let {
-		ref = $bindable(null),
-		class: className,
-		children,
-		...restProps
-	}: WithElementRef<HTMLAttributes<HTMLElement>> = $props();
+  let {
+    ref = $bindable(null),
+    class: className,
+    children,
+    ...restProps
+  }: WithElementRef<HTMLAttributes<HTMLElement>> = $props();
 </script>
 
 <div
-	bind:this={ref}
-	data-slot="sidebar-group"
-	data-sidebar="group"
-	class={cn("p-2 relative flex w-full min-w-0 flex-col", className)}
-	{...restProps}
+  class={cn("p-2 relative flex w-full min-w-0 flex-col", className)}
+  data-sidebar="group"
+  data-slot="sidebar-group"
+  bind:this={ref}
+  {...restProps}
 >
-	{@render children?.()}
+  {@render children?.()}
 </div>

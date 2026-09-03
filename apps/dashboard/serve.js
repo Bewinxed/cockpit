@@ -19,26 +19,30 @@
  * connection and the hub's own 101 passes straight back. Nothing here has to
  * agree with a runtime about what an upgrade is.
  */
-import http from 'node:http';
-import net from 'node:net';
-import { handler } from './build/handler.js';
+import http from "node:http";
+import net from "node:net";
+import { handler } from "./build/handler.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
-const HOST = process.env.HOST ?? '0.0.0.0';
-const target = new URL(process.env.WHIFFLE_HUB_URL || 'http://localhost:3456');
+const HOST = process.env.HOST ?? "0.0.0.0";
+const target = new URL(process.env.WHIFFLE_HUB_URL || "http://localhost:3456");
 const targetPort = Number(target.port || 80);
 
 const server = http.createServer(handler);
 
-server.on('upgrade', (req, socket, head) => {
+server.on("upgrade", (req, socket, head) => {
   // `http.Server` drops a socket's error handling the moment it emits
   // `upgrade`, so an upgrade nobody claims is left with no `error` listener and
   // the eventual reset becomes a process-level throw — taking the server, and
   // every other dashboard socket, down with it.
-  socket.on('error', (error) => {
-    console.warn(`[whiffle] websocket socket error on ${req.url}: ${error.code ?? error.message}`);
+  socket.on("error", (error) => {
+    console.warn(
+      `[whiffle] websocket socket error on ${req.url}: ${error.code ?? error.message}`
+    );
   });
-  if (!req.url?.startsWith('/ws')) return socket.destroy();
+  if (!req.url?.startsWith("/ws")) {
+    return socket.destroy();
+  }
 
   const upstream = net.connect(targetPort, target.hostname, () => {
     const lines = [`${req.method} ${req.url} HTTP/1.1`];
@@ -46,24 +50,28 @@ server.on('upgrade', (req, socket, head) => {
       // The hub is the one being addressed now, so it gets its own Host; every
       // other header (the websocket key above all) is the browser's and is
       // forwarded untouched, because the hub's 101 is computed from it.
-      if (req.rawHeaders[i].toLowerCase() === 'host') continue;
+      if (req.rawHeaders[i].toLowerCase() === "host") {
+        continue;
+      }
       lines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`);
     }
     lines.push(`Host: ${target.host}`);
-    upstream.write(`${lines.join('\r\n')}\r\n\r\n`);
-    if (head?.length) upstream.write(head);
+    upstream.write(`${lines.join("\r\n")}\r\n\r\n`);
+    if (head?.length) {
+      upstream.write(head);
+    }
     upstream.pipe(socket);
     socket.pipe(upstream);
   });
 
-  upstream.on('error', (error) => {
+  upstream.on("error", (error) => {
     console.warn(
       `[whiffle] hub ws proxy could not reach ${target.host}: ${error.code ?? error.message}`
     );
     socket.destroy();
   });
-  socket.on('close', () => upstream.destroy());
-  upstream.on('close', () => socket.destroy());
+  socket.on("close", () => upstream.destroy());
+  upstream.on("close", () => socket.destroy());
 });
 
 server.listen(PORT, HOST, () => {

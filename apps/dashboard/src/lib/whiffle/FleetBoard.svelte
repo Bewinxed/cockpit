@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { SDKSessionInfo } from "@whiffle/core";
   /**
    * The fleet board — every session across every machine as one ledger table,
    * with the four counts that say whether the fleet needs you above it.
@@ -12,38 +13,16 @@
    * whose transcript is already running somewhere is dropped — the live row is
    * the same conversation, and it is the one that can still be spoken to.
    */
-  import { goto } from '$app/navigation';
-  import { page } from '$app/state';
-  import type { SDKSessionInfo } from '@whiffle/core';
-  import { cn } from '$lib/utils';
-  import { Button } from '$lib/components/ui/button';
-  import { Badge } from '$lib/components/ui/badge';
-  import { Input } from '$lib/components/ui/input';
-  import * as Card from '$lib/components/ui/card';
-  import * as Select from '$lib/components/ui/select';
-  import * as Tooltip from '$lib/components/ui/tooltip';
-  import * as Table from '$lib/components/ui/table';
-  import * as Pagination from '$lib/components/ui/pagination';
-  import SpawnPanel from '$lib/whiffle/SpawnPanel.svelte';
-  import AttentionQueue from '$lib/whiffle/AttentionQueue.svelte';
-  import LiveSessionRow from '$lib/whiffle/LiveSessionRow.svelte';
-  import MachineCard from '$lib/whiffle/MachineCard.svelte';
-  import StatTile from '$lib/whiffle/StatTile.svelte';
-  import {
-    whiffle,
-    isFailed,
-    isResumable,
-    isStale,
-    reconnectNow,
-    resumeSession,
-    setPeeked,
-    type InstanceRow,
-  } from './client.svelte';
-  import { markHue, type MarkHue } from './mark';
-  import HarnessGlyph from './HarnessGlyph.svelte';
-  import { machineLabel } from './machine';
-  import { sessionTitle, transcriptHref } from './links';
-  import { formatDistanceToNow } from '$lib/utils/time';
+  import { goto } from "$app/navigation";
+  import { page } from "$app/state";
+  import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
+  import * as Card from "$lib/components/ui/card";
+  import { Input } from "$lib/components/ui/input";
+  import * as Pagination from "$lib/components/ui/pagination";
+  import * as Select from "$lib/components/ui/select";
+  import * as Table from "$lib/components/ui/table";
+  import * as Tooltip from "$lib/components/ui/tooltip";
   import {
     IconDownload,
     IconExternal,
@@ -52,57 +31,83 @@
     IconPlay,
     IconPlus,
     IconSearch,
-  } from '$lib/icons';
+  } from "$lib/icons";
+  import { cn } from "$lib/utils";
+  import { formatDistanceToNow } from "$lib/utils/time";
+  import AttentionQueue from "$lib/whiffle/AttentionQueue.svelte";
+  import LiveSessionRow from "$lib/whiffle/LiveSessionRow.svelte";
+  import MachineCard from "$lib/whiffle/MachineCard.svelte";
+  import SpawnPanel from "$lib/whiffle/SpawnPanel.svelte";
+  import StatTile from "$lib/whiffle/StatTile.svelte";
+  import {
+    type InstanceRow,
+    isFailed,
+    isResumable,
+    isStale,
+    reconnectNow,
+    resumeSession,
+    setPeeked,
+    whiffle,
+  } from "./client.svelte";
+  import HarnessGlyph from "./HarnessGlyph.svelte";
+  import { sessionTitle, transcriptHref } from "./links";
+  import { machineLabel } from "./machine";
+  import { type MarkHue, markHue } from "./mark";
 
   let { active }: { active: boolean } = $props();
 
   const PAGE_SIZE = 12;
 
-  type PillStatus = 'live' | 'attn' | 'fail' | 'idle';
+  type PillStatus = "live" | "attn" | "fail" | "idle";
 
   interface Row {
-    key: string;
-    title: string;
-    machineId: string;
-    machine: string;
-    harness: string;
-    harnessLabel: string;
-    // the mark draws the vendor glyph from `harness`; the hue tells sessions apart
-    hue: MarkHue;
-    status: PillStatus;
-    stateLabel: string;
-    turns: number | null;
+    at: number | undefined;
     contextPct: number | null;
     cost: number | null;
-    at: number | undefined;
-    href: string;
-    instance: InstanceRow | null;
-    stored: SDKSessionInfo | null;
     cwd: string;
+    harness: string;
+    harnessLabel: string;
+    href: string;
+    // the mark draws the vendor glyph from `harness`; the hue tells sessions apart
+    hue: MarkHue;
+    instance: InstanceRow | null;
+    key: string;
+    machine: string;
+    machineId: string;
+    stateLabel: string;
+    status: PillStatus;
+    stored: SDKSessionInfo | null;
+    title: string;
+    turns: number | null;
   }
 
   function harnessLabelOf(harness: string): string {
     switch (harness) {
-      case 'claude':
-        return 'Claude Code';
-      case 'opencode':
-        return 'OpenCode';
-      case 'pi':
-        return 'pi';
+      case "claude":
+        return "Claude Code";
+      case "opencode":
+        return "OpenCode";
+      case "pi":
+        return "pi";
       default:
         return harness;
     }
   }
 
-  function liveState(instance: InstanceRow): { status: PillStatus; label: string } {
-    if (isFailed(instance)) return { status: 'fail', label: 'Failed' };
+  function liveState(instance: InstanceRow): {
+    status: PillStatus;
+    label: string;
+  } {
+    if (isFailed(instance)) {
+      return { status: "fail", label: "Failed" };
+    }
     switch (whiffle.activityOf(instance.id)) {
-      case 'blocked':
-        return { status: 'attn', label: 'Needs you' };
-      case 'working':
-        return { status: 'live', label: 'Working' };
+      case "blocked":
+        return { status: "attn", label: "Needs you" };
+      case "working":
+        return { status: "live", label: "Working" };
       default:
-        return { status: 'idle', label: 'Idle' };
+        return { status: "idle", label: "Idle" };
     }
   }
 
@@ -110,11 +115,13 @@
     const live = whiffle.runningInstances.map((instance): Row => {
       const stats = whiffle.statsOf(instance.id);
       const state = liveState(instance);
-      const machine = whiffle.machines.find((m) => m.machineId === instance.machineId);
-      const harness = instance.harness ?? 'claude';
+      const machine = whiffle.machines.find(
+        (m) => m.machineId === instance.machineId
+      );
+      const harness = instance.harness ?? "claude";
       return {
         key: instance.id,
-        title: instance.title ?? 'untitled session',
+        title: instance.title ?? "untitled session",
         machineId: instance.machineId,
         machine: machine ? machineLabel(machine.hostname) : instance.machineId,
         harness,
@@ -133,7 +140,9 @@
       };
     });
 
-    const running = new Set(live.map((row) => row.instance?.sessionId).filter(Boolean));
+    const running = new Set(
+      live.map((row) => row.instance?.sessionId).filter(Boolean)
+    );
     const stored = whiffle.machines.flatMap((machine) =>
       whiffle
         .catalogOf(machine.machineId)
@@ -147,8 +156,8 @@
             harness: info.harness,
             harnessLabel: harnessLabelOf(info.harness),
             hue: markHue(info.cwd || machine.machineId),
-            status: 'idle',
-            stateLabel: 'Idle',
+            status: "idle",
+            stateLabel: "Idle",
             turns: null,
             contextPct: null,
             cost: null,
@@ -156,7 +165,7 @@
             href: transcriptHref(info),
             instance: null,
             stored: info,
-            cwd: info.cwd ?? '',
+            cwd: info.cwd ?? "",
           })
         )
     );
@@ -165,7 +174,10 @@
   });
 
   const spend = $derived(
-    whiffle.runningInstances.reduce((sum, row) => sum + (whiffle.statsOf(row.id).cost ?? 0), 0)
+    whiffle.runningInstances.reduce(
+      (sum, row) => sum + (whiffle.statsOf(row.id).cost ?? 0),
+      0
+    )
   );
 
   /** Listed rows with no live process — asleep or unreachable. Shown apart from
@@ -177,73 +189,97 @@
 
   /* ---- filters ------------------------------------------------------- */
 
-  let search = $state('');
+  let search = $state("");
   let showAllNotRunning = $state(false);
   /** '' is "All machines"; otherwise a machineId. */
-  let machineFilter = $state('');
-  const STATES: { value: PillStatus | ''; label: string }[] = [
-    { value: '', label: 'All states' },
-    { value: 'live', label: 'Working' },
-    { value: 'attn', label: 'Needs you' },
-    { value: 'idle', label: 'Idle' },
+  let machineFilter = $state("");
+  const STATES: { value: PillStatus | ""; label: string }[] = [
+    { value: "", label: "All states" },
+    { value: "live", label: "Working" },
+    { value: "attn", label: "Needs you" },
+    { value: "idle", label: "Idle" },
   ];
-  let stateFilter = $state<PillStatus | ''>('');
-  const SORTS: { value: 'recent' | 'name'; label: string }[] = [
-    { value: 'recent', label: 'Last active' },
-    { value: 'name', label: 'Name (A–Z)' },
+  let stateFilter = $state<PillStatus | "">("");
+  const SORTS: { value: "recent" | "name"; label: string }[] = [
+    { value: "recent", label: "Last active" },
+    { value: "name", label: "Name (A–Z)" },
   ];
-  let sortBy = $state<'recent' | 'name'>('recent');
+  let sortBy = $state<"recent" | "name">("recent");
   let pageNo = $state(1);
 
   const machineName = $derived(
     machineFilter
-      ? (rows.find((row) => row.machineId === machineFilter)?.machine ?? machineFilter)
-      : 'All machines'
+      ? (rows.find((row) => row.machineId === machineFilter)?.machine ??
+          machineFilter)
+      : "All machines"
   );
-  const stateName = $derived(STATES.find((s) => s.value === stateFilter)?.label ?? 'All states');
+  const stateName = $derived(
+    STATES.find((s) => s.value === stateFilter)?.label ?? "All states"
+  );
   /** The blocked list only means "nothing needs you" while the socket is live. */
-  const hubLive = $derived(whiffle.hub === 'connected');
-  const sortName = $derived(SORTS.find((s) => s.value === sortBy)?.label ?? 'Last active');
+  const hubLive = $derived(whiffle.hub === "connected");
+  const sortName = $derived(
+    SORTS.find((s) => s.value === sortBy)?.label ?? "Last active"
+  );
 
   const filtered = $derived(
     rows.filter((row) => {
       const needle = search.trim().toLowerCase();
-      if (needle && !row.title.toLowerCase().includes(needle)) return false;
-      if (machineFilter && row.machineId !== machineFilter) return false;
-      if (stateFilter && row.status !== stateFilter) return false;
+      if (needle && !row.title.toLowerCase().includes(needle)) {
+        return false;
+      }
+      if (machineFilter && row.machineId !== machineFilter) {
+        return false;
+      }
+      if (stateFilter && row.status !== stateFilter) {
+        return false;
+      }
       return true;
     })
   );
 
   const sorted = $derived(
-    sortBy === 'name'
+    sortBy === "name"
       ? [...filtered].sort((a, b) => a.title.localeCompare(b.title))
       : [...filtered].sort((a, b) => (b.at ?? 0) - (a.at ?? 0))
   );
 
   const pageCount = $derived(Math.max(1, Math.ceil(sorted.length / PAGE_SIZE)));
-  const paged = $derived(sorted.slice((pageNo - 1) * PAGE_SIZE, pageNo * PAGE_SIZE));
+  const paged = $derived(
+    sorted.slice((pageNo - 1) * PAGE_SIZE, pageNo * PAGE_SIZE)
+  );
 
   // A filter that shrinks the list out from under the current page leaves it
   // showing nothing at all; the first page always has rows.
   $effect(() => {
-    if (pageNo > pageCount) pageNo = 1;
+    if (pageNo > pageCount) {
+      pageNo = 1;
+    }
   });
 
   /* ---- actions ------------------------------------------------------- */
 
   let spawnOpen = $state(false);
-  let spawnPrefill = $state<{ machineId?: string; cwd?: string } | undefined>(undefined);
+  let spawnPrefill = $state<{ machineId?: string; cwd?: string } | undefined>(
+    undefined
+  );
 
   // "Spawn here" from anywhere else in the app arrives as a query on the board's
   // own URL. It is consumed once and cleared, so a reload is not a second spawn.
   $effect(() => {
-    if (!active) return;
-    const machineId = page.url.searchParams.get('machine');
-    if (!machineId) return;
-    spawnPrefill = { machineId, cwd: page.url.searchParams.get('cwd') ?? undefined };
+    if (!active) {
+      return;
+    }
+    const machineId = page.url.searchParams.get("machine");
+    if (!machineId) {
+      return;
+    }
+    spawnPrefill = {
+      machineId,
+      cwd: page.url.searchParams.get("cwd") ?? undefined,
+    };
     spawnOpen = true;
-    void goto('/session', { replaceState: true });
+    void goto("/session", { replaceState: true });
   });
 
   function startSession() {
@@ -253,7 +289,9 @@
 
   function resume(row: Row) {
     const sessionId = row.instance?.sessionId ?? row.stored?.sessionId;
-    if (!sessionId) return;
+    if (!sessionId) {
+      return;
+    }
     const id = resumeSession({
       machineId: row.machineId,
       cwd: row.cwd,
@@ -264,28 +302,36 @@
   }
 
   function exportCsv() {
-    const head = ['Session', 'Machine', 'Harness', 'Turns', 'Context', 'Last activity', 'State'];
+    const head = [
+      "Session",
+      "Machine",
+      "Harness",
+      "Turns",
+      "Context",
+      "Last activity",
+      "State",
+    ];
     const cell = (value: string) => `"${value.replaceAll('"', '""')}"`;
     const body = filtered.map((row) =>
       [
         row.title,
         row.machine,
         row.harnessLabel,
-        row.turns === null ? '' : String(row.turns),
-        row.contextPct === null ? '' : `${Math.round(row.contextPct)}%`,
-        row.at ? new Date(row.at).toISOString() : '',
+        row.turns === null ? "" : String(row.turns),
+        row.contextPct === null ? "" : `${Math.round(row.contextPct)}%`,
+        row.at ? new Date(row.at).toISOString() : "",
         row.stateLabel,
       ]
         .map(cell)
-        .join(',')
+        .join(",")
     );
-    const blob = new Blob([[head.map(cell).join(','), ...body].join('\n')], {
-      type: 'text/csv;charset=utf-8',
+    const blob = new Blob([[head.map(cell).join(","), ...body].join("\n")], {
+      type: "text/csv;charset=utf-8",
     });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
-    link.download = 'fleet-sessions.csv';
+    link.download = "fleet-sessions.csv";
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -293,23 +339,23 @@
   /* ---- cells --------------------------------------------------------- */
 
   const contextClass = (pct: number | null) =>
-    pct === null ? '' : pct >= 90 ? 'bad' : pct >= 70 ? 'warn' : '';
+    pct === null ? "" : pct >= 90 ? "bad" : pct >= 70 ? "warn" : "";
 
   // The machine-convergence list, dressed the same as every other fleet panel's
   // raised list (FleetAgents.svelte / FleetMemory.svelte's own `panelList`):
   // a raised card at zero padding, each row drawing its own top hairline.
   const machinesPanelClass =
-    'gap-0 overflow-hidden rounded-[var(--radius-panel)] border-0 bg-[var(--surface-raised)] p-0 shadow-[var(--shadow-lifted)] ring-1 ring-[var(--border-hairline)] mt-[var(--space-6)]';
+    "gap-0 overflow-hidden rounded-[var(--radius-panel)] border-0 bg-[var(--surface-raised)] p-0 shadow-[var(--shadow-lifted)] ring-1 ring-[var(--border-hairline)] mt-[var(--space-6)]";
 
   // The status column, dressed on ui/badge: a light tint carries the meaning,
   // deepened ink carries the legibility. Idle carries no fill — absence is idle.
   const pillBase =
-    'h-[var(--c-pill-h)] gap-[var(--c-pill-gap)] rounded-[var(--radius-pill)] border-transparent px-[10px] [font-size:var(--c-pill-fs)] [font-weight:var(--weight-strong)] whitespace-nowrap';
+    "h-[var(--c-pill-h)] gap-[var(--c-pill-gap)] rounded-[var(--radius-pill)] border-transparent px-[10px] [font-size:var(--c-pill-fs)] [font-weight:var(--weight-strong)] whitespace-nowrap";
   const pillTint: Record<PillStatus, string> = {
-    live: 'bg-[var(--status-live-bg)] text-[var(--status-live-ink)]',
-    attn: 'bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]',
-    fail: 'bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]',
-    idle: 'bg-transparent px-0 text-[var(--ink-muted)] [font-weight:var(--weight-medium)]',
+    live: "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]",
+    attn: "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]",
+    fail: "bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]",
+    idle: "bg-transparent px-0 text-[var(--ink-muted)] [font-weight:var(--weight-medium)]",
   };
 </script>
 
@@ -324,7 +370,10 @@
     </div>
 
     <div class="stats">
-      <StatTile label="Sessions" value={String(whiffle.runningInstances.length)} />
+      <StatTile
+        label="Sessions"
+        value={String(whiffle.runningInstances.length)}
+      />
 
       <!-- Needs you is not a readout. It names this surface's job, so it is the
            control that reaches it (DESIGN.md §Open questions): pressing it
@@ -335,29 +384,29 @@
            empty list means "not read yet", and printing 0 there is a false
            all-clear — the one failure the Switch interview names by hand. -->
       <button
-        type="button"
-        class="attn-tile"
-        aria-pressed={stateFilter === 'attn'}
         aria-label={hubLive
           ? `Needs you: ${whiffle.blocked.length}. Show only sessions that need you.`
           : 'Needs you: unknown while reconnecting. Show only sessions that need you.'}
+        aria-pressed={stateFilter === 'attn'}
+        class="attn-tile"
         onclick={() => {
           stateFilter = stateFilter === 'attn' ? '' : 'attn';
           pageNo = 1;
         }}
+        type="button"
       >
         <StatTile
           label="Needs you"
-          value={hubLive ? String(whiffle.blocked.length) : '—'}
-          unit={hubLive ? undefined : 'unknown while reconnecting'}
           tone="attn"
+          unit={hubLive ? undefined : 'unknown while reconnecting'}
+          value={hubLive ? String(whiffle.blocked.length) : '—'}
         />
       </button>
 
       <StatTile
         label="Machines"
-        value={String(whiffle.onlineMachines.length)}
         unit="of {whiffle.machines.length}"
+        value={String(whiffle.onlineMachines.length)}
       />
       <StatTile label="Spend today" value={`$${spend.toFixed(2)}`} />
     </div>
@@ -375,7 +424,7 @@
         <Card.Root class={machinesPanelClass}>
           <ul class="machine-list">
             {#each whiffle.machines as machine (machine.machineId)}
-              <MachineCard {machine} hubBuild={whiffle.hubBuild} />
+              <MachineCard hubBuild={whiffle.hubBuild} {machine} />
             {/each}
           </ul>
         </Card.Root>
@@ -405,7 +454,11 @@
           {/each}
         </div>
         {#if !showAllNotRunning && notRunning.length > CAP}
-          <button type="button" class="show-all" onclick={() => (showAllNotRunning = true)}>
+          <button
+            class="show-all"
+            onclick={() => (showAllNotRunning = true)}
+            type="button"
+          >
             Show all {notRunning.length} sessions
           </button>
         {/if}
@@ -417,16 +470,24 @@
         <div class="empty">
           <b>Can't reach the hub</b>
           <p>Nothing on the fleet can be read until the connection is back.</p>
-          <Button variant="outline" onclick={() => reconnectNow()}>Retry</Button>
+          <Button onclick={() => reconnectNow()} variant="outline"
+            >Retry</Button
+          >
         </div>
       {:else if whiffle.machines.length === 0}
         <div class="empty">
           <b>No machines yet</b>
-          <p>Run <code>whiffle</code> on a machine and it joins this board by itself.</p>
+          <p>
+            Run <code>whiffle</code> on a machine and it joins this board by
+            itself.
+          </p>
         </div>
       {:else if rows.length === 0}
         <div class="empty">
-          <b>{whiffle.onlineMachines.length} machines online, no sessions running.</b>
+          <b
+            >{whiffle.onlineMachines.length}
+            machines online, no sessions running.</b
+          >
           <Button onclick={startSession}>
             <IconPlus />
             Start session
@@ -437,24 +498,29 @@
           <div class="search">
             <span class="lead"><IconSearch /></span>
             <Input
-              class="search-input"
-              bind:value={search}
-              placeholder="Search sessions…"
               aria-label="Search sessions"
+              class="search-input"
               oninput={() => (pageNo = 1)}
+              placeholder="Search sessions…"
+              bind:value={search}
             />
           </div>
 
           <Select.Root
+            onValueChange={(v) => ((machineFilter = v === 'all' ? '' : v), (pageNo = 1))}
             type="single"
             value={machineFilter || 'all'}
-            onValueChange={(v) => ((machineFilter = v === 'all' ? '' : v), (pageNo = 1))}
           >
             <Select.Trigger class="min-w-[168px]">{machineName}</Select.Trigger>
             <Select.Content>
-              <Select.Item value="all" label="All machines">All machines</Select.Item>
+              <Select.Item label="All machines" value="all"
+                >All machines</Select.Item
+              >
               {#each whiffle.machines as m (m.machineId)}
-                <Select.Item value={m.machineId} label={machineLabel(m.hostname)}>
+                <Select.Item
+                  label={machineLabel(m.hostname)}
+                  value={m.machineId}
+                >
                   {machineLabel(m.hostname)}
                 </Select.Item>
               {/each}
@@ -462,34 +528,42 @@
           </Select.Root>
 
           <Select.Root
-            type="single"
-            value={stateFilter || 'all'}
             onValueChange={(v) => (
               (stateFilter = (v === 'all' ? '' : v) as PillStatus | ''), (pageNo = 1)
             )}
+            type="single"
+            value={stateFilter || 'all'}
           >
             <Select.Trigger class="min-w-[140px]">{stateName}</Select.Trigger>
             <Select.Content>
               {#each STATES as s (s.label)}
-                <Select.Item value={s.value || 'all'} label={s.label}>{s.label}</Select.Item>
+                <Select.Item label={s.label} value={s.value || 'all'}
+                  >{s.label}</Select.Item
+                >
               {/each}
             </Select.Content>
           </Select.Root>
 
           <Select.Root
+            onValueChange={(v) => (sortBy = v as 'recent' | 'name')}
             type="single"
             value={sortBy}
-            onValueChange={(v) => (sortBy = v as 'recent' | 'name')}
           >
             <Select.Trigger class="min-w-[150px]">{sortName}</Select.Trigger>
             <Select.Content>
               {#each SORTS as s (s.value)}
-                <Select.Item value={s.value} label={s.label}>{s.label}</Select.Item>
+                <Select.Item label={s.label} value={s.value}
+                  >{s.label}</Select.Item
+                >
               {/each}
             </Select.Content>
           </Select.Root>
 
-          <Button variant="outline" class="ml-auto max-[900px]:ml-0" onclick={exportCsv}>
+          <Button
+            class="ml-auto max-[900px]:ml-0"
+            onclick={exportCsv}
+            variant="outline"
+          >
             <IconDownload />
             Export CSV
           </Button>
@@ -514,10 +588,7 @@
                 <Table.Row>
                   <Table.Cell>
                     <div class="nm">
-                      <span
-                        class="mark m{row.hue}"
-                        aria-hidden="true"
-                      >
+                      <span aria-hidden="true" class="mark m{row.hue}">
                         <HarnessGlyph harness={row.harness} />
                       </span>
                       <a href={row.href}>{row.title}</a>
@@ -536,34 +607,36 @@
                     </span>
                   </Table.Cell>
                   <Table.Cell>
-                    <Badge class={cn(pillBase, pillTint[row.status])}>{row.stateLabel}</Badge>
+                    <Badge class={cn(pillBase, pillTint[row.status])}
+                      >{row.stateLabel}</Badge
+                    >
                   </Table.Cell>
                   <Table.Cell>
                     <div class="act">
                       <Button
-                        variant="outline"
-                        size="icon-sm"
-                        href={row.href}
                         aria-label="Open {row.title}"
+                        href={row.href}
+                        size="icon-sm"
+                        variant="outline"
                       >
                         <IconExternal />
                       </Button>
                       {#if row.instance}
                         <Button
-                          variant="outline"
-                          size="icon-sm"
                           aria-label="Peek {row.title}"
                           onclick={() => setPeeked(row.instance!.id)}
+                          size="icon-sm"
+                          variant="outline"
                         >
                           <IconMaximize />
                         </Button>
                       {/if}
                       {#if row.stored || (row.instance && isResumable(row.instance))}
                         <Button
-                          variant="outline"
-                          size="icon-sm"
                           aria-label="Resume {row.title}"
                           onclick={() => resume(row)}
+                          size="icon-sm"
+                          variant="outline"
                         >
                           <IconPlay />
                         </Button>
@@ -579,7 +652,12 @@
         <div class="foot">
           Showing {paged.length} of {filtered.length}
           <div class="pager">
-            <Pagination.Root count={filtered.length} perPage={PAGE_SIZE} bind:page={pageNo} class="w-fit">
+            <Pagination.Root
+              class="w-fit"
+              count={filtered.length}
+              perPage={PAGE_SIZE}
+              bind:page={pageNo}
+            >
               {#snippet children({ pages, currentPage })}
                 <Pagination.Content>
                   <Pagination.Item>
@@ -592,7 +670,10 @@
                       </Pagination.Item>
                     {:else}
                       <Pagination.Item>
-                        <Pagination.Link page={p} isActive={currentPage === p.value}>
+                        <Pagination.Link
+                          isActive={currentPage === p.value}
+                          page={p}
+                        >
                           {p.value}
                         </Pagination.Link>
                       </Pagination.Item>
@@ -611,7 +692,11 @@
   </div>
 </div>
 
-<SpawnPanel open={spawnOpen} prefill={spawnPrefill} onclose={() => (spawnOpen = false)} />
+<SpawnPanel
+  onclose={() => (spawnOpen = false)}
+  open={spawnOpen}
+  prefill={spawnPrefill}
+/>
 
 <style>
   .board {
@@ -665,13 +750,13 @@
     outline-offset: 2px;
   }
   .attn-tile:hover :global(.st-well),
-  .attn-tile[aria-pressed='true'] :global(.st-well) {
+  .attn-tile[aria-pressed="true"] :global(.st-well) {
     border-color: var(--status-attn-ink);
   }
-  .attn-tile[aria-pressed='true'] :global(.st-well) {
+  .attn-tile[aria-pressed="true"] :global(.st-well) {
     background: var(--status-attn-bg);
   }
-  .attn-tile[aria-pressed='true'] :global(.st-value) {
+  .attn-tile[aria-pressed="true"] :global(.st-value) {
     color: var(--status-attn-ink);
   }
   @media (prefers-reduced-motion: reduce) {
@@ -681,7 +766,6 @@
       transform: none;
     }
   }
-
 
   /* The wrapper is layout-transparent, so an empty queue leaves no gap behind:
      the spacing belongs to the card, which only exists when something waits. */
@@ -775,7 +859,7 @@
   }
 
   /* ui/table, dressed as the ledger grid */
-  .tbl :global([data-slot='table-head']) {
+  .tbl :global([data-slot="table-head"]) {
     height: var(--space-8);
     padding: 0 var(--space-3);
     background: var(--surface-sunken);
@@ -788,23 +872,23 @@
     color: var(--ink-label);
     vertical-align: middle;
   }
-  .tbl :global([data-slot='table-head']:first-child) {
+  .tbl :global([data-slot="table-head"]:first-child) {
     border-radius: var(--radius-tile) 0 0 var(--radius-tile);
   }
-  .tbl :global([data-slot='table-head']:last-child) {
+  .tbl :global([data-slot="table-head"]:last-child) {
     border-radius: 0 var(--radius-tile) var(--radius-tile) 0;
   }
-  .tbl :global([data-slot='table-head'].s-name) {
+  .tbl :global([data-slot="table-head"].s-name) {
     width: 290px;
   }
-  .tbl :global([data-slot='table-head'].s-act) {
+  .tbl :global([data-slot="table-head"].s-act) {
     width: 140px;
   }
-  .tbl :global([data-slot='table-header'] tr),
-  .tbl :global([data-slot='table-row']) {
+  .tbl :global([data-slot="table-header"] tr),
+  .tbl :global([data-slot="table-row"]) {
     border-bottom: 0;
   }
-  .tbl :global(tbody [data-slot='table-cell']) {
+  .tbl :global(tbody [data-slot="table-cell"]) {
     height: 44px;
     padding: 0 var(--space-3);
     border-bottom: 1px solid var(--border-divider);
@@ -812,7 +896,7 @@
     color: var(--ink-row);
     vertical-align: middle;
   }
-  .tbl :global(tbody tr:last-child [data-slot='table-cell']) {
+  .tbl :global(tbody tr:last-child [data-slot="table-cell"]) {
     border-bottom: 0;
   }
   .tbl :global(.num) {
@@ -844,13 +928,27 @@
     display: block;
     color: var(--mark-glyph);
   }
-  .mark.m2 { background-color: var(--mark-2); }
-  .mark.m3 { background-color: var(--mark-3); }
-  .mark.m4 { background-color: var(--mark-4); }
-  .mark.m5 { background-color: var(--mark-5); }
-  .mark.m6 { background-color: var(--mark-6); }
-  .mark.m7 { background-color: var(--mark-7); }
-  .mark.m8 { background-color: var(--mark-8); }
+  .mark.m2 {
+    background-color: var(--mark-2);
+  }
+  .mark.m3 {
+    background-color: var(--mark-3);
+  }
+  .mark.m4 {
+    background-color: var(--mark-4);
+  }
+  .mark.m5 {
+    background-color: var(--mark-5);
+  }
+  .mark.m6 {
+    background-color: var(--mark-6);
+  }
+  .mark.m7 {
+    background-color: var(--mark-7);
+  }
+  .mark.m8 {
+    background-color: var(--mark-8);
+  }
 
   .nm {
     display: flex;

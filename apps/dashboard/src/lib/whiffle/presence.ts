@@ -3,7 +3,7 @@
  * asserted without a DOM: how long the turn has been running, and whether the
  * line is wanted at all.
  */
-import type { Activity } from './activity';
+import type { Activity } from "./activity";
 
 /**
  * beui's `formatElapsed`, unchanged: tenths of a second always, minutes only
@@ -67,7 +67,7 @@ export function showsPresence(input: {
   tailIsThinking: boolean;
 }): boolean {
   return (
-    input.activity === 'working' &&
+    input.activity === "working" &&
     !input.thinkingLive &&
     !input.tailIsThinking &&
     !input.streaming

@@ -24,18 +24,19 @@
  * its own). The CLI still registers the plugin — whiffle does not pretend to
  * own `installed_plugins.json` — but it no longer fetches anything.
  */
-import type { FleetPluginPayload, MarketplacePluginInfo } from '@whiffle/core';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { isAbsolute, join, normalize } from 'node:path';
-import { downloadRepo, get, readTree, unpack } from './skills';
+
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { isAbsolute, join, normalize } from "node:path";
+import type { FleetPluginPayload, MarketplacePluginInfo } from "@whiffle/core";
+import { downloadRepo, get, readTree, unpack } from "./skills";
 
 /** `owner/repo` as a marketplace source names it, with an optional `@ref`. */
 const GITHUB_SLUG = /^([\w.-]+)\/([\w.-]+?)(?:@([\w./-]+))?$/;
 
 /** A plugin id is `name@marketplace`; the name is what the manifest lists. */
-export const pluginName = (id: string): string => id.split('@')[0] ?? id;
-export const pluginMarketplace = (id: string): string => id.split('@')[1] ?? '';
+export const pluginName = (id: string): string => id.split("@")[0] ?? id;
+export const pluginMarketplace = (id: string): string => id.split("@")[1] ?? "";
 
 /**
  * A path inside a downloaded tree, refused if it climbs out of it. The manifest
@@ -44,7 +45,9 @@ export const pluginMarketplace = (id: string): string => id.split('@')[1] ?? '';
  */
 const inside = (root: string, rel: string): string => {
   const joined = normalize(join(root, rel));
-  if (!joined.startsWith(normalize(root))) throw new Error(`${rel} points outside the marketplace`);
+  if (!joined.startsWith(normalize(root))) {
+    throw new Error(`${rel} points outside the marketplace`);
+  }
   return joined;
 };
 
@@ -57,22 +60,36 @@ interface Manifest {
  * The marketplace repo, downloaded. Sources the hub understands are the ones a
  * marketplace is actually declared with: an `owner/repo` slug and a git URL.
  */
-const marketplaceRoot = async (source: string, work: string): Promise<string> => {
+const marketplaceRoot = async (
+  source: string,
+  work: string
+): Promise<string> => {
   const trimmed = source.trim();
   const slug = GITHUB_SLUG.exec(trimmed);
-  if (slug?.[1] && slug[2]) return await downloadRepo(slug[1], slug[2], slug[3], work);
+  if (slug?.[1] && slug[2]) {
+    return await downloadRepo(slug[1], slug[2], slug[3], work);
+  }
 
   const url = /^https?:\/\//.test(trimmed) ? new URL(trimmed) : undefined;
-  if (url?.hostname === 'github.com') {
-    const [owner, repo] = url.pathname.replace(/^\/+/, '').replace(/\.git$/, '').split('/');
-    if (owner && repo) return await downloadRepo(owner, repo, undefined, work);
+  if (url?.hostname === "github.com") {
+    const [owner, repo] = url.pathname
+      .replace(/^\/+/, "")
+      .replace(/\.git$/, "")
+      .split("/");
+    if (owner && repo) {
+      return await downloadRepo(owner, repo, undefined, work);
+    }
   }
   if (url) {
     const response = await get(url.href);
-    if (!response.ok) throw new Error(`${url.href} answered ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`${url.href} answered ${response.status}`);
+    }
     return await unpack(response, work, url.pathname);
   }
-  throw new Error(`${source} is not a marketplace source whiffle knows how to fetch`);
+  throw new Error(
+    `${source} is not a marketplace source whiffle knows how to fetch`
+  );
 };
 
 /**
@@ -87,48 +104,68 @@ const pluginRoot = async (
   const source = entry.source;
 
   // Vendored: a path relative to the marketplace, already downloaded.
-  if (typeof source === 'string') {
-    if (isAbsolute(source)) throw new Error(`${entry.name}'s source is an absolute path`);
+  if (typeof source === "string") {
+    if (isAbsolute(source)) {
+      throw new Error(`${entry.name}'s source is an absolute path`);
+    }
     return inside(marketplace, source);
   }
-  if (!source || typeof source !== 'object') {
+  if (!source || typeof source !== "object") {
     throw new Error(`${entry.name} has no source whiffle can read`);
   }
   const spec = source as Record<string, unknown>;
-  const kind = typeof spec.source === 'string' ? spec.source : undefined;
+  const kind = typeof spec.source === "string" ? spec.source : undefined;
 
-  if (kind === 'github' && typeof spec.repo === 'string') {
-    const [owner, repo] = spec.repo.split('/');
-    if (!owner || !repo) throw new Error(`${entry.name}'s repo "${spec.repo}" is not owner/name`);
-    const ref = typeof spec.ref === 'string' ? spec.ref : undefined;
-    return await downloadRepo(owner, repo, ref, await mkdtemp(join(work, 'p-')));
+  if (kind === "github" && typeof spec.repo === "string") {
+    const [owner, repo] = spec.repo.split("/");
+    if (!(owner && repo)) {
+      throw new Error(`${entry.name}'s repo "${spec.repo}" is not owner/name`);
+    }
+    const ref = typeof spec.ref === "string" ? spec.ref : undefined;
+    return await downloadRepo(
+      owner,
+      repo,
+      ref,
+      await mkdtemp(join(work, "p-"))
+    );
   }
 
   // `git-subdir` and `url` both name an archive; the first also names a path in it.
-  const href = typeof spec.url === 'string' ? spec.url : undefined;
-  if ((kind === 'git-subdir' || kind === 'url') && href) {
-    const scratch = await mkdtemp(join(work, 'p-'));
+  const href = typeof spec.url === "string" ? spec.url : undefined;
+  if ((kind === "git-subdir" || kind === "url") && href) {
+    const scratch = await mkdtemp(join(work, "p-"));
     const url = new URL(href);
     let root: string;
-    if (url.hostname === 'github.com') {
-      const [owner, repo] = url.pathname.replace(/^\/+/, '').replace(/\.git$/, '').split('/');
-      if (!owner || !repo) throw new Error(`${href} is not a github repository`);
-      const ref = typeof spec.sha === 'string' ? spec.sha : undefined;
+    if (url.hostname === "github.com") {
+      const [owner, repo] = url.pathname
+        .replace(/^\/+/, "")
+        .replace(/\.git$/, "")
+        .split("/");
+      if (!(owner && repo)) {
+        throw new Error(`${href} is not a github repository`);
+      }
+      const ref = typeof spec.sha === "string" ? spec.sha : undefined;
       root = await downloadRepo(owner, repo, ref, scratch);
     } else {
       const response = await get(href);
-      if (!response.ok) throw new Error(`${href} answered ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`${href} answered ${response.status}`);
+      }
       root = await unpack(response, scratch, url.pathname);
     }
-    const path = typeof spec.path === 'string' ? spec.path : undefined;
+    const path = typeof spec.path === "string" ? spec.path : undefined;
     return path ? inside(root, path) : root;
   }
 
-  throw new Error(`${entry.name}'s source kind "${kind ?? 'unknown'}" is not one whiffle fetches`);
+  throw new Error(
+    `${entry.name}'s source kind "${kind ?? "unknown"}" is not one whiffle fetches`
+  );
 };
 
 /** One resolved plugin, or the sentence saying why it is not. */
-export type ResolvedPlugin = FleetPluginPayload | { name: string; error: string };
+export type ResolvedPlugin =
+  | FleetPluginPayload
+  | { name: string; error: string };
 
 /**
  * Every wanted plugin of one marketplace, resolved to files.
@@ -142,23 +179,30 @@ export const resolveMarketplacePlugins = async (
   marketplaceSource: string,
   names: readonly string[]
 ): Promise<ResolvedPlugin[]> => {
-  if (names.length === 0) return [];
-  const work = await mkdtemp(join(tmpdir(), 'whiffle-plugins-'));
+  if (names.length === 0) {
+    return [];
+  }
+  const work = await mkdtemp(join(tmpdir(), "whiffle-plugins-"));
   try {
     const root = await marketplaceRoot(marketplaceSource, work);
-    const manifestPath = join(root, '.claude-plugin', 'marketplace.json');
-    const manifest = (await Bun.file(manifestPath).json().catch(() => undefined)) as
-      | Manifest
-      | undefined;
+    const manifestPath = join(root, ".claude-plugin", "marketplace.json");
+    const manifest = (await Bun.file(manifestPath)
+      .json()
+      .catch(() => undefined)) as Manifest | undefined;
     if (!manifest?.plugins) {
-      throw new Error(`${marketplaceSource} has no .claude-plugin/marketplace.json whiffle could read`);
+      throw new Error(
+        `${marketplaceSource} has no .claude-plugin/marketplace.json whiffle could read`
+      );
     }
 
     const resolved: ResolvedPlugin[] = [];
     for (const name of names) {
       const entry = manifest.plugins.find((plugin) => plugin.name === name);
       if (!entry) {
-        resolved.push({ name, error: `${marketplaceSource} lists no plugin called ${name}` });
+        resolved.push({
+          name,
+          error: `${marketplaceSource} lists no plugin called ${name}`,
+        });
         continue;
       }
       try {
@@ -166,7 +210,10 @@ export const resolveMarketplacePlugins = async (
         const { files, hash, bytes } = await readTree(dir, `plugin ${name}`);
         resolved.push({ name, marketplace, hash, bytes, files });
       } catch (error) {
-        resolved.push({ name, error: error instanceof Error ? error.message : String(error) });
+        resolved.push({
+          name,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
     return resolved;

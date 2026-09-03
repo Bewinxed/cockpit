@@ -8,7 +8,7 @@
    * length and drowned the ledger. Settled traces clamp to four lines behind a
    * quiet toggle; a live one stays open so its tail keeps arriving in view.
    */
-  import { IconChevronRight } from '$lib/icons';
+  import { IconChevronRight } from "$lib/icons";
 
   let { text, live = false }: { text: string; live?: boolean } = $props();
 
@@ -16,7 +16,7 @@
   let bodyEl = $state<HTMLElement | null>(null);
   let overflows = $state(false);
 
-  const clamped = $derived(!live && !expanded);
+  const clamped = $derived(!(live || expanded));
 
   /* Only a trace that is actually cut off earns a toggle — measured, because
      four lines of wrapped prose is not a character count. */
@@ -25,18 +25,33 @@
     void expanded;
     void live;
     const el = bodyEl;
-    if (!el) return;
+    if (!el) {
+      return;
+    }
     overflows = expanded || el.scrollHeight - el.clientHeight > 1;
   });
 </script>
 
 <div class="think">
-  <div class="body" class:clamp={clamped} bind:this={bodyEl}
-    >{#if text}{text}{:else}Thinking…{/if}{#if live}<span class="caret"></span>{/if}</div>
+  <div class="body" bind:this={bodyEl} class:clamp={clamped}>
+    {#if text}
+      {text}
+    {:else}
+      Thinking…
+    {/if}
+    {#if live}
+      <span class="caret"></span>
+    {/if}
+  </div>
   {#if !live && text && overflows}
-    <button type="button" class="more" aria-expanded={expanded} onclick={() => (expanded = !expanded)}>
-      <span class="chev" class:open={expanded}><IconChevronRight /></span
-      >{expanded ? 'Collapse' : 'Show all reasoning'}
+    <button
+      aria-expanded={expanded}
+      class="more"
+      onclick={() => (expanded = !expanded)}
+      type="button"
+    >
+      <span class="chev" class:open={expanded}><IconChevronRight /></span>
+      {expanded ? 'Collapse' : 'Show all reasoning'}
     </button>
   {/if}
 </div>

@@ -10,16 +10,18 @@
  * Kept per browser rather than on the hub. It is a record of what *this* reader
  * has been looking at, not a property of the fleet.
  */
-export const WORKING_SET_KEY = 'whiffle-working-set';
+export const WORKING_SET_KEY = "whiffle-working-set";
 const KEY = WORKING_SET_KEY;
 
 /** Beyond this it stops being a working set and becomes history again. */
 const LIMIT = 10;
 
 export interface Visit {
-  id: string;
   /** Only eviction reads this: the tab that goes is the coldest one. */
   at: number;
+  cwd?: string;
+  harness?: string;
+  id: string;
   /**
    * Where a STORED session was last known to live. Not part of its address —
    * a tab link is the bare `/session/{id}`, and the hub locates the id across
@@ -29,8 +31,6 @@ export interface Visit {
    * leave these undefined; their row on the hub says all of this.
    */
   machine?: string | null;
-  cwd?: string;
-  harness?: string;
   /**
    * What this conversation resolved to being CALLED, last time a strip
    * resolved it. A tab is drawn before the fleet and the transcript have
@@ -44,17 +44,22 @@ export interface Visit {
 
 /** The last-known machine, folder and harness of a stored session's tab. */
 export interface VisitContext {
-  machine: string;
   cwd: string;
   harness: string;
+  machine: string;
 }
 
 const parse = (raw: string | null | undefined): Visit[] => {
-  if (!raw) return [];
+  if (!raw) {
+    return [];
+  }
   try {
     const parsed = JSON.parse(raw) as Visit[];
     return Array.isArray(parsed)
-      ? parsed.filter((visit) => typeof visit?.id === 'string' && typeof visit?.at === 'number')
+      ? parsed.filter(
+          (visit) =>
+            typeof visit?.id === "string" && typeof visit?.at === "number"
+        )
       : [];
   } catch {
     return [];
@@ -63,7 +68,9 @@ const parse = (raw: string | null | undefined): Visit[] => {
 
 const load = (): Visit[] => {
   try {
-    if (typeof localStorage !== 'undefined') return parse(localStorage.getItem(KEY));
+    if (typeof localStorage !== "undefined") {
+      return parse(localStorage.getItem(KEY));
+    }
   } catch {
     // A browser that will not read storage starts the set over.
   }
@@ -73,7 +80,9 @@ const load = (): Visit[] => {
 const visits = $state<Visit[]>(load());
 
 const save = () => {
-  if (typeof localStorage === 'undefined') return;
+  if (typeof localStorage === "undefined") {
+    return;
+  }
   try {
     localStorage.setItem(KEY, JSON.stringify(visits));
   } catch {
@@ -91,14 +100,25 @@ export const workingSet = {
       session, whose row on the hub answers instead. */
   contextOf(id: string): VisitContext | null {
     const visit = visits.find((v) => v.id === id);
-    if (!visit || !visit.machine) return null;
-    return { machine: visit.machine, cwd: visit.cwd ?? '', harness: visit.harness ?? 'claude' };
+    if (!(visit && visit.machine)) {
+      return null;
+    }
+    return {
+      machine: visit.machine,
+      cwd: visit.cwd ?? "",
+      harness: visit.harness ?? "claude",
+    };
   },
 
   /** Notes that a conversation is on screen, keeping where a stored session
       was last known to live so its tab can be named before the fleet answers. */
-  visit(id: string, ctx?: { machine?: string | null; cwd?: string; harness?: string }): void {
-    if (!id) return;
+  visit(
+    id: string,
+    ctx?: { machine?: string | null; cwd?: string; harness?: string }
+  ): void {
+    if (!id) {
+      return;
+    }
     const at = Date.now();
     const existing = visits.findIndex((visit) => visit.id === id);
     // Coming back to a tab only re-dates it. Moving it is the re-rank this
@@ -113,7 +133,9 @@ export const workingSet = {
     if (visits.length > LIMIT) {
       let coldest = 0;
       for (let i = 1; i < visits.length; i++) {
-        if (visits[i].at < visits[coldest].at) coldest = i;
+        if (visits[i].at < visits[coldest].at) {
+          coldest = i;
+        }
       }
       visits.splice(coldest, 1);
     }
@@ -132,9 +154,13 @@ export const workingSet = {
    */
   setTitle(id: string, title: string): void {
     const at = visits.findIndex((visit) => visit.id === id);
-    if (at === -1) return;
+    if (at === -1) {
+      return;
+    }
     const named = title.trim();
-    if (!named || visits[at].title === named) return;
+    if (!named || visits[at].title === named) {
+      return;
+    }
     visits[at].title = named;
     save();
   },
@@ -142,7 +168,9 @@ export const workingSet = {
   /** Drops a conversation that no longer exists, so it cannot be swiped to. */
   forget(id: string): void {
     const at = visits.findIndex((visit) => visit.id === id);
-    if (at === -1) return;
+    if (at === -1) {
+      return;
+    }
     visits.splice(at, 1);
     save();
   },
@@ -158,10 +186,14 @@ export const workingSet = {
     const reordered: Visit[] = [];
     for (const id of ids) {
       const visit = known.get(id);
-      if (visit) reordered.push(visit);
+      if (visit) {
+        reordered.push(visit);
+      }
     }
     for (const visit of visits) {
-      if (!ids.includes(visit.id)) reordered.push(visit);
+      if (!ids.includes(visit.id)) {
+        reordered.push(visit);
+      }
     }
     visits.splice(0, visits.length, ...reordered);
     save();
@@ -181,9 +213,13 @@ export const workingSet = {
   step(from: string, by: number, fallback: string[]): string | null {
     const open = this.order.filter((id) => fallback.includes(id));
     const order = open.length > 1 ? open : fallback;
-    if (order.length < 2) return null;
+    if (order.length < 2) {
+      return null;
+    }
     const at = order.indexOf(from);
-    if (at === -1) return order[0] ?? null;
+    if (at === -1) {
+      return order[0] ?? null;
+    }
     // Wraps, because on a phone there is no edge to see and continuing round is
     // the shortest way back to the other end of a short list.
     return order[(at + by + order.length) % order.length] ?? null;

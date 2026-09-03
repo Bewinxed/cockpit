@@ -3,25 +3,31 @@
    * Right-click on a running session or a side quest. Keep and Discard are what a
    * side quest is waiting on, so they only appear on one (NEW.md §1).
    */
-  import type { Snippet } from 'svelte';
-  import { goto } from '$app/navigation';
+  import type { Snippet } from "svelte";
+  import { goto } from "$app/navigation";
+  import * as ContextMenu from "$lib/components/ui/context-menu";
   import {
-    IconCopy,
     IconCheck,
+    IconCopy,
     IconExternal,
     IconFolder,
     IconPin,
     IconPinFilled,
     IconStop,
     IconTrash,
-  } from '$lib/icons';
-  import * as ContextMenu from '$lib/components/ui/context-menu';
-  import { confirm } from './confirm.svelte';
-  import { discardSession, keepSession, stopSession, type InstanceRow } from './client.svelte';
-  import { copyToClipboard } from './copy';
-  import { rail } from './rail.svelte';
+  } from "$lib/icons";
+  import {
+    discardSession,
+    type InstanceRow,
+    keepSession,
+    stopSession,
+  } from "./client.svelte";
+  import { confirm } from "./confirm.svelte";
+  import { copyToClipboard } from "./copy";
+  import { rail } from "./rail.svelte";
 
   interface Props {
+    children: Snippet;
     instance: InstanceRow;
     /**
      * Set only where the rail has flattened this session's directory out of
@@ -29,25 +35,26 @@
      * grouped, and offering it the verb would say nothing.
      */
     ongroup?: () => void;
-    children: Snippet;
   }
 
   let { instance, ongroup, children }: Props = $props();
 
   const href = $derived(`/session/${instance.id}`);
-  const scratch = $derived(instance.kind === 'scratch');
-  const pinned = $derived(rail.isPinned('session', instance.id));
+  const scratch = $derived(instance.kind === "scratch");
+  const pinned = $derived(rail.isPinned("session", instance.id));
 
   let busy = $state(false);
 
   async function askDiscard() {
     const ok = await confirm({
-      title: 'Discard this side quest?',
-      body: 'The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good.',
-      confirmLabel: 'Discard side quest',
+      title: "Discard this side quest?",
+      body: "The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good.",
+      confirmLabel: "Discard side quest",
       destructive: true,
     });
-    if (!ok) return;
+    if (!ok) {
+      return;
+    }
     busy = true;
     try {
       await discardSession(instance.id, instance.machineId);
@@ -67,7 +74,9 @@
       <IconExternal />
       Open
     </ContextMenu.Item>
-    <ContextMenu.Item onSelect={() => stopSession(instance.id, instance.machineId)}>
+    <ContextMenu.Item
+      onSelect={() => stopSession(instance.id, instance.machineId)}
+    >
       <IconStop />
       Stop
     </ContextMenu.Item>
@@ -93,7 +102,7 @@
         <IconCheck />
         Keep
       </ContextMenu.Item>
-      <ContextMenu.Item variant="destructive" onSelect={askDiscard}>
+      <ContextMenu.Item onSelect={askDiscard} variant="destructive">
         <IconTrash />
         Discard
       </ContextMenu.Item>
@@ -101,11 +110,16 @@
 
     <ContextMenu.Separator />
 
-    <ContextMenu.Item disabled={!instance.cwd} onSelect={() => copyToClipboard('Path', instance.cwd)}>
+    <ContextMenu.Item
+      disabled={!instance.cwd}
+      onSelect={() => copyToClipboard('Path', instance.cwd)}
+    >
       <IconCopy />
       Copy path
     </ContextMenu.Item>
-    <ContextMenu.Item onSelect={() => copyToClipboard('Session id', instance.id)}>
+    <ContextMenu.Item
+      onSelect={() => copyToClipboard('Session id', instance.id)}
+    >
       <IconCopy />
       Copy id
     </ContextMenu.Item>

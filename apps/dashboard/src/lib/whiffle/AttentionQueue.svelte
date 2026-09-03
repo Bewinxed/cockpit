@@ -1,4 +1,11 @@
 <script lang="ts">
+  import { quintOut } from "svelte/easing";
+  import { fly } from "svelte/transition";
+  import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
+  import { Card } from "$lib/components/ui/card";
+  import { isTyping } from "$lib/utils/typing";
+  import ActivityDot from "./ActivityDot.svelte";
   /**
    * Everything in the fleet parked on a human, in one calm list — the Whiffle
    * fleet view's whole answer to "what needs me right now". One thing parks on
@@ -24,25 +31,19 @@
    * calmly instead of bracing for six red banners.
    */
   import {
-    whiffle,
-    resolvePermission,
-    permissionAnswer,
     type BlockedRequest,
     type PermissionAnswer,
-  } from './client.svelte';
-  import { permissionSummary } from './permission-summary';
-  import { questionsOf } from './question';
-  import { isTyping } from '$lib/utils/typing';
-  import { reducedMotion } from './motion.svelte';
-  import ActivityDot from './ActivityDot.svelte';
-  import { Badge } from '$lib/components/ui/badge';
-  import { Button } from '$lib/components/ui/button';
-  import { Card } from '$lib/components/ui/card';
-  import { fly } from 'svelte/transition';
-  import { quintOut } from 'svelte/easing';
+    permissionAnswer,
+    resolvePermission,
+    whiffle,
+  } from "./client.svelte";
+  import { reducedMotion } from "./motion.svelte";
+  import { permissionSummary } from "./permission-summary";
+  import { questionsOf } from "./question";
 
   /** A request only ever belongs to one session, but the pair is the honest key. */
-  const rowKey = (item: BlockedRequest): string => `${item.instanceId}:${item.request.requestId}`;
+  const rowKey = (item: BlockedRequest): string =>
+    `${item.instanceId}:${item.request.requestId}`;
 
   /**
    * When this tab first saw each parked ask. Module-scoped so the clock keeps
@@ -64,7 +65,11 @@
   const queue = $derived.by(() => {
     const at = Date.now();
     const live = new Set(blocked.map(rowKey));
-    for (const key of firstSeen.keys()) if (!live.has(key)) firstSeen.delete(key);
+    for (const key of firstSeen.keys()) {
+      if (!live.has(key)) {
+        firstSeen.delete(key);
+      }
+    }
 
     const rows = blocked.map((item) => {
       const key = rowKey(item);
@@ -80,7 +85,7 @@
         since,
         isQuestion: Boolean(questions),
         summary: questions
-          ? questions.map((question) => question.question).join(' · ')
+          ? questions.map((question) => question.question).join(" · ")
           : permissionSummary(item.request.toolName, item.request.input),
       };
     });
@@ -93,11 +98,17 @@
   /** "waiting 4m" — deliberately vague under a minute, never a fake precision. */
   function waited(since: number): string {
     const seconds = Math.max(0, Math.floor((now - since) / 1000));
-    if (seconds < 60) return 'waiting';
+    if (seconds < 60) {
+      return "waiting";
+    }
     const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `waiting ${minutes}m`;
+    if (minutes < 60) {
+      return `waiting ${minutes}m`;
+    }
     const hours = Math.floor(minutes / 60);
-    return hours < 24 ? `waiting ${hours}h` : `waiting ${Math.floor(hours / 24)}d`;
+    return hours < 24
+      ? `waiting ${hours}h`
+      : `waiting ${Math.floor(hours / 24)}d`;
   }
 
   function answer(item: BlockedRequest, kind: PermissionAnswer): void {
@@ -118,35 +129,48 @@
    * a shortcut here, and neither does a row while the reader is typing
    * somewhere else.
    */
-  function onKeydown(event: KeyboardEvent, item: BlockedRequest, isQuestion: boolean): void {
-    if (isQuestion || isTyping()) return;
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
+  function onKeydown(
+    event: KeyboardEvent,
+    item: BlockedRequest,
+    isQuestion: boolean
+  ): void {
+    if (isQuestion || isTyping()) {
+      return;
+    }
+    if (event.metaKey || event.ctrlKey || event.altKey) {
+      return;
+    }
     const key = event.key.toLowerCase();
-    if (key === 'y' || key === 'a') {
+    if (key === "y" || key === "a") {
       event.preventDefault();
-      answer(item, 'allow');
-    } else if (key === 'n' || key === 'd') {
+      answer(item, "allow");
+    } else if (key === "n" || key === "d") {
       event.preventDefault();
-      answer(item, 'deny');
+      answer(item, "deny");
     }
   }
 </script>
 
 {#if total > 0}
   <Card
-    class="flex flex-col gap-0 rounded-[var(--radius-panel)] py-0 shadow-[var(--shadow-lifted)] [--card-spacing:var(--space-4)]"
     aria-labelledby="attention-queue-heading"
+    class="flex flex-col gap-0 rounded-[var(--radius-panel)] py-0 shadow-[var(--shadow-lifted)] [--card-spacing:var(--space-4)]"
   >
     <header
       class="flex flex-wrap items-center gap-[var(--space-2)] px-[var(--space-4)] pt-[var(--space-4)] pb-[var(--space-2)]"
     >
-      <h2 id="attention-queue-heading" class="text-body font-medium text-foreground">Needs you</h2>
+      <h2
+        class="text-body font-medium text-foreground"
+        id="attention-queue-heading"
+      >
+        Needs you
+      </h2>
       <!-- Needs-you is not failure: --status-attn-* is the fleet's one hue for
            "a person is holding this up" (DESIGN.md Never #3 reserves red). -->
       <Badge
-        variant="secondary"
-        class="min-w-5 bg-[var(--status-attn-bg)] px-1.5 !text-[color:var(--status-attn-ink)] tabular-nums"
         aria-label="{total} {total === 1 ? 'session needs' : 'sessions need'} you"
+        class="min-w-5 bg-[var(--status-attn-bg)] px-1.5 !text-[color:var(--status-attn-ink)] tabular-nums"
+        variant="secondary"
       >
         {total}
       </Badge>
@@ -167,8 +191,8 @@
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-baseline gap-x-2">
               <a
-                href="/session/{item.instanceId}"
                 class="text-body truncate font-medium text-foreground transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                href="/session/{item.instanceId}"
                 onkeydown={(event) => onKeydown(event, item, entry.isQuestion)}
               >
                 {item.hostname}
@@ -178,7 +202,9 @@
                      machine apart — TX-02, like every other path in the app. -->
                 <span class="text-caption truncate font-mono">{item.cwd}</span>
               {/if}
-              <span class="text-micro shrink-0 text-muted-foreground tabular-nums">
+              <span
+                class="text-micro shrink-0 text-muted-foreground tabular-nums"
+              >
                 {waited(entry.since)}
               </span>
             </div>
@@ -193,26 +219,33 @@
             class="flex w-full shrink-0 items-center justify-end gap-[var(--space-1)] sm:w-auto sm:pt-0.5"
           >
             {#if entry.isQuestion}
-              <Button size="sm" href="/session/{item.instanceId}">Answer</Button>
+              <Button href="/session/{item.instanceId}" size="sm"
+                >Answer</Button
+              >
             {:else}
               <Button
-                size="sm"
                 aria-label="Approve {entry.summary} on {item.hostname}"
-                onkeydown={(event: KeyboardEvent) => onKeydown(event, item, false)}
                 onclick={() => answer(item, 'allow')}
+                onkeydown={(event: KeyboardEvent) => onKeydown(event, item, false)}
+                size="sm"
               >
                 Approve
               </Button>
               <Button
+                aria-label="Deny {entry.summary} on {item.hostname}"
+                onclick={() => answer(item, 'deny')}
+                onkeydown={(event: KeyboardEvent) => onKeydown(event, item, false)}
                 size="sm"
                 variant="ghost"
-                aria-label="Deny {entry.summary} on {item.hostname}"
-                onkeydown={(event: KeyboardEvent) => onKeydown(event, item, false)}
-                onclick={() => answer(item, 'deny')}
               >
                 Deny
               </Button>
-              <Button size="sm" variant="ghost" href="/session/{item.instanceId}">Open</Button>
+              <Button
+                href="/session/{item.instanceId}"
+                size="sm"
+                variant="ghost"
+                >Open</Button
+              >
             {/if}
           </div>
         </li>
@@ -224,7 +257,7 @@
 <style>
   /* Coarse pointers get the 44px floor DESIGN.md asks for at every width. */
   @media (pointer: coarse) {
-    li :global([data-slot='button']) {
+    li :global([data-slot="button"]) {
       min-height: 44px;
       min-width: 44px;
     }

@@ -6,15 +6,15 @@
    * grammar the highlighter does not carry falls back to a plain mono well.
    */
   import {
+    type AgentCodeTokenLines,
+    type AgentCodeTokens,
     agentCodeLanguage,
     cachedTokens,
     paintableTokens,
     tokenize,
-    type AgentCodeTokenLines,
-    type AgentCodeTokens,
-  } from './agent-code';
+  } from "./agent-code";
 
-  let { text, language = undefined }: { text: string; language?: string | null } = $props();
+  let { text, language }: { text: string; language?: string | null } = $props();
 
   const lang = $derived(agentCodeLanguage(language));
 
@@ -23,15 +23,25 @@
   // The tokens that may paint right now: the ones in hand while a fresh batch is
   // pending, so a streaming block stays coloured between frames.
   const lines = $derived.by<AgentCodeTokenLines | null>(() => {
-    if (!lang) return null;
-    return paintableTokens(painted, text, lang) ?? cachedTokens(text, lang)?.lines ?? null;
+    if (!lang) {
+      return null;
+    }
+    return (
+      paintableTokens(painted, text, lang) ??
+      cachedTokens(text, lang)?.lines ??
+      null
+    );
   });
 
   $effect(() => {
-    if (!lang) return;
+    if (!lang) {
+      return;
+    }
     let live = true;
     void tokenize(text, lang).then((result) => {
-      if (live) painted = result;
+      if (live) {
+        painted = result;
+      }
     });
     return () => {
       live = false;

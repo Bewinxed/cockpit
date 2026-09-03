@@ -31,15 +31,14 @@ import type {
   StopPayload,
   SupervisorEvent,
   UsageLimitsReading,
-} from '@whiffle/core';
-import { classifyCommand, RESOLVE_PERMISSION, WHIFFLE_SCRATCH_TAG } from '@whiffle/core';
-import { goto } from '$app/navigation';
-import { toast } from 'svelte-sonner';
-
-import type { SubagentState } from '$lib/utils/flow-types';
-import type { Activity } from './activity';
-import { activityOf, runningSubagents } from './activity';
-import type { DelegateAskEvent, DelegateEvent, Message } from './types';
+} from "@whiffle/core";
+import {
+  classifyCommand,
+  RESOLVE_PERMISSION,
+  WHIFFLE_SCRATCH_TAG,
+} from "@whiffle/core";
+import { toast } from "svelte-sonner";
+import { goto } from "$app/navigation";
 import {
   CONTROL_TIMEOUT_MS,
   DISCARD_TIMEOUT_MS,
@@ -50,9 +49,11 @@ import {
   WS_RECONNECT_BASE_DELAY,
   WS_RECONNECT_MAX_ATTEMPTS,
   WS_RECONNECT_MAX_DELAY,
-} from '$lib/config';
-import type { ToolGlance } from './frames';
-import { newId } from './id';
+} from "$lib/config";
+import type { SubagentState } from "$lib/utils/flow-types";
+import type { Activity } from "./activity";
+import { activityOf, runningSubagents } from "./activity";
+import type { ToolGlance } from "./frames";
 import {
   applyBranchEvent,
   applyToolResult,
@@ -68,9 +69,15 @@ import {
   suppressesTaskLine,
   turnBoundaries,
   turnStart,
-} from './frames';
-import { ingestQueued, retireQueued } from './queue';
-import type { CommandRecord, SettleStage, StreamEffects, StreamHost } from './stream';
+} from "./frames";
+import { newId } from "./id";
+import { ingestQueued, retireQueued } from "./queue";
+import type {
+  CommandRecord,
+  SettleStage,
+  StreamEffects,
+  StreamHost,
+} from "./stream";
 import {
   createStreamState,
   disarmCommandSweep,
@@ -80,18 +87,27 @@ import {
   latestCommand,
   noteCapabilities,
   noteDisconnect,
-  sessionCommands,
   SETTLED_COMMAND_LIMIT,
   SETTLED_COMMAND_TTL_MS,
+  sessionCommands,
   streamCarries,
   submitCommand as submitTrackedCommand,
   sweepCommands,
   syncStreamSubscriptions,
-} from './stream';
-import { invalidateTasks, refreshTasks, TASK_LEDGER_TOOLS } from './tasks.svelte';
-import { workingSet } from './working-set.svelte';
+} from "./stream";
+import {
+  invalidateTasks,
+  refreshTasks,
+  TASK_LEDGER_TOOLS,
+} from "./tasks.svelte";
+import type { DelegateAskEvent, DelegateEvent, Message } from "./types";
+import { workingSet } from "./working-set.svelte";
 
-export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
+export type ConnectionStatus =
+  | "connecting"
+  | "connected"
+  | "disconnected"
+  | "error";
 
 /**
  * What to *tell a reader* about the hub, which is coarser than the socket's own
@@ -99,7 +115,7 @@ export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'er
  * through and is never a fault; `unreachable` is one — the hub is a process on
  * somebody's machine, and it being off is the ordinary case, not the exotic one.
  */
-export type HubState = 'connected' | 'connecting' | 'unreachable';
+export type HubState = "connected" | "connecting" | "unreachable";
 
 /** A machine from the hub registry (`GET /api/agents`, and `instances` frames). */
 export type Machine = AgentRow;
@@ -109,16 +125,16 @@ export type { InstanceRow };
 
 /** A project the hub knows about (`GET /api/projects`). */
 export interface ProjectRow {
+  createdAt: string;
+  cwd: string;
   id: string;
   machineId: string;
   name: string;
-  cwd: string;
-  createdAt: string;
 }
 
 /** Only a session the hub can still reach is live; the rest is history. */
 const isLive = (row: InstanceRow): boolean =>
-  row.status === 'running' || row.status === 'starting';
+  row.status === "running" || row.status === "starting";
 
 /**
  * A session that stays on the board until the operator discards it: live work,
@@ -128,7 +144,10 @@ const isLive = (row: InstanceRow): boolean =>
  * were wrong (see {@link isStale}).
  */
 const isListed = (row: InstanceRow): boolean =>
-  isLive(row) || row.status === 'error' || row.status === 'sleeping' || row.status === 'unknown';
+  isLive(row) ||
+  row.status === "error" ||
+  row.status === "sleeping" ||
+  row.status === "unknown";
 
 /**
  * A session whose owning machine the hub cannot currently reach — the
@@ -137,7 +156,7 @@ const isListed = (row: InstanceRow): boolean =>
  * machine; the hub genuinely does not know, which is a different claim from
  * every other status and must never be flattened into "idle".
  */
-export const isStale = (row: InstanceRow): boolean => row.status === 'unknown';
+export const isStale = (row: InstanceRow): boolean => row.status === "unknown";
 
 /**
  * A session whose process is gone but whose conversation is not: sleeping, not
@@ -149,7 +168,8 @@ export const isStale = (row: InstanceRow): boolean => row.status === 'unknown';
  * deliberately ended, but nothing stops it being picked back up.
  */
 export const isResumable = (row: InstanceRow): boolean =>
-  row.status === 'sleeping' || (row.status === 'stopped' && Boolean(row.sessionId));
+  row.status === "sleeping" ||
+  (row.status === "stopped" && Boolean(row.sessionId));
 
 /**
  * A session that died of something, and is not coming back by being opened.
@@ -157,7 +177,7 @@ export const isResumable = (row: InstanceRow): boolean =>
  * whenever the hub asserts it — so there is no longer a resumable marker to
  * carve back out of it.
  */
-export const isFailed = (row: InstanceRow): boolean => row.status === 'error';
+export const isFailed = (row: InstanceRow): boolean => row.status === "error";
 
 /** A side quest's worktree sits under the project's checkout, so it counts as in it. */
 const under = (root: string, path: string): boolean =>
@@ -168,24 +188,25 @@ const under = (root: string, path: string): boolean =>
  * tags its SDK session on the way out to say so. The tag is the whole test —
  * the directory a session ran in says nothing about whether it was a quest.
  */
-const listedInHistory = (info: SDKSessionInfo): boolean => info.tag !== WHIFFLE_SCRATCH_TAG;
+const listedInHistory = (info: SDKSessionInfo): boolean =>
+  info.tag !== WHIFFLE_SCRATCH_TAG;
 
 export interface PendingPermission {
-  requestId: string;
-  instanceId: string;
-  toolName: string;
   input: Record<string, unknown>;
-  suggestions?: PermissionUpdate[];
+  instanceId: string;
+  requestId: string;
   /** Set when the hub routed the ask to its parent rather than to the user. */
-  routedTo?: 'parent';
+  routedTo?: "parent";
+  suggestions?: PermissionUpdate[];
+  toolName: string;
 }
 
 /** A permission parked anywhere in the fleet, with the context to act on it. */
 export interface BlockedRequest {
+  cwd: string;
+  hostname: string;
   instanceId: string;
   machineId: string;
-  hostname: string;
-  cwd: string;
   request: PendingPermission;
 }
 
@@ -197,12 +218,12 @@ export interface BlockedRequest {
  * the numbers, not a second opinion about them.
  */
 export interface ContextUsage {
-  totalTokens: number;
+  categories: { name: string; tokens: number; color: string }[];
   maxTokens: number;
   percentage: number;
-  categories: { name: string; tokens: number; color: string }[];
   /** When this reading was taken, so a stale one can say so instead of lying. */
   readAt: number;
+  totalTokens: number;
 }
 
 /**
@@ -213,12 +234,12 @@ export interface ContextUsage {
  * installed and a session only ever offers its own.
  */
 export interface CommandState {
+  /** Descriptions and argument hints, `null` until something has asked. */
+  detailed: Map<string, SlashCommand> | null;
   /** Names as the session lists them, without the leading slash. */
   names: string[];
   /** The subset of `names` that are skills — {@link classifyCommand}'s evidence. */
   skills: string[];
-  /** Descriptions and argument hints, `null` until something has asked. */
-  detailed: Map<string, SlashCommand> | null;
 }
 
 /**
@@ -227,23 +248,81 @@ export interface CommandState {
  * the pane says a different sentence for each.
  */
 export interface ReadFault {
-  reason: 'offline' | 'failed';
   message: string;
+  reason: "offline" | "failed";
 }
 
 export interface SessionState {
-  /** The id this view lives at: a spawned instance, or the SDK session browsed. */
-  instanceId: string;
-  machineId: string;
+  /** A turn is in flight (sent, no `result` yet). */
+  busy: boolean;
+  /** What this session offers behind `/` — see {@link commandsOf}. */
+  commands: CommandState;
+  /** A `supportedCommands` call is out; the names from `init` are the menu meanwhile. */
+  commandsPending: boolean;
+  /** The last context reading, `null` until one has been asked for. */
+  context: ContextUsage | null;
+  /** A `getContextUsage` call is out; the meter keeps its last number meanwhile. */
+  contextPending: boolean;
+  /** The main loop's tool in flight, cleared by its result or the turn's end. */
+  currentTool: ToolGlance | null;
   cwd: string;
-  /** The SDK session behind this view, once one is known. */
-  sessionId: string | null;
+  /**
+   * How hard that model thinks. Learnt the same way with one difference that
+   * matters: no `init` reports effort back, so nothing ever corrects this — it
+   * is the last level asked for, and `null` means nobody has asked, not that the
+   * session is running at the API default.
+   */
+  effort: EffortLevel | null;
   /** Which harness owns {@link sessionId} — what a resume and a catalog read route on. */
   harness: HarnessKind;
+  /** The older chunks of a long transcript are still being prepended. */
+  hydrating: boolean;
+  /** The `system.init` banner is re-emitted every turn; render it once. */
+  initialized: boolean;
+  /** The id this view lives at: a spawned instance, or the SDK session browsed. */
+  instanceId: string;
+  lastActivityAt: Date | null;
+  /**
+   * What the last compaction did, from the `compact_boundary` the SDK emits when
+   * one finishes. Kept on the session rather than only in the transcript so the
+   * dock can say it happened without the reader scrolling to find the line.
+   */
+  lastCompaction: {
+    at: number;
+    preTokens: number;
+    trigger: "manual" | "auto";
+    result?: "success" | "failed";
+    error?: string;
+  } | null;
+  /**
+   * The last turn came back an error — the SDK's `is_error`, not a reading of
+   * what it said. Paired with the machine's auth state, this is what tells a
+   * "cannot answer" apart from an answer nobody liked.
+   */
+  lastTurnFailed: boolean;
+  /** A stored transcript is being fetched. */
+  loading: boolean;
+  machineId: string;
+  /** The session's MCP servers (`mcpServerStatus`), null until asked; [] when the ask failed or found none. */
+  mcp: McpServerStatus[] | null;
+  mcpPending: boolean;
   messages: Message[];
-  /** Subagent branches, keyed by the Task `tool_use_id` that spawned them. */
-  subagents: Record<string, SubagentState>;
+  /** Which model answers the next turn, learnt and corrected the same way. */
+  model: string | null;
+  /**
+   * Which content block the main loop has open right now, from the partials —
+   * `null` between blocks and outside a turn. This is the only evidence of what
+   * the session is doing while it does it, and the tail says nothing the
+   * partials have not shown.
+   */
+  openBlock: "thinking" | "text" | "tool" | null;
   pending: PendingPermission[];
+  /**
+   * How the session answers tool permissions: named by every `system.init`,
+   * moved optimistically by a switch and corrected by the init the next turn
+   * opens with. `null` until something has said — see {@link adoptSettings}.
+   */
+  permissionMode: PermissionMode | null;
   /**
    * Messages this session has taken but not started, oldest first — the
    * harness's own input queue, announced by `message_queued` and retired
@@ -255,22 +334,30 @@ export interface SessionState {
    * predates the frames simply never fills it and keeps its local echo.
    */
   queued: QueuedMessage[];
+  /**
+   * How the last transcript read ended, when it ended with nothing on screen.
+   * Every read path sets this on a terminal failure and clears it when a read
+   * starts, so a pane always has something to show for an empty transcript: a
+   * hover-peek's backfill that timed out used to fail into `console.error`
+   * and leave the pane on its loading state for the life of the tab.
+   */
+  readFault: ReadFault | null;
+  /** Started again in place for a mode it could not switch into; ends at the next init. */
+  relaunching: boolean;
+  /** A side quest (NEW.md §1) — kept visually apart until it is kept or discarded. */
+  scratch: boolean;
+  /**
+   * The session's own word on what it is doing: `compacting` while it rewrites
+   * its context — the only live signal, since the boundary frame lands after
+   * the work — `requesting` while it waits on the model.
+   */
+  sdkStatus: SDKStatus;
+  /** The SDK session behind this view, once one is known. */
+  sessionId: string | null;
   /** Partial assistant text, between `stream_event`s and the final message. */
   streaming: string;
-  /**
-   * Which content block the main loop has open right now, from the partials —
-   * `null` between blocks and outside a turn. This is the only evidence of what
-   * the session is doing while it does it, and the tail says nothing the
-   * partials have not shown.
-   */
-  openBlock: 'thinking' | 'text' | 'tool' | null;
-  /**
-   * What the open thinking block has reasoned so far. Left standing when the
-   * block closes — the trace stays readable until the transcript's own thinking
-   * message supersedes it — and `''` for a redacted block, which streams
-   * nothing and is still thinking.
-   */
-  thinkingStream: string;
+  /** Subagent branches, keyed by the Task `tool_use_id` that spawned them. */
+  subagents: Record<string, SubagentState>;
   /** The SDK signed the thinking block: it is wrapping up, not still going. */
   thinkingClosing: boolean;
   /**
@@ -280,8 +367,19 @@ export interface SessionState {
    * where both mapped messages share a timestamp and adjacency measures 0.
    */
   thinkingSince: number | null;
-  /** A turn is in flight (sent, no `result` yet). */
-  busy: boolean;
+  /**
+   * What the open thinking block has reasoned so far. Left standing when the
+   * block closes — the trace stays readable until the transcript's own thinking
+   * message supersedes it — and `''` for a redacted block, which streams
+   * nothing and is still thinking.
+   */
+  thinkingStream: string;
+  /**
+   * The cumulative cost the latest `result` frame reported, in dollars.
+   * `undefined` until a turn has closed with one. Frames, not transcript
+   * scraping: a successful turn's cost has no transcript line.
+   */
+  totalCost?: number;
   /**
    * When this stretch of work began, epoch ms, or `null` while the session is
    * idle. Stamped by the local send before a single frame has come back — the
@@ -290,87 +388,10 @@ export interface SessionState {
    * answered halfway through does not restart the clock.
    */
   workingSince: number | null;
-  /** The main loop's tool in flight, cleared by its result or the turn's end. */
-  currentTool: ToolGlance | null;
-  lastActivityAt: Date | null;
-  /** A stored transcript is being fetched. */
-  loading: boolean;
-  /** The older chunks of a long transcript are still being prepended. */
-  hydrating: boolean;
-  /**
-   * How the last transcript read ended, when it ended with nothing on screen.
-   * Every read path sets this on a terminal failure and clears it when a read
-   * starts, so a pane always has something to show for an empty transcript: a
-   * hover-peek's backfill that timed out used to fail into `console.error`
-   * and leave the pane on its loading state for the life of the tab.
-   */
-  readFault: ReadFault | null;
-  /** The `system.init` banner is re-emitted every turn; render it once. */
-  initialized: boolean;
-  /**
-   * How the session answers tool permissions: named by every `system.init`,
-   * moved optimistically by a switch and corrected by the init the next turn
-   * opens with. `null` until something has said — see {@link adoptSettings}.
-   */
-  permissionMode: PermissionMode | null;
-  /** Which model answers the next turn, learnt and corrected the same way. */
-  model: string | null;
-  /**
-   * How hard that model thinks. Learnt the same way with one difference that
-   * matters: no `init` reports effort back, so nothing ever corrects this — it
-   * is the last level asked for, and `null` means nobody has asked, not that the
-   * session is running at the API default.
-   */
-  effort: EffortLevel | null;
-  /** Started again in place for a mode it could not switch into; ends at the next init. */
-  relaunching: boolean;
-  /** A side quest (NEW.md §1) — kept visually apart until it is kept or discarded. */
-  scratch: boolean;
-  /** The last context reading, `null` until one has been asked for. */
-  context: ContextUsage | null;
-  /** A `getContextUsage` call is out; the meter keeps its last number meanwhile. */
-  contextPending: boolean;
-  /** What this session offers behind `/` — see {@link commandsOf}. */
-  commands: CommandState;
-  /** A `supportedCommands` call is out; the names from `init` are the menu meanwhile. */
-  commandsPending: boolean;
-  /** The session's MCP servers (`mcpServerStatus`), null until asked; [] when the ask failed or found none. */
-  mcp: McpServerStatus[] | null;
-  mcpPending: boolean;
-  /**
-   * The last turn came back an error — the SDK's `is_error`, not a reading of
-   * what it said. Paired with the machine's auth state, this is what tells a
-   * "cannot answer" apart from an answer nobody liked.
-   */
-  lastTurnFailed: boolean;
-  /**
-   * The cumulative cost the latest `result` frame reported, in dollars.
-   * `undefined` until a turn has closed with one. Frames, not transcript
-   * scraping: a successful turn's cost has no transcript line.
-   */
-  totalCost?: number;
-  /**
-   * The session's own word on what it is doing: `compacting` while it rewrites
-   * its context — the only live signal, since the boundary frame lands after
-   * the work — `requesting` while it waits on the model.
-   */
-  sdkStatus: SDKStatus;
-  /**
-   * What the last compaction did, from the `compact_boundary` the SDK emits when
-   * one finishes. Kept on the session rather than only in the transcript so the
-   * dock can say it happened without the reader scrolling to find the line.
-   */
-  lastCompaction: {
-    at: number;
-    preTokens: number;
-    trigger: 'manual' | 'auto';
-    result?: 'success' | 'failed';
-    error?: string;
-  } | null;
 }
 
 const state = $state({
-  status: 'disconnected' as ConnectionStatus,
+  status: "disconnected" as ConnectionStatus,
   /**
    * Whether a socket has ever been opened for this document. A dashboard that
    * has not tried yet reads `disconnected` off the socket exactly like one whose
@@ -431,8 +452,8 @@ const state = $state({
    */
   supervisorActivity: {} as Record<
     string,
-    | { phase: 'evaluating'; source: 'rule' | 'autopilot'; since: number }
-    | { phase: 'settled'; verdict: SupervisorEvent['verdict']; at: number }
+    | { phase: "evaluating"; source: "rule" | "autopilot"; since: number }
+    | { phase: "settled"; verdict: SupervisorEvent["verdict"]; at: number }
   >,
   /** Stored sessions per machine, newest first (`listSessions` through the tunnel). */
   catalog: {} as Record<string, SDKSessionInfo[]>,
@@ -445,8 +466,8 @@ const state = $state({
 });
 
 interface Waiter {
-  resolve: (result: unknown) => void;
   reject: (error: Error) => void;
+  resolve: (result: unknown) => void;
 }
 
 /** Control calls awaiting their `control_result`, keyed by the SDK `requestId`. */
@@ -460,7 +481,7 @@ const backfilled = new Set<string>();
 const hydrations = new Map<string, number>();
 
 // Lets the store be asserted from the console while developing.
-if (import.meta.env.DEV && typeof window !== 'undefined') {
+if (import.meta.env.DEV && typeof window !== "undefined") {
   Object.assign(globalThis, { __whiffleDebug: { state, inflight } });
 }
 
@@ -487,7 +508,9 @@ if (import.meta.hot) {
 }
 
 function abandonInflight(reason: string): void {
-  for (const waiter of inflight.values()) waiter.reject(new Error(reason));
+  for (const waiter of inflight.values()) {
+    waiter.reject(new Error(reason));
+  }
   inflight.clear();
 }
 
@@ -501,20 +524,23 @@ function teardown(): void {
     globalThis.__whiffleReconnectTimeout = null;
   }
   const socket = globalThis.__whiffleSocket;
-  if (!socket) return;
+  if (!socket) {
+    return;
+  }
   // Null the handlers first, or the close fires a reconnect we just cancelled.
   socket.onclose = null;
   socket.onmessage = null;
   socket.onerror = null;
   socket.close();
   globalThis.__whiffleSocket = null;
-  abandonInflight('The connection to the hub closed before that finished.');
+  abandonInflight("The connection to the hub closed before that finished.");
 }
 
 /** Mainline sessions the rail lists for one machine: live work and what stopped. */
 const listedOn = (machineId: string): InstanceRow[] =>
   state.instances.filter(
-    (row) => row.machineId === machineId && isListed(row) && row.kind !== 'scratch'
+    (row) =>
+      row.machineId === machineId && isListed(row) && row.kind !== "scratch"
   );
 
 /**
@@ -529,17 +555,17 @@ const listedOn = (machineId: string): InstanceRow[] =>
 export function blankSession(instanceId: string): SessionState {
   return {
     instanceId,
-    machineId: '',
-    cwd: '',
+    machineId: "",
+    cwd: "",
     sessionId: null,
-    harness: 'claude',
+    harness: "claude",
     messages: [],
     subagents: {},
     pending: [],
     queued: [],
-    streaming: '',
+    streaming: "",
     openBlock: null,
-    thinkingStream: '',
+    thinkingStream: "",
     thinkingClosing: false,
     thinkingSince: null,
     busy: false,
@@ -569,7 +595,9 @@ export function blankSession(instanceId: string): SessionState {
 
 function session(instanceId: string): SessionState {
   const existing = state.sessions[instanceId];
-  if (existing) return existing;
+  if (existing) {
+    return existing;
+  }
 
   const created: SessionState = blankSession(instanceId);
   state.sessions[instanceId] = created;
@@ -589,17 +617,23 @@ function hydrate(target: SessionState): void {
   // fills a blank: once frames are flowing they are fresher than any snapshot.
   if (target.queued.length === 0) {
     const held = queueSnapshot[target.instanceId];
-    if (held?.length) target.queued = held;
+    if (held?.length) {
+      target.queued = held;
+    }
   }
   const known = state.instances.find((row) => row.id === target.instanceId);
-  if (!known) return;
+  if (!known) {
+    return;
+  }
   adoptSettings(target, known);
-  if (target.machineId) return;
+  if (target.machineId) {
+    return;
+  }
   target.machineId = known.machineId;
   target.cwd = known.cwd;
   target.sessionId = known.sessionId;
-  target.harness = (known.harness as HarnessKind) ?? 'claude';
-  target.scratch = known.kind === 'scratch';
+  target.harness = (known.harness as HarnessKind) ?? "claude";
+  target.scratch = known.kind === "scratch";
 }
 
 /**
@@ -619,10 +653,14 @@ function adoptSettings(target: SessionState, row: InstanceRow): void {
   if (target.permissionMode === null && row.permissionMode) {
     target.permissionMode = row.permissionMode as PermissionMode;
   }
-  if (target.model === null && row.model) target.model = row.model;
+  if (target.model === null && row.model) {
+    target.model = row.model;
+  }
   // The row is the *only* source for effort — no init carries it — so this is
   // not a blank being filled ahead of the session's own word, it is the record.
-  if (target.effort === null && row.effort) target.effort = row.effort as EffortLevel;
+  if (target.effort === null && row.effort) {
+    target.effort = row.effort as EffortLevel;
+  }
 }
 
 /**
@@ -632,26 +670,43 @@ function adoptSettings(target: SessionState, row: InstanceRow): void {
  */
 async function persistSettings(
   instanceId: string,
-  settings: { permissionMode?: PermissionMode; model?: string; effort?: EffortLevel }
+  settings: {
+    permissionMode?: PermissionMode;
+    model?: string;
+    effort?: EffortLevel;
+  }
 ): Promise<void> {
   const row = state.instances.find((candidate) => candidate.id === instanceId);
-  if (!row) return;
+  if (!row) {
+    return;
+  }
 
   const patch: typeof settings = {};
-  if (settings.permissionMode && settings.permissionMode !== row.permissionMode) {
+  if (
+    settings.permissionMode &&
+    settings.permissionMode !== row.permissionMode
+  ) {
     patch.permissionMode = settings.permissionMode;
   }
-  if (settings.model && settings.model !== row.model) patch.model = settings.model;
-  if (settings.effort && settings.effort !== row.effort) patch.effort = settings.effort;
-  if (Object.keys(patch).length === 0) return;
+  if (settings.model && settings.model !== row.model) {
+    patch.model = settings.model;
+  }
+  if (settings.effort && settings.effort !== row.effort) {
+    patch.effort = settings.effort;
+  }
+  if (Object.keys(patch).length === 0) {
+    return;
+  }
 
   try {
     const response = await fetch(`/api/instances/${instanceId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
-    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
   } catch (error) {
     // The session is already answering this way; only the row is behind, and
     // the next init will try again — nothing the reader needs to act on.
@@ -680,20 +735,28 @@ const delegatesRead = new Set<string>();
  * cards on the transcript markers, and the next open tries again.
  */
 async function loadDelegateEvents(instanceId: string): Promise<void> {
-  if (delegatesRead.has(instanceId)) return;
+  if (delegatesRead.has(instanceId)) {
+    return;
+  }
   delegatesRead.add(instanceId);
-  const events = await load<DelegateEvent[]>(`/api/delegate-events?parent=${instanceId}`);
+  const events = await load<DelegateEvent[]>(
+    `/api/delegate-events?parent=${instanceId}`
+  );
   if (!events) {
     delegatesRead.delete(instanceId);
     return;
   }
-  for (const event of events) recordDelegateEvent(event);
+  for (const event of events) {
+    recordDelegateEvent(event);
+  }
 }
 
 async function load<T>(path: string): Promise<T | null> {
   try {
     const response = await fetch(path);
-    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
     return (await response.json()) as T;
   } catch (error) {
     console.error(`[whiffle] ${path} failed:`, error);
@@ -708,7 +771,9 @@ async function load<T>(path: string): Promise<T | null> {
  */
 function adoptInstances(instances: InstanceRow[]): void {
   state.instances = instances;
-  for (const target of Object.values(state.sessions)) hydrate(target);
+  for (const target of Object.values(state.sessions)) {
+    hydrate(target);
+  }
 }
 
 /**
@@ -724,8 +789,12 @@ function adoptInstances(instances: InstanceRow[]): void {
  * empty queue and a hub that predates the field says nothing about any of them
  * (`undefined`), which must leave what frames have already established alone.
  */
-function adoptQueues(queues: Record<string, QueuedMessage[]> | undefined): void {
-  if (!queues) return;
+function adoptQueues(
+  queues: Record<string, QueuedMessage[]> | undefined
+): void {
+  if (!queues) {
+    return;
+  }
   queueSnapshot = queues;
   for (const target of Object.values(state.sessions)) {
     target.queued = queues[target.instanceId] ?? [];
@@ -741,59 +810,93 @@ function adoptQueues(queues: Record<string, QueuedMessage[]> | undefined): void 
 let queueSnapshot: Record<string, QueuedMessage[]> = {};
 
 /** Replaces the whole limits map with the hub's word — a full snapshot, not a patch. */
-function adoptUsageLimits(readings: { machineId: string; limits: ClaudeLimits }[]): void {
+function adoptUsageLimits(
+  readings: { machineId: string; limits: ClaudeLimits }[]
+): void {
   const next: Record<string, ClaudeLimits> = {};
-  for (const reading of readings) next[reading.machineId] = reading.limits;
+  for (const reading of readings) {
+    next[reading.machineId] = reading.limits;
+  }
   state.usageLimits = next;
 }
 
 /** The `kind: 'usage'` frame's readings, mapped down to a machine → limits table. */
-function usageLimitReadings(readings: UsageLimitsReading[]): Record<string, ClaudeLimits> {
+function usageLimitReadings(
+  readings: UsageLimitsReading[]
+): Record<string, ClaudeLimits> {
   const next: Record<string, ClaudeLimits> = {};
-  for (const reading of readings) next[reading.machineId] = reading.payload;
+  for (const reading of readings) {
+    next[reading.machineId] = reading.payload;
+  }
   return next;
 }
 
 /** Registry reads: on connect and again after every reconnect. */
 async function refresh(): Promise<void> {
-  const [machines, instances, projects, pending, handoffs, queues, usage] = await Promise.all([
-    load<Machine[]>('/api/agents'),
-    load<InstanceRow[]>('/api/instances'),
-    load<ProjectRow[]>('/api/projects'),
-    load<Envelope<FramePayload>[]>('/api/pending'),
-    // Read on connect, not only broadcast on change: a dashboard opened after
-    // a hand-off went out has missed every broadcast it will ever get.
-    load<Record<string, { from: string; at: number }>>('/api/handoffs'),
-    // Same reason again, and the whole point of the queue being observable: a
-    // tab opened while a message is waiting has missed the frame that said so.
-    load<Record<string, QueuedMessage[]>>('/api/queues'),
-    // Same reason: a dashboard opened between reports has missed the frames.
-    load<{ machines: { machineId: string; limits: ClaudeLimits }[] }>('/api/usage/limits'),
-  ]);
+  const [machines, instances, projects, pending, handoffs, queues, usage] =
+    await Promise.all([
+      load<Machine[]>("/api/agents"),
+      load<InstanceRow[]>("/api/instances"),
+      load<ProjectRow[]>("/api/projects"),
+      load<Envelope<FramePayload>[]>("/api/pending"),
+      // Read on connect, not only broadcast on change: a dashboard opened after
+      // a hand-off went out has missed every broadcast it will ever get.
+      load<Record<string, { from: string; at: number }>>("/api/handoffs"),
+      // Same reason again, and the whole point of the queue being observable: a
+      // tab opened while a message is waiting has missed the frame that said so.
+      load<Record<string, QueuedMessage[]>>("/api/queues"),
+      // Same reason: a dashboard opened between reports has missed the frames.
+      load<{ machines: { machineId: string; limits: ClaudeLimits }[] }>(
+        "/api/usage/limits"
+      ),
+    ]);
 
-  if (handoffs) state.handoffs = handoffs;
-  if (queues) adoptQueues(queues);
-  if (machines) state.machines = machines;
-  if (projects) state.projects = projects;
-  if (instances) adoptInstances(instances);
-  if (usage) adoptUsageLimits(usage.machines);
+  if (handoffs) {
+    state.handoffs = handoffs;
+  }
+  if (queues) {
+    adoptQueues(queues);
+  }
+  if (machines) {
+    state.machines = machines;
+  }
+  if (projects) {
+    state.projects = projects;
+  }
+  if (instances) {
+    adoptInstances(instances);
+  }
+  if (usage) {
+    adoptUsageLimits(usage.machines);
+  }
   if (pending) {
-    for (const envelope of pending) handleFrame(envelope.payload);
+    for (const envelope of pending) {
+      handleFrame(envelope.payload);
+    }
   }
 }
 
 /** Every online machine's stored sessions — the sidebar's contents on arrival. */
 async function refreshCatalogs(): Promise<void> {
   for (const machine of state.machines) {
-    if (machine.status === 'online') void loadCatalog(machine.machineId);
+    if (machine.status === "online") {
+      void loadCatalog(machine.machineId);
+    }
   }
 }
 
 /** Answers the promise a `requestId` belongs to; false when nobody is waiting. */
-function settle(requestId: string | undefined, answer: (waiter: Waiter) => void): boolean {
-  if (!requestId) return false;
+function settle(
+  requestId: string | undefined,
+  answer: (waiter: Waiter) => void
+): boolean {
+  if (!requestId) {
+    return false;
+  }
   const waiter = inflight.get(requestId);
-  if (!waiter) return false;
+  if (!waiter) {
+    return false;
+  }
   inflight.delete(requestId);
   answer(waiter);
   return true;
@@ -807,9 +910,13 @@ function settle(requestId: string | undefined, answer: (waiter: Waiter) => void)
  */
 function delegateEventOf(frame: FramePayload): DelegateEvent | null {
   const candidate: { kind: string; event?: unknown } = frame;
-  if (candidate.kind !== 'delegate_event') return null;
+  if (candidate.kind !== "delegate_event") {
+    return null;
+  }
   const event = candidate.event;
-  if (typeof event !== 'object' || event === null) return null;
+  if (typeof event !== "object" || event === null) {
+    return null;
+  }
   return event as DelegateEvent;
 }
 
@@ -825,22 +932,36 @@ function recordDelegateEvent(event: DelegateEvent): void {
 /** The hub's supervisor-event push, structurally the same as delegate events. */
 function supervisorEventOf(frame: FramePayload): SupervisorEvent | null {
   const candidate: { kind: string; event?: unknown } = frame;
-  if (candidate.kind !== 'supervisor_event') return null;
+  if (candidate.kind !== "supervisor_event") {
+    return null;
+  }
   const event = candidate.event;
-  if (typeof event !== 'object' || event === null) return null;
+  if (typeof event !== "object" || event === null) {
+    return null;
+  }
   return event as SupervisorEvent;
 }
 
 /** The transient "supervisor is thinking" push — structural twin of the event. */
 function supervisorStatusOf(
   frame: FramePayload
-): { instanceId: string; source: 'rule' | 'autopilot'; at: number } | null {
-  const candidate: { kind: string; instanceId?: unknown; status?: unknown } = frame;
-  if (candidate.kind !== 'supervisor_status') return null;
+): { instanceId: string; source: "rule" | "autopilot"; at: number } | null {
+  const candidate: { kind: string; instanceId?: unknown; status?: unknown } =
+    frame;
+  if (candidate.kind !== "supervisor_status") {
+    return null;
+  }
   const status = candidate.status;
-  if (typeof status !== 'object' || status === null) return null;
-  if (typeof candidate.instanceId !== 'string') return null;
-  return { instanceId: candidate.instanceId, ...(status as { source: 'rule' | 'autopilot'; at: number }) };
+  if (typeof status !== "object" || status === null) {
+    return null;
+  }
+  if (typeof candidate.instanceId !== "string") {
+    return null;
+  }
+  return {
+    instanceId: candidate.instanceId,
+    ...(status as { source: "rule" | "autopilot"; at: number }),
+  };
 }
 
 /** Cap sourced from PLAN §C9: 200 in memory. */
@@ -850,13 +971,20 @@ const SUPERVISOR_EVENT_CAP = 200;
 function recordSupervisorEvent(event: SupervisorEvent): boolean {
   const ring = state.supervisorEvents;
   // Deduplicate by id — the same row can arrive via REST seed and broadcast.
-  if (ring.some((e) => e.id === event.id)) return false;
+  if (ring.some((e) => e.id === event.id)) {
+    return false;
+  }
   // Insert newest-first: find the position to keep descending-id order.
   const idx = ring.findIndex((e) => e.id < event.id);
-  if (idx === -1) ring.push(event);
-  else ring.splice(idx, 0, event);
+  if (idx === -1) {
+    ring.push(event);
+  } else {
+    ring.splice(idx, 0, event);
+  }
   // Cap.
-  if (ring.length > SUPERVISOR_EVENT_CAP) ring.length = SUPERVISOR_EVENT_CAP;
+  if (ring.length > SUPERVISOR_EVENT_CAP) {
+    ring.length = SUPERVISOR_EVENT_CAP;
+  }
   return true;
 }
 
@@ -870,20 +998,26 @@ function recordSupervisorEvent(event: SupervisorEvent): boolean {
  */
 function announceSupervisorEvent(event: SupervisorEvent): void {
   const row = state.instances.find((i) => i.id === event.instanceId);
-  const where = row?.title ?? (row?.cwd ? row.cwd.split('/').filter(Boolean).pop() : undefined) ?? 'a session';
-  const open = { label: 'Open', onClick: () => void goto(`/session/${event.instanceId}`) };
-  if (event.verdict === 'error') {
+  const where =
+    row?.title ??
+    (row?.cwd ? row.cwd.split("/").filter(Boolean).pop() : undefined) ??
+    "a session";
+  const open = {
+    label: "Open",
+    onClick: () => void goto(`/session/${event.instanceId}`),
+  };
+  if (event.verdict === "error") {
     // One toast per (session, cause) — sonner replaces by id, so a broken
     // brain failing every turn updates one toast instead of stacking forty.
-    toast.error(`Supervisor error — ${event.note ?? 'unknown'}`, {
-      id: `sup-error-${event.instanceId}-${event.note ?? ''}`,
+    toast.error(`Supervisor error — ${event.note ?? "unknown"}`, {
+      id: `sup-error-${event.instanceId}-${event.note ?? ""}`,
       description: where,
       action: open,
     });
-  } else if (event.verdict === 'escalate' || event.verdict === 'ask') {
-    toast.warning(event.message ?? 'The supervisor needs you.', {
+  } else if (event.verdict === "escalate" || event.verdict === "ask") {
+    toast.warning(event.message ?? "The supervisor needs you.", {
       id: `sup-esc-${event.id}`,
-      description: `${event.source === 'autopilot' ? 'Autopilot' : 'Supervisor'} — ${where}`,
+      description: `${event.source === "autopilot" ? "Autopilot" : "Supervisor"} — ${where}`,
       action: open,
     });
   }
@@ -896,8 +1030,11 @@ function announceSupervisorEvent(event: SupervisorEvent): void {
  * so a turn that is merely blocked or waiting on a tool keeps counting.
  */
 function trackWorking(target: SessionState): void {
-  if (activityOf(target) === 'idle') target.workingSince = null;
-  else target.workingSince ??= Date.now();
+  if (activityOf(target) === "idle") {
+    target.workingSince = null;
+  } else {
+    target.workingSince ??= Date.now();
+  }
 }
 
 /**
@@ -907,25 +1044,27 @@ function trackWorking(target: SessionState): void {
  */
 function clearTurnPhase(target: SessionState): void {
   target.openBlock = null;
-  target.thinkingStream = '';
+  target.thinkingStream = "";
   target.thinkingClosing = false;
   target.thinkingSince = null;
 }
 
 /** Which tool a result answers, from the call it lands on. */
 const nameOfCall = (messages: Message[], toolId: string): string =>
-  messages.findLast((message) => message.metadata?.toolId === toolId)?.metadata?.toolName ?? '';
+  messages.findLast((message) => message.metadata?.toolId === toolId)?.metadata
+    ?.toolName ?? "";
 
 function handleFrame(frame: FramePayload): void {
-  if (frame.kind === 'instances') {
+  if (frame.kind === "instances") {
     // The machines ride along so a daemon registering — the moment its auth
     // state is decided — reaches the rail without a re-fetch.
     state.machines = frame.agents;
     // The hub's own record of what each session is carrying. Kept there rather
     // than learnt by watching, so it is the same on every device and survives a
     // reload — a hand-off only this tab saw is one your phone never knows about.
-    state.handoffs = (frame as { handoffs?: Record<string, { from: string; at: number }> })
-      .handoffs ?? {};
+    state.handoffs =
+      (frame as { handoffs?: Record<string, { from: string; at: number }> })
+        .handoffs ?? {};
     adoptQueues((frame as { queues?: Record<string, QueuedMessage[]> }).queues);
     adoptInstances(frame.instances);
     // The hub's now-state for every session it lists (C3), so a freshly-opened
@@ -940,46 +1079,62 @@ function handleFrame(frame: FramePayload): void {
     // that predates C2 sends nothing here, and the comparisons that use it
     // (see convergence.ts) already treat "nothing to compare against" as
     // unknown rather than as current.
-    state.hubBuild = (frame as { hubBuild?: BuildInfo }).hubBuild ?? state.hubBuild;
+    state.hubBuild =
+      (frame as { hubBuild?: BuildInfo }).hubBuild ?? state.hubBuild;
     return;
   }
 
-  if (frame.kind === 'usage') {
+  if (frame.kind === "usage") {
     // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
     state.usageLimits = usageLimitReadings(frame.limits);
     return;
   }
 
-  if (frame.kind === 'pulse') {
+  if (frame.kind === "pulse") {
     // The daemon's coarse now-state, broadcast — this is the whole of what the
     // rail knows about a session this browser has not subscribed to.
     state.pulses[frame.instanceId] = frame.pulse;
     return;
   }
 
-  if (frame.kind === 'error') {
+  if (frame.kind === "error") {
     const { instanceId, message } = frame;
-    if (settle(frame.requestId, (waiter) => waiter.reject(new Error(message)))) return;
+    if (
+      settle(frame.requestId, (waiter) => waiter.reject(new Error(message)))
+    ) {
+      return;
+    }
     if (instanceId) {
       const target = session(instanceId);
       // A relaunch that never came up has no init frame to end its wait.
       target.relaunching = false;
       target.messages.push(errorMessage(instanceId, message));
-    } else console.error('[whiffle] hub error:', message);
+    } else {
+      console.error("[whiffle] hub error:", message);
+    }
     return;
   }
 
-  if (frame.kind === 'control_result') {
+  if (frame.kind === "control_result") {
     const answered = settle(frame.requestId, (waiter) =>
       frame.ok
         ? waiter.resolve(frame.result)
-        : waiter.reject(new Error(frame.error ?? 'The machine could not carry out that request.'))
+        : waiter.reject(
+            new Error(
+              frame.error ?? "The machine could not carry out that request."
+            )
+          )
     );
-    if (answered) return;
+    if (answered) {
+      return;
+    }
     // Fire-and-forget controls (interrupt, permission replies) still report failure.
     if (!frame.ok && frame.instanceId) {
       session(frame.instanceId).messages.push(
-        errorMessage(frame.instanceId, frame.error ?? 'The machine could not carry out that request.')
+        errorMessage(
+          frame.instanceId,
+          frame.error ?? "The machine could not carry out that request."
+        )
       );
     }
     return;
@@ -1005,11 +1160,12 @@ function handleFrame(frame: FramePayload): void {
       // the in-flight/queue skips, which describe a SECOND turn while the
       // first evaluation is still genuinely running.
       const stillRunning =
-        supervisorEvent.verdict === 'skipped' &&
-        (supervisorEvent.note === 'in-flight' || supervisorEvent.note === 'semaphore queue full');
+        supervisorEvent.verdict === "skipped" &&
+        (supervisorEvent.note === "in-flight" ||
+          supervisorEvent.note === "semaphore queue full");
       if (!stillRunning) {
         state.supervisorActivity[supervisorEvent.instanceId] = {
-          phase: 'settled',
+          phase: "settled",
           verdict: supervisorEvent.verdict,
           at: Date.now(),
         };
@@ -1021,7 +1177,7 @@ function handleFrame(frame: FramePayload): void {
   const supervisorStatus = supervisorStatusOf(frame);
   if (supervisorStatus) {
     state.supervisorActivity[supervisorStatus.instanceId] = {
-      phase: 'evaluating',
+      phase: "evaluating",
       source: supervisorStatus.source,
       since: supervisorStatus.at,
     };
@@ -1039,42 +1195,54 @@ function handleFrame(frame: FramePayload): void {
   }
 
   switch (frame.kind) {
-    case 'frame': {
+    case "frame": {
       target.harness = frame.harness;
       const mapping = mapFrame(frame.instanceId, frame.message);
       // The input queue moving. Ahead of the transcript work below because the
       // announcement takes back the local echo the sender drew, and the turn
       // that retires the row is pushed by that same transcript work.
-      if (mapping.queued) ingestQueued(target, mapping.queued);
-      if (mapping.dequeued) retireQueued(target, mapping.dequeued);
-      if (mapping.branch) applyBranchEvent(target.subagents, frame.instanceId, mapping.branch);
+      if (mapping.queued) {
+        ingestQueued(target, mapping.queued);
+      }
+      if (mapping.dequeued) {
+        retireQueued(target, mapping.dequeued);
+      }
+      if (mapping.branch) {
+        applyBranchEvent(target.subagents, frame.instanceId, mapping.branch);
+      }
       // Cost rides every result frame, cumulative across the run. It has no
       // transcript line on success, so it lives on the session instead.
-      if (mapping.cost !== undefined) target.totalCost = mapping.cost;
+      if (mapping.cost !== undefined) {
+        target.totalCost = mapping.cost;
+      }
 
       // A subagent's turns belong to its branch, not to the main transcript —
       // interleaving them is what buries the conversation the user is reading.
       const sink = mapping.agentId
-        ? branchFor(target.subagents, frame.instanceId, mapping.agentId).messages
+        ? branchFor(target.subagents, frame.instanceId, mapping.agentId)
+            .messages
         : target.messages;
 
       for (const message of mapping.messages) {
-        if (message.type === 'system.init') {
+        if (message.type === "system.init") {
           target.sessionId = message.metadata?.sessionId ?? target.sessionId;
           // Re-emitted every turn and the session's own word on both settings,
           // so this confirms a switch, puts the picker back if the agent ignored
           // one, and catches a `/model` or `/permissions` run somewhere else.
           // Harvested before the banner is deduplicated, or only the first would.
           target.model = message.metadata?.model ?? target.model;
-          target.permissionMode = message.metadata?.permissionMode ?? target.permissionMode;
+          target.permissionMode =
+            message.metadata?.permissionMode ?? target.permissionMode;
           void persistSettings(frame.instanceId, {
             permissionMode: message.metadata?.permissionMode,
             model: message.metadata?.model,
           });
           // The `/` menu, from the same re-emitted frame and for the same
           // reason: a skill installed since the last turn is in this list.
-          target.commands.names = message.metadata?.slashCommands ?? target.commands.names;
-          target.commands.skills = message.metadata?.skills ?? target.commands.skills;
+          target.commands.names =
+            message.metadata?.slashCommands ?? target.commands.names;
+          target.commands.skills =
+            message.metadata?.skills ?? target.commands.skills;
           // A relaunch can change the MCP set; null makes the header ask again.
           target.mcp = null;
           // The process behind a relaunch is up: this is the frame it opens with.
@@ -1088,7 +1256,9 @@ function handleFrame(frame: FramePayload): void {
           // and a new one opened the session. Answering those reaches a daemon
           // that never asked, which is the "no permission request <id>" the
           // reader gets for clicking a button the app was still showing them.
-          if (target.pending.length > 0) target.pending = [];
+          if (target.pending.length > 0) {
+            target.pending = [];
+          }
           // Never a transcript line. `init` is re-emitted every single turn, so
           // any attempt to render it once relies on a flag that survives every
           // reload, reconnect and daemon restart — and each time that flag is
@@ -1100,28 +1270,32 @@ function handleFrame(frame: FramePayload): void {
         // A compaction just landed. The transcript has its own line for it; the
         // dock needs the fact and the size, and a fresh reading because the
         // window it is metering just changed underneath it.
-        if (message.type === 'system.compact_boundary') {
+        if (message.type === "system.compact_boundary") {
           target.lastCompaction = {
             at: Date.now(),
             preTokens: message.metadata?.preTokens ?? 0,
-            trigger: message.metadata?.trigger === 'manual' ? 'manual' : 'auto',
+            trigger: message.metadata?.trigger === "manual" ? "manual" : "auto",
           };
-          if (target.machineId) void refreshContext(frame.instanceId, target.machineId);
+          if (target.machineId) {
+            void refreshContext(frame.instanceId, target.machineId);
+          }
         }
         // An id the SDK took but could not honour: the init that opened this
         // turn still names what was asked for, so the picker follows this
         // instead rather than going on claiming a model that is not answering.
-        if (message.type === 'system.model_fallback') {
+        if (message.type === "system.model_fallback") {
           target.model = message.metadata?.model ?? target.model;
-          void persistSettings(frame.instanceId, { model: message.metadata?.model });
+          void persistSettings(frame.instanceId, {
+            model: message.metadata?.model,
+          });
         }
         // The settle that precedes a relaunch ends the old turn with an error
         // result the reader asked for — a quiet note, not a red card.
-        if (target.relaunching && message.type === 'result.error') {
+        if (target.relaunching && message.type === "result.error") {
           sink.push({
             ...message,
-            type: 'system.status',
-            content: 'Turn stopped to change the permission mode.',
+            type: "system.status",
+            content: "Turn stopped to change the permission mode.",
             metadata: {},
           });
           continue;
@@ -1129,22 +1303,32 @@ function handleFrame(frame: FramePayload): void {
         // A hand-off brief arrives twice — the uuid-less live echo and the
         // uuid-bearing stored copy, both mapping to `user.peer` — and identical
         // body text means it is one brief, not two.
-        if (mergePeerMessage(sink, message)) continue;
+        if (mergePeerMessage(sink, message)) {
+          continue;
+        }
         // A real subagent's `task_notification` names a `tool_use_id` whose
         // branch already exists — its completion is the branch card. The branch
         // event above ran first, so the registry already answers whether this
         // line is redundant; a plain tool task has no branch and keeps its line.
-        if (suppressesTaskLine(target.subagents, message, mapping.branch?.toolUseId)) continue;
+        if (
+          suppressesTaskLine(
+            target.subagents,
+            message,
+            mapping.branch?.toolUseId
+          )
+        ) {
+          continue;
+        }
         // A `result.error` in the shadow of this client's own interrupt is the
         // receipt of a deliberate stop, not a failure — the crimson card is
         // the ledger's loudest treatment and must not be spent on the
         // operator's own action. Retyped to the quiet one-word line.
         if (
-          message.type === 'result.error' &&
+          message.type === "result.error" &&
           interruptedRecently(streamState, frame.instanceId, Date.now())
         ) {
-          message.type = 'ui.interrupted';
-          message.metadata = { ...message.metadata, noteTitle: 'Interrupted' };
+          message.type = "ui.interrupted";
+          message.metadata = { ...message.metadata, noteTitle: "Interrupted" };
         }
         sink.push(message);
       }
@@ -1157,11 +1341,17 @@ function handleFrame(frame: FramePayload): void {
         // queued row it replaces is not a copy anything can stamp. Its id is
         // the second way a row retires — the dequeue frame can be raced by the
         // turn it announces, or missed entirely by a tab that just subscribed.
-        if (mapping.echo.queueId) retireQueued(target, mapping.echo.queueId);
-        else {
-          const copies = target.messages.filter((m) => m.type === 'user' && !m.sdkUuid);
-          const copy = copies.find((m) => m.content === mapping.echo?.text) ?? copies[0];
-          if (copy) copy.sdkUuid = mapping.echo.uuid;
+        if (mapping.echo.queueId) {
+          retireQueued(target, mapping.echo.queueId);
+        } else {
+          const copies = target.messages.filter(
+            (m) => m.type === "user" && !m.sdkUuid
+          );
+          const copy =
+            copies.find((m) => m.content === mapping.echo?.text) ?? copies[0];
+          if (copy) {
+            copy.sdkUuid = mapping.echo.uuid;
+          }
         }
       }
       for (const result of mapping.toolResults) {
@@ -1180,13 +1370,18 @@ function handleFrame(frame: FramePayload): void {
         // closes it again — which is how every subagent ends up reading
         // "running" forever, whether it is working or was done an hour ago.
         const branch = target.subagents[result.toolId];
-        if (!branch) continue;
-        branch.status = result.isError ? 'error' : 'complete';
+        if (!branch) {
+          continue;
+        }
+        branch.status = result.isError ? "error" : "complete";
         branch.completedAt ??= new Date();
         // The tool_result carries the full report; task_notification only had
         // a short summary, so this overwrites unconditionally.
-        if (result.isError) branch.error = result.result;
-        else branch.result = result.result;
+        if (result.isError) {
+          branch.error = result.result;
+        } else {
+          branch.result = result.result;
+        }
       }
 
       // A push the SDK sends when the commands on disk changed: the full list,
@@ -1202,36 +1397,50 @@ function handleFrame(frame: FramePayload): void {
 
       // `undefined` is "this frame said nothing about it"; `null` is the session
       // saying it stopped. Only the latter clears the meter's label.
-      if (mapping.status !== undefined) target.sdkStatus = mapping.status;
+      if (mapping.status !== undefined) {
+        target.sdkStatus = mapping.status;
+      }
       if (mapping.compaction) {
         target.lastCompaction = {
           at: Date.now(),
           preTokens: target.lastCompaction?.preTokens ?? 0,
-          trigger: target.lastCompaction?.trigger ?? 'auto',
+          trigger: target.lastCompaction?.trigger ?? "auto",
           result: mapping.compaction.result,
           error: mapping.compaction.error,
         };
-        if (target.machineId) void refreshContext(frame.instanceId, target.machineId);
+        if (target.machineId) {
+          void refreshContext(frame.instanceId, target.machineId);
+        }
       }
 
-      if (mapping.currentTool && !mapping.agentId) target.currentTool = mapping.currentTool;
+      if (mapping.currentTool && !mapping.agentId) {
+        target.currentTool = mapping.currentTool;
+      }
       // What the partials say the model is writing right now. Only ever the
       // main loop's — `mapFrame` files nothing here for a subagent's frames.
       if (mapping.blockStart) {
         target.openBlock = mapping.blockStart;
         // A fresh block of reasoning, not a continuation of the last one.
-        if (mapping.blockStart === 'thinking') {
-          target.thinkingStream = '';
+        if (mapping.blockStart === "thinking") {
+          target.thinkingStream = "";
           target.thinkingClosing = false;
           target.thinkingSince = Date.now();
         }
       }
-      if (mapping.thinkingDelta) target.thinkingStream += mapping.thinkingDelta;
-      if (mapping.thinkingClosing) target.thinkingClosing = true;
-      if (mapping.blockStop) target.openBlock = null;
+      if (mapping.thinkingDelta) {
+        target.thinkingStream += mapping.thinkingDelta;
+      }
+      if (mapping.thinkingClosing) {
+        target.thinkingClosing = true;
+      }
+      if (mapping.blockStop) {
+        target.openBlock = null;
+      }
       // The glance is empty until the full frame lands, so it never overwrites
       // one that already has the arguments in it.
-      if (mapping.toolStarting && !target.currentTool) target.currentTool = mapping.toolStarting;
+      if (mapping.toolStarting && !target.currentTool) {
+        target.currentTool = mapping.toolStarting;
+      }
       // The turn's own thinking message has landed in the transcript, which is
       // where the reasoning is read from now — same frame, so the live trace
       // gives way without a gap between the two. Before it does, the measured
@@ -1239,11 +1448,14 @@ function handleFrame(frame: FramePayload): void {
       // frame share a mapped timestamp, so adjacency reads 0 there and only
       // this clock knows. One thinking message consumes it; more than one in a
       // frame shares no honest split, so none of them gets a number.
-      if (frame.message.type === 'assistant' && !mapping.agentId) {
+      if (frame.message.type === "assistant" && !mapping.agentId) {
         if (target.thinkingSince !== null) {
-          const settled = mapping.messages.filter((message) => message.type === 'thinking');
+          const settled = mapping.messages.filter(
+            (message) => message.type === "thinking"
+          );
           if (settled.length === 1 && settled[0].metadata) {
-            settled[0].metadata.thinkingDurationMs = Date.now() - target.thinkingSince;
+            settled[0].metadata.thinkingDurationMs =
+              Date.now() - target.thinkingSince;
           }
         }
         clearTurnPhase(target);
@@ -1254,21 +1466,37 @@ function handleFrame(frame: FramePayload): void {
       }
       // A subagent's deltas feed its branch's buffer, not the main loop's.
       if (mapping.agentId) {
-        const branch = branchFor(target.subagents, frame.instanceId, mapping.agentId);
-        if (mapping.delta) branch.streaming += mapping.delta;
-        if (mapping.clearsStream) branch.streaming = '';
+        const branch = branchFor(
+          target.subagents,
+          frame.instanceId,
+          mapping.agentId
+        );
+        if (mapping.delta) {
+          branch.streaming += mapping.delta;
+        }
+        if (mapping.clearsStream) {
+          branch.streaming = "";
+        }
       } else {
-        if (mapping.delta) target.streaming += mapping.delta;
-        if (mapping.clearsStream) target.streaming = '';
+        if (mapping.delta) {
+          target.streaming += mapping.delta;
+        }
+        if (mapping.clearsStream) {
+          target.streaming = "";
+        }
       }
-      if (mapping.failedTurn !== undefined) target.lastTurnFailed = mapping.failedTurn;
+      if (mapping.failedTurn !== undefined) {
+        target.lastTurnFailed = mapping.failedTurn;
+      }
       if (mapping.endsTurn) {
         target.busy = false;
         target.currentTool = null;
         target.sdkStatus = null;
         clearTurnPhase(target);
         // The turn just changed how full the window is; ask rather than guess.
-        if (target.machineId) void refreshContext(frame.instanceId, target.machineId);
+        if (target.machineId) {
+          void refreshContext(frame.instanceId, target.machineId);
+        }
       } else if (
         mapping.delta ||
         mapping.currentTool ||
@@ -1277,7 +1505,8 @@ function handleFrame(frame: FramePayload): void {
         mapping.blockStart ||
         mapping.thinkingDelta ||
         mapping.messages.some(
-          (message) => message.type === 'assistant' || message.type === 'thinking'
+          (message) =>
+            message.type === "assistant" || message.type === "thinking"
         )
       ) {
         // A tab that joined after the turn started never sent anything, so nothing
@@ -1287,9 +1516,11 @@ function handleFrame(frame: FramePayload): void {
       break;
     }
 
-    case 'permission_request': {
-      const routedTo = (frame as { routedTo?: 'parent' }).routedTo;
-      const existing = target.pending.find((p) => p.requestId === frame.requestId);
+    case "permission_request": {
+      const routedTo = (frame as { routedTo?: "parent" }).routedTo;
+      const existing = target.pending.find(
+        (p) => p.requestId === frame.requestId
+      );
       if (existing) {
         // A re-broadcast (the parent died) clears the tag, so the ask returns
         // to the user's queue; a fresh arrival keeps it out. Either way the
@@ -1342,9 +1573,15 @@ const streamState = $state(createStreamState());
 function ingestFrame(
   sessionId: string | undefined,
   frame: FramePayload,
-  source: 'legacy' | 'stream'
+  source: "legacy" | "stream"
 ): void {
-  if (source === 'legacy' && sessionId && streamCarries(streamState, sessionId, frame.kind)) return;
+  if (
+    source === "legacy" &&
+    sessionId &&
+    streamCarries(streamState, sessionId, frame.kind)
+  ) {
+    return;
+  }
   handleFrame(frame);
 }
 
@@ -1353,7 +1590,8 @@ const sessionOf = (frame: FramePayload): string | undefined =>
   (frame as { instanceId?: string }).instanceId;
 
 const streamHost: StreamHost = {
-  applyFrame: (sessionId, frame) => ingestFrame(sessionId, frame as FramePayload, 'stream'),
+  applyFrame: (sessionId, frame) =>
+    ingestFrame(sessionId, frame as FramePayload, "stream"),
   /**
    * The existing re-read, unchanged — a reset is exactly the late-join problem
    * `backfillSession` already solves, including holding the deltas that land
@@ -1367,7 +1605,9 @@ const streamHost: StreamHost = {
   },
   sendToHub: (message) => {
     const socket = globalThis.__whiffleSocket;
-    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return false;
+    }
     socket.send(JSON.stringify(message));
     return true;
   },
@@ -1382,7 +1622,8 @@ const streamHost: StreamHost = {
    * indefinitely. A real timer settles them whether or not anything arrives.
    */
   setTimer: (delayMs, run) => setTimeout(run, delayMs) as unknown as number,
-  clearTimer: (handle) => clearTimeout(handle as unknown as ReturnType<typeof setTimeout>),
+  clearTimer: (handle) =>
+    clearTimeout(handle as unknown as ReturnType<typeof setTimeout>),
   /**
    * The client half of the ledger's failure port: every command that ever
    * reaches `failed`, on either dialect, is heard exactly once here.
@@ -1395,7 +1636,7 @@ const streamHost: StreamHost = {
    * to close.
    */
   noteFailure: (record) => {
-    if (record.kind === 'send') {
+    if (record.kind === "send") {
       // The echo carries the failure from here on — stamped rather than kept
       // only on the record, because records are swept after five minutes and a
       // message that never sent must not fade back to looking sent. The stamp
@@ -1403,14 +1644,18 @@ const streamHost: StreamHost = {
       // row, or the session was closed), nothing on screen says anything, and
       // the toast below is all the operator gets.
       announceSendFailure(record);
-      if (stampSendFailure(record)) return;
+      if (stampSendFailure(record)) {
+        return;
+      }
     }
     // A parked permission card renders its own refusal (`Couldn't send that
     // answer.`) against the very command id it holds. It only does so while it
     // is still on screen: answering removes the request from `pending`, so an
     // answer that fails after the card has gone has no inline surface at all
     // and falls through to the toast.
-    if (record.kind === 'permission.answer' && answerCardStillParked(record)) return;
+    if (record.kind === "permission.answer" && answerCardStillParked(record)) {
+      return;
+    }
     toast.error(failureNotice(record));
   },
 };
@@ -1418,11 +1663,11 @@ const streamHost: StreamHost = {
 /** What to say about a failed command, in the operator's terms, never the wire's. */
 const FAILURE_LEAD: Record<CommandKind, string> = {
   send: "Couldn't send that message.",
-  'permission.answer': "Couldn't send that answer.",
+  "permission.answer": "Couldn't send that answer.",
   interrupt: "Couldn't stop the turn.",
-  'set-model': "Couldn't change the model.",
-  'set-permission-mode': "Couldn't change the permission mode.",
-  'set-effort': "Couldn't change the effort.",
+  "set-model": "Couldn't change the model.",
+  "set-permission-mode": "Couldn't change the permission mode.",
+  "set-effort": "Couldn't change the effort.",
 };
 
 const failureNotice = (record: CommandRecord): string => {
@@ -1437,12 +1682,18 @@ const failureNotice = (record: CommandRecord): string => {
  */
 function stampSendFailure(record: CommandRecord): boolean {
   const target = state.sessions[record.sessionId];
-  if (!target) return false;
-  const echo = target.messages.find((message) => message.metadata?.sentAs === record.commandId);
-  if (!echo) return false;
+  if (!target) {
+    return false;
+  }
+  const echo = target.messages.find(
+    (message) => message.metadata?.sentAs === record.commandId
+  );
+  if (!echo) {
+    return false;
+  }
   echo.metadata = {
     ...echo.metadata,
-    sendFailed: record.reason ?? 'The hub never took it.',
+    sendFailed: record.reason ?? "The hub never took it.",
   };
   return true;
 }
@@ -1453,16 +1704,25 @@ function stampSendFailure(record: CommandRecord): boolean {
  * request id while the ledger correlates on the COMMAND's — nothing else joins
  * the two.
  */
-const answerSurfaces = new Map<string, { instanceId: string; requestId: string }>();
+const answerSurfaces = new Map<
+  string,
+  { instanceId: string; requestId: string }
+>();
 
 /**
  * Kept only as long as the ledger keeps the record it belongs to: an answer
  * that succeeded is never asked about again, so its link would otherwise be a
  * slow leak on the busiest control path there is.
  */
-function rememberAnswerSurface(commandId: string, instanceId: string, requestId: string): void {
+function rememberAnswerSurface(
+  commandId: string,
+  instanceId: string,
+  requestId: string
+): void {
   for (const known of [...answerSurfaces.keys()]) {
-    if (!streamState.commands[known]) answerSurfaces.delete(known);
+    if (!streamState.commands[known]) {
+      answerSurfaces.delete(known);
+    }
   }
   answerSurfaces.set(commandId, { instanceId, requestId });
 }
@@ -1494,10 +1754,13 @@ function rememberAnswerSurface(commandId: string, instanceId: string, requestId:
 function answerCardStillParked(record: CommandRecord): boolean {
   const surface = answerSurfaces.get(record.commandId);
   answerSurfaces.delete(record.commandId);
-  if (!surface) return false;
+  if (!surface) {
+    return false;
+  }
   return (
     state.sessions[surface.instanceId]?.pending.some(
-      (parked) => parked.requestId === surface.requestId && !routedToParent(parked)
+      (parked) =>
+        parked.requestId === surface.requestId && !routedToParent(parked)
     ) ?? false
   );
 }
@@ -1513,7 +1776,9 @@ let lastSweep = 0;
  */
 function sweepOnTraffic(): void {
   const now = Date.now();
-  if (now - lastSweep < 1000) return;
+  if (now - lastSweep < 1000) {
+    return;
+  }
   lastSweep = now;
   // With the host: a sweep without it fails records that
   // {@link StreamHost.noteFailure} never hears about — silence, by omission.
@@ -1525,7 +1790,7 @@ function sweepOnTraffic(): void {
 }
 
 /** Re-exported so a component reads one import for a command and its stages. */
-export type { CommandRecord, CommandStage } from './stream';
+export type { CommandRecord, CommandStage } from "./stream";
 
 /** Whether this dashboard is following hub-sequenced streams. Read by the UI. */
 export function streamCapable(): boolean {
@@ -1546,18 +1811,21 @@ export function commandsFor(instanceId: string): CommandRecord[] {
  * The newest command of one kind on one session — what a control reads to say
  * whether what was just asked for has been taken, applied, or refused.
  */
-export function latestCommandFor(instanceId: string, kind: CommandKind): CommandRecord | null {
+export function latestCommandFor(
+  instanceId: string,
+  kind: CommandKind
+): CommandRecord | null {
   return latestCommand(streamState, instanceId, kind);
 }
 
 /** What each command kind carries, in the shape the caller already has to hand. */
 export interface CommandIntents {
-  send: { text: string; extras?: SendExtras };
-  'permission.answer': { requestId: string; result: PermissionResult };
   interrupt: Record<string, never>;
-  'set-model': { model: string };
-  'set-permission-mode': { mode: PermissionMode };
-  'set-effort': { effort: EffortLevel };
+  "permission.answer": { requestId: string; result: PermissionResult };
+  send: { text: string; extras?: SendExtras };
+  "set-effort": { effort: EffortLevel };
+  "set-model": { model: string };
+  "set-permission-mode": { mode: PermissionMode };
 }
 
 /**
@@ -1579,24 +1847,34 @@ function wirePayload<K extends CommandKind>(
     args,
   });
   switch (kind) {
-    case 'send': {
-      const { text, extras } = intent as CommandIntents['send'];
+    case "send": {
+      const { text, extras } = intent as CommandIntents["send"];
       return { instanceId, message: userMessage(text), ...(extras ?? {}) };
     }
-    case 'permission.answer': {
-      const { requestId, result } = intent as CommandIntents['permission.answer'];
-      return { instanceId, requestId, method: RESOLVE_PERMISSION, args: [requestId, result] };
+    case "permission.answer": {
+      const { requestId, result } =
+        intent as CommandIntents["permission.answer"];
+      return {
+        instanceId,
+        requestId,
+        method: RESOLVE_PERMISSION,
+        args: [requestId, result],
+      };
     }
-    case 'interrupt':
-      return control('interrupt', []);
-    case 'set-model':
-      return control('setModel', [(intent as CommandIntents['set-model']).model]);
-    case 'set-permission-mode':
-      return control('setPermissionMode', [
-        (intent as CommandIntents['set-permission-mode']).mode,
+    case "interrupt":
+      return control("interrupt", []);
+    case "set-model":
+      return control("setModel", [
+        (intent as CommandIntents["set-model"]).model,
       ]);
-    case 'set-effort':
-      return control('setEffort', [(intent as CommandIntents['set-effort']).effort]);
+    case "set-permission-mode":
+      return control("setPermissionMode", [
+        (intent as CommandIntents["set-permission-mode"]).mode,
+      ]);
+    case "set-effort":
+      return control("setEffort", [
+        (intent as CommandIntents["set-effort"]).effort,
+      ]);
     default:
       // A kind the contract grew and this map did not. Loud rather than
       // silently dispatched as whatever the last branch happened to be.
@@ -1613,30 +1891,40 @@ function legacyCall<K extends CommandKind>(
   commandId: string
 ): () => void | Promise<unknown> {
   switch (kind) {
-    case 'send': {
-      const { text, extras } = intent as CommandIntents['send'];
+    case "send": {
+      const { text, extras } = intent as CommandIntents["send"];
       // The id travels into the echo on this dialect too, so a legacy-hub
       // failure lands on the same row a stream-hub failure would.
       return () => sendText(instanceId, machineId, text, extras, commandId);
     }
-    case 'permission.answer': {
-      const { requestId, result } = intent as CommandIntents['permission.answer'];
+    case "permission.answer": {
+      const { requestId, result } =
+        intent as CommandIntents["permission.answer"];
       return () => resolvePermission(instanceId, machineId, requestId, result);
     }
-    case 'interrupt':
+    case "interrupt":
       return () => interrupt(instanceId, machineId);
-    case 'set-model':
-      return () => setModel(instanceId, machineId, (intent as CommandIntents['set-model']).model);
-    case 'set-permission-mode':
+    case "set-model":
+      return () =>
+        setModel(
+          instanceId,
+          machineId,
+          (intent as CommandIntents["set-model"]).model
+        );
+    case "set-permission-mode":
       return () =>
         setPermissionMode(
           instanceId,
           machineId,
-          (intent as CommandIntents['set-permission-mode']).mode
+          (intent as CommandIntents["set-permission-mode"]).mode
         );
-    case 'set-effort':
+    case "set-effort":
       return () =>
-        setEffort(instanceId, machineId, (intent as CommandIntents['set-effort']).effort);
+        setEffort(
+          instanceId,
+          machineId,
+          (intent as CommandIntents["set-effort"]).effort
+        );
     default:
       throw new Error(`No legacy call for command kind ${String(kind)}.`);
   }
@@ -1690,12 +1978,12 @@ export function submitCommand<K extends CommandKind>(
   // afterwards, held nothing at all when the throw happened before the wire —
   // the operator got a toast and their typed words were gone, which is the
   // original defect wearing a different hat.
-  if (kind === 'send') {
-    const { text, extras } = intent as CommandIntents['send'];
+  if (kind === "send") {
+    const { text, extras } = intent as CommandIntents["send"];
     rememberSend(commandId, instanceId, machineId, text, extras ?? {});
   }
-  if (kind === 'permission.answer') {
-    const { requestId } = intent as CommandIntents['permission.answer'];
+  if (kind === "permission.answer") {
+    const { requestId } = intent as CommandIntents["permission.answer"];
     rememberAnswerSurface(commandId, instanceId, requestId);
   }
 
@@ -1709,7 +1997,10 @@ export function submitCommand<K extends CommandKind>(
     // `relaySend` untouched. No `viewId` here — it would just repeat the
     // envelope's own `instanceId`; `clientId` is the only fact provenance adds.
     const provenance = { clientId: currentClientId() };
-    payload = { ...(wirePayload(kind, instanceId, commandId, intent) as object), provenance };
+    payload = {
+      ...(wirePayload(kind, instanceId, commandId, intent) as object),
+      provenance,
+    };
     legacy = legacyCall(kind, instanceId, machineId, intent, commandId);
     effects = streamEffectsFor(instanceId, kind, intent, commandId);
   } catch (error) {
@@ -1732,8 +2023,8 @@ export function submitCommand<K extends CommandKind>(
     // recoverable text nobody can reach. It is wrapped because it is the one
     // thing left that could throw, and a throw from a catch block is the
     // silence this whole function exists to abolish.
-    if (kind === 'send') {
-      const { text, extras } = intent as CommandIntents['send'];
+    if (kind === "send") {
+      const { text, extras } = intent as CommandIntents["send"];
       try {
         noteSendSubmitted(instanceId, text, extras ?? {}, commandId);
       } catch {
@@ -1772,12 +2063,12 @@ export function submitCommand<K extends CommandKind>(
  * word when their `control_result` comes back.
  */
 const SETTLES_AT: Record<CommandKind, SettleStage> = {
-  send: 'accepted',
-  'permission.answer': 'applied',
-  interrupt: 'applied',
-  'set-model': 'applied',
-  'set-permission-mode': 'applied',
-  'set-effort': 'applied',
+  send: "accepted",
+  "permission.answer": "applied",
+  interrupt: "applied",
+  "set-model": "applied",
+  "set-permission-mode": "applied",
+  "set-effort": "applied",
 };
 
 const messageOf = (error: unknown): string =>
@@ -1787,11 +2078,11 @@ const messageOf = (error: unknown): string =>
 
 /** One unsent message, whole — the payload a retry needs and the echo cannot hold. */
 interface OutboxEntry {
+  at: number;
+  extras: SendExtras;
   instanceId: string;
   machineId: string;
   text: string;
-  extras: SendExtras;
-  at: number;
 }
 
 /**
@@ -1843,7 +2134,13 @@ function rememberSend(
   text: string,
   extras: SendExtras
 ): void {
-  sendOutbox.set(commandId, { instanceId, machineId, text, extras, at: Date.now() });
+  sendOutbox.set(commandId, {
+    instanceId,
+    machineId,
+    text,
+    extras,
+    at: Date.now(),
+  });
   outboxVersion += 1;
   pruneOutbox();
 }
@@ -1868,24 +2165,35 @@ function pruneOutbox(): void {
     // treating that as "the hub has it" deleted the payload the moment it was
     // stored. The absent-record case is covered by `stale` anyway: a record the
     // ledger has already forgotten is at least as old as the TTL below.
-    const taken = record ? record.stage !== 'submitted' && record.stage !== 'failed' : false;
-    if (stale || taken) sendOutbox.delete(commandId);
+    const taken = record
+      ? record.stage !== "submitted" && record.stage !== "failed"
+      : false;
+    if (stale || taken) {
+      sendOutbox.delete(commandId);
+    }
   }
   if (sendOutbox.size > SETTLED_COMMAND_LIMIT) {
     const oldest = [...sendOutbox.entries()].sort((a, b) => a[1].at - b[1].at);
-    for (const [commandId] of oldest.slice(0, sendOutbox.size - SETTLED_COMMAND_LIMIT)) {
+    for (const [commandId] of oldest.slice(
+      0,
+      sendOutbox.size - SETTLED_COMMAND_LIMIT
+    )) {
       sendOutbox.delete(commandId);
     }
   }
   // Only when something actually went, so the common no-op sweep does not
   // invalidate every row's derivation once a second.
-  if (sendOutbox.size !== before) outboxVersion += 1;
+  if (sendOutbox.size !== before) {
+    outboxVersion += 1;
+  }
 }
 
 /** Removes the echo a failed command left behind, if it is still there. */
 function dropSendEcho(instanceId: string, commandId: string): void {
   const target = state.sessions[instanceId];
-  if (!target) return;
+  if (!target) {
+    return;
+  }
   target.messages = target.messages.filter(
     (message) => message.metadata?.sentAs !== commandId
   );
@@ -1899,13 +2207,15 @@ function dropSendEcho(instanceId: string, commandId: string): void {
  */
 export function retrySend(commandId: string): void {
   const entry = sendOutbox.get(commandId);
-  if (!entry) return;
+  if (!entry) {
+    return;
+  }
   sendOutbox.delete(commandId);
   outboxVersion += 1;
   dropSendEcho(entry.instanceId, commandId);
   // Through `submitCommand`, not around it: a retry is a new command with its
   // own record and its own ghost, never a resurrected one.
-  submitCommand(entry.instanceId, entry.machineId, 'send', {
+  submitCommand(entry.instanceId, entry.machineId, "send", {
     text: entry.text,
     extras: entry.extras,
   });
@@ -1920,7 +2230,9 @@ export function retrySend(commandId: string): void {
  */
 export function restoreDraft(commandId: string): void {
   const entry = sendOutbox.get(commandId);
-  if (!entry) return;
+  if (!entry) {
+    return;
+  }
   sendOutbox.delete(commandId);
   outboxVersion += 1;
   dropSendEcho(entry.instanceId, commandId);
@@ -1930,7 +2242,9 @@ export function restoreDraft(commandId: string): void {
   // would otherwise pin those bytes for the life of the tab. Keeping only the
   // newest bounds it at one without needing anyone to come back and collect.
   for (const held of Object.keys(restoreSlots)) {
-    if (held !== entry.instanceId) delete restoreSlots[held];
+    if (held !== entry.instanceId) {
+      delete restoreSlots[held];
+    }
   }
   restoreSlots[entry.instanceId] = { text: entry.text, extras: entry.extras };
 }
@@ -1942,10 +2256,14 @@ export function restoreDraft(commandId: string): void {
  * threading a prop through the transcript for this would make the transcript a
  * conduit for something it has no part in.
  */
-const restoreSlots = $state<Record<string, { text: string; extras: SendExtras } | null>>({});
+const restoreSlots = $state<
+  Record<string, { text: string; extras: SendExtras } | null>
+>({});
 
 /** The payload waiting to go back into this session's composer, if any. */
-export function pendingRestore(instanceId: string): { text: string; extras: SendExtras } | null {
+export function pendingRestore(
+  instanceId: string
+): { text: string; extras: SendExtras } | null {
   return restoreSlots[instanceId] ?? null;
 }
 
@@ -1967,7 +2285,7 @@ export function clearRestore(instanceId: string): void {
 const sendFailureNotices = $state<Record<string, string>>({});
 
 export function sendFailureNotice(instanceId: string): string {
-  return sendFailureNotices[instanceId] ?? '';
+  return sendFailureNotices[instanceId] ?? "";
 }
 
 function announceSendFailure(record: CommandRecord): void {
@@ -1975,11 +2293,13 @@ function announceSendFailure(record: CommandRecord): void {
   // are small, but "small and unbounded" is still unbounded on a board a
   // reader leaves open for a week.
   for (const held of Object.keys(sendFailureNotices)) {
-    if (held !== record.sessionId && !state.sessions[held]) delete sendFailureNotices[held];
+    if (held !== record.sessionId && !state.sessions[held]) {
+      delete sendFailureNotices[held];
+    }
   }
   sendFailureNotices[record.sessionId] = record.reason
     ? `Message not sent: ${record.reason}`
-    : 'Message not sent.';
+    : "Message not sent.";
 }
 
 /**
@@ -2005,13 +2325,15 @@ function streamEffectsFor<K extends CommandKind>(
 ): StreamEffects | undefined {
   const target = session(instanceId);
   switch (kind) {
-    case 'send': {
-      const { text, extras } = intent as CommandIntents['send'];
+    case "send": {
+      const { text, extras } = intent as CommandIntents["send"];
       // The echo is stamped with the id of the command it IS, which is the
       // whole join between a rendered message and the ledger's word on it.
-      return { submitted: () => noteSendSubmitted(instanceId, text, extras, commandId) };
+      return {
+        submitted: () => noteSendSubmitted(instanceId, text, extras, commandId),
+      };
     }
-    case 'interrupt':
+    case "interrupt":
       return {
         submitted: () => {
           target.busy = false;
@@ -2019,51 +2341,62 @@ function streamEffectsFor<K extends CommandKind>(
           trackWorking(target);
         },
       };
-    case 'permission.answer': {
-      const { requestId } = intent as CommandIntents['permission.answer'];
+    case "permission.answer": {
+      const { requestId } = intent as CommandIntents["permission.answer"];
       return {
         submitted: () => {
-          target.pending = target.pending.filter((p) => p.requestId !== requestId);
+          target.pending = target.pending.filter(
+            (p) => p.requestId !== requestId
+          );
           trackWorking(target);
         },
       };
     }
-    case 'set-model': {
-      const { model } = intent as CommandIntents['set-model'];
+    case "set-model": {
+      const { model } = intent as CommandIntents["set-model"];
       const previous = target.model;
       return {
         submitted: () => {
           target.model = model;
         },
         settled: (stage) => {
-          if (stage === 'failed') target.model = previous;
-          else void persistSettings(instanceId, { model });
+          if (stage === "failed") {
+            target.model = previous;
+          } else {
+            void persistSettings(instanceId, { model });
+          }
         },
       };
     }
-    case 'set-permission-mode': {
-      const { mode } = intent as CommandIntents['set-permission-mode'];
+    case "set-permission-mode": {
+      const { mode } = intent as CommandIntents["set-permission-mode"];
       const previous = target.permissionMode;
       return {
         submitted: () => {
           target.permissionMode = mode;
         },
         settled: (stage) => {
-          if (stage === 'failed') target.permissionMode = previous;
-          else void persistSettings(instanceId, { permissionMode: mode });
+          if (stage === "failed") {
+            target.permissionMode = previous;
+          } else {
+            void persistSettings(instanceId, { permissionMode: mode });
+          }
         },
       };
     }
-    case 'set-effort': {
-      const { effort } = intent as CommandIntents['set-effort'];
+    case "set-effort": {
+      const { effort } = intent as CommandIntents["set-effort"];
       const previous = target.effort;
       return {
         submitted: () => {
           target.effort = effort;
         },
         settled: (stage) => {
-          if (stage === 'failed') target.effort = previous;
-          else void persistSettings(instanceId, { effort });
+          if (stage === "failed") {
+            target.effort = previous;
+          } else {
+            void persistSettings(instanceId, { effort });
+          }
         },
       };
     }
@@ -2092,13 +2425,17 @@ function isSubscribed(instanceId: string): boolean {
 /** The full set of instance ids this dashboard wants `frame` frames for. */
 function subscriptionIds(): string[] {
   const ids = new Set(workingSet.order);
-  if (peekedId) ids.add(peekedId);
-  for (const id of watchedDelegates) ids.add(id);
+  if (peekedId) {
+    ids.add(peekedId);
+  }
+  for (const id of watchedDelegates) {
+    ids.add(id);
+  }
   return [...ids];
 }
 
 /** The last subscription set sent, so an unchanged working set stays quiet. */
-let lastSubscriptionKey = '';
+let lastSubscriptionKey = "";
 
 /**
  * Re-sends the whole subscription set. Replace-whole-set on every change; a
@@ -2107,13 +2444,21 @@ let lastSubscriptionKey = '';
  */
 export function syncSubscriptions(): void {
   const socket = globalThis.__whiffleSocket;
-  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return;
+  }
   const ids = subscriptionIds().sort();
-  const key = ids.join('\u0000');
-  if (key === lastSubscriptionKey) return;
+  const key = ids.join("\u0000");
+  if (key === lastSubscriptionKey) {
+    return;
+  }
   lastSubscriptionKey = key;
   socket.send(
-    JSON.stringify({ verb: 'subscribe', machineId: '', payload: { instanceIds: ids } })
+    JSON.stringify({
+      verb: "subscribe",
+      machineId: "",
+      payload: { instanceIds: ids },
+    })
   );
   // The stream is subscribed per session, so the set the dashboard watches is
   // the set it follows. A no-op against a legacy hub.
@@ -2122,7 +2467,9 @@ export function syncSubscriptions(): void {
 
 /** The board peeking a session subscribes it for frames; `null` closes the peek. */
 export function setPeeked(id: string | null): void {
-  if (peekedId === id) return;
+  if (peekedId === id) {
+    return;
+  }
   peekedId = id;
   syncSubscriptions();
 }
@@ -2135,14 +2482,18 @@ export function watchDelegate(instanceId: string): void {
 
 /** A delegate card collapsed: stop watching, so the instance's frames no longer stream. */
 export function unwatchDelegate(instanceId: string): void {
-  if (!watchedDelegates.delete(instanceId)) return;
+  if (!watchedDelegates.delete(instanceId)) {
+    return;
+  }
   syncSubscriptions();
 }
 
 function send(envelope: Envelope): void {
   const socket = globalThis.__whiffleSocket;
   if (!socket || socket.readyState !== WebSocket.OPEN) {
-    throw new Error('Not connected to the hub. Check that it is running, then try again.');
+    throw new Error(
+      "Not connected to the hub. Check that it is running, then try again."
+    );
   }
   socket.send(JSON.stringify(envelope));
 }
@@ -2178,8 +2529,15 @@ function scheduleReconnect(): void {
  */
 export function reconnectNow(): void {
   const socket = globalThis.__whiffleSocket;
-  if (socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) return;
-  if (globalThis.__whiffleReconnectTimeout) clearTimeout(globalThis.__whiffleReconnectTimeout);
+  if (
+    socket?.readyState === WebSocket.OPEN ||
+    socket?.readyState === WebSocket.CONNECTING
+  ) {
+    return;
+  }
+  if (globalThis.__whiffleReconnectTimeout) {
+    clearTimeout(globalThis.__whiffleReconnectTimeout);
+  }
   globalThis.__whiffleReconnectAttempts = 0;
   state.retryAt = null;
   connect();
@@ -2201,27 +2559,27 @@ let claimed = false;
  * host", and the two have different fixes.
  */
 export function hubSocketUrl(): string {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${window.location.host}/ws/dashboard`;
 }
 
 function connect(): void {
   globalThis.__whiffleDisposing = false;
   teardown();
-  state.status = 'connecting';
+  state.status = "connecting";
   state.attempted = true;
 
   const socket = new WebSocket(hubSocketUrl());
 
   socket.onopen = () => {
-    state.status = 'connected';
+    state.status = "connected";
     state.retryAt = null;
     state.failed = false;
     globalThis.__whiffleReconnectAttempts = 0;
     void refresh().then(refreshCatalogs);
     // Re-state the subscription on every (re)connect — the hub's registry forgot
     // this dashboard the moment the socket dropped.
-    lastSubscriptionKey = '';
+    lastSubscriptionKey = "";
     syncSubscriptions();
   };
 
@@ -2264,28 +2622,32 @@ function bind(socket: WebSocket): void {
       return;
     }
     const envelope = message as Envelope<FramePayload>;
-    if (envelope.verb !== 'frames') return;
-    ingestFrame(sessionOf(envelope.payload), envelope.payload, 'legacy');
+    if (envelope.verb !== "frames") {
+      return;
+    }
+    ingestFrame(sessionOf(envelope.payload), envelope.payload, "legacy");
     sweepOnTraffic();
   };
 
   socket.onclose = () => {
-    state.status = 'disconnected';
+    state.status = "disconnected";
     // A socket that closed is an attempt that is over, one way or the other.
     state.failed = true;
-    abandonInflight('The connection to the hub dropped before that finished.');
+    abandonInflight("The connection to the hub dropped before that finished.");
     // Subscriptions, resumes and unanswered commands all died with the socket;
     // the cursors do not — resuming from them is what the hub's ring is for.
     // With the host, for the same reason the traffic sweep passes it: a socket
     // that dies mid-command must SAY so, not merely record it.
     noteDisconnect(streamState, Date.now(), streamHost);
-    if (!globalThis.__whiffleDisposing) scheduleReconnect();
+    if (!globalThis.__whiffleDisposing) {
+      scheduleReconnect();
+    }
   };
 
   socket.onerror = () => {
     // Always followed by `onclose`, which schedules the retry — this only
     // records that the last attempt failed, never that trying has stopped.
-    state.status = 'error';
+    state.status = "error";
     state.failed = true;
   };
 }
@@ -2293,8 +2655,14 @@ function bind(socket: WebSocket): void {
 /** What routes call on mount: the socket is app-scoped, not page-scoped. */
 export function ensureConnected(): void {
   const socket = globalThis.__whiffleSocket;
-  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-    if (claimed) return;
+  if (
+    socket &&
+    (socket.readyState === WebSocket.OPEN ||
+      socket.readyState === WebSocket.CONNECTING)
+  ) {
+    if (claimed) {
+      return;
+    }
     // Adopt it rather than assume somebody else is still listening: `onopen`
     // has already fired for an open socket and will never fire again, so the
     // status has to be read off the socket instead of waited for.
@@ -2302,13 +2670,13 @@ export function ensureConnected(): void {
     state.attempted = true;
     bind(socket);
     if (socket.readyState === WebSocket.OPEN) {
-      state.status = 'connected';
+      state.status = "connected";
       state.retryAt = null;
       void refresh().then(refreshCatalogs);
-      lastSubscriptionKey = '';
+      lastSubscriptionKey = "";
       syncSubscriptions();
     } else {
-      state.status = 'connecting';
+      state.status = "connecting";
     }
     return;
   }
@@ -2323,30 +2691,40 @@ export function ensureConnected(): void {
  * window regains focus. Each means the outage may be over right now, and the
  * timer was set when none of that was known. Registered once per document.
  */
-if (typeof window !== 'undefined' && !globalThis.__whiffleWakeBound) {
+if (typeof window !== "undefined" && !globalThis.__whiffleWakeBound) {
   globalThis.__whiffleWakeBound = true;
   const wake = () => {
-    if (document.visibilityState === 'hidden') return;
+    if (document.visibilityState === "hidden") {
+      return;
+    }
     reconnectNow();
   };
-  window.addEventListener('online', wake);
-  window.addEventListener('focus', wake);
-  document.addEventListener('visibilitychange', wake);
+  window.addEventListener("online", wake);
+  window.addEventListener("focus", wake);
+  document.addEventListener("visibilitychange", wake);
 }
 
 /** Resolves once the app socket is OPEN, connecting it if needed. */
 function waitForOpen(timeoutMs = 5000): Promise<void> {
   ensureConnected();
   const socket = globalThis.__whiffleSocket;
-  if (socket && socket.readyState === WebSocket.OPEN) return Promise.resolve();
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    return Promise.resolve();
+  }
 
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs;
     const poll = () => {
       const current = globalThis.__whiffleSocket;
-      if (current && current.readyState === WebSocket.OPEN) return resolve();
+      if (current && current.readyState === WebSocket.OPEN) {
+        return resolve();
+      }
       if (Date.now() > deadline) {
-        return reject(new Error('Could not reach the hub. Check that it is running, then try again.'));
+        return reject(
+          new Error(
+            "Could not reach the hub. Check that it is running, then try again."
+          )
+        );
       }
       setTimeout(poll, 100);
     };
@@ -2354,15 +2732,15 @@ function waitForOpen(timeoutMs = 5000): Promise<void> {
   });
 }
 
-function userMessage(text: string): SendPayload['message'] {
+function userMessage(text: string): SendPayload["message"] {
   return {
-    type: 'user',
-    message: { role: 'user', content: text },
+    type: "user",
+    message: { role: "user", content: text },
     parent_tool_use_id: null,
     // Stamped, not implied. The SDK treats an unstamped message as
     // unattributed and fails it closed at the gates that ask whether a human
     // said this — so a typed sentence has to say that it was typed.
-    origin: { kind: 'human' },
+    origin: { kind: "human" },
   };
 }
 
@@ -2376,26 +2754,37 @@ function userMessage(text: string): SendPayload['message'] {
  *   usually mid-work; the note lands in its transcript now and is picked up
  *   when it next answers, instead of derailing what it was asked to do.
  */
-function peerMessage(text: string, from: { id: string; name: string }): SendPayload['message'] {
+function peerMessage(
+  text: string,
+  from: { id: string; name: string }
+): SendPayload["message"] {
   return {
-    type: 'user',
-    message: { role: 'user', content: text },
+    type: "user",
+    message: { role: "user", content: text },
     parent_tool_use_id: null,
-    origin: { kind: 'peer', from: from.id, name: from.name, fromSession: from.id },
+    origin: {
+      kind: "peer",
+      from: from.id,
+      name: from.name,
+      fromSession: from.id,
+    },
     shouldQuery: false,
   };
 }
 
 /** Spawns a session on `machineId` and registers the view it streams into. */
-function start({ machineId, ...spawn }: Omit<SpawnPayload, 'instanceId'> & { machineId: string }): SessionState {
+function start({
+  machineId,
+  ...spawn
+}: Omit<SpawnPayload, "instanceId"> & { machineId: string }): SessionState {
   const instanceId = newId();
   const payload: SpawnPayload = { instanceId, ...spawn };
-  send({ verb: 'spawn', machineId, instanceId, payload });
+  send({ verb: "spawn", machineId, instanceId, payload });
 
   const created = session(instanceId);
   created.machineId = machineId;
   created.cwd = spawn.cwd;
-  created.harness = spawn.harness ?? 'claude';
+  created.harness = spawn.harness ?? "claude";
   created.permissionMode = spawn.permissionMode ?? null;
   // What the form chose, so the header shows it during the wait for the first
   // init — which then corrects it to whatever the harness resolved it to.
@@ -2425,8 +2814,8 @@ export function spawnSession({
   permissionMode?: PermissionMode;
   model?: string;
   effort?: EffortLevel;
-  scratch?: SpawnPayload['scratch'];
-  bootstrap?: SpawnPayload['bootstrap'];
+  scratch?: SpawnPayload["scratch"];
+  bootstrap?: SpawnPayload["bootstrap"];
   projectId?: string;
 }): string {
   const created = start({
@@ -2440,7 +2829,9 @@ export function spawnSession({
     bootstrap,
     projectId,
   });
-  if (prompt?.trim()) sendText(created.instanceId, machineId, prompt.trim());
+  if (prompt?.trim()) {
+    sendText(created.instanceId, machineId, prompt.trim());
+  }
   void refresh();
   return created.instanceId;
 }
@@ -2453,7 +2844,7 @@ export function resumeSession({
   machineId,
   cwd,
   sessionId,
-  harness = 'claude',
+  harness = "claude",
   history = [],
 }: {
   machineId: string;
@@ -2470,7 +2861,9 @@ export function resumeSession({
   );
   let live: InstanceRow | undefined = candidates[0];
   if (candidates.length > 1) {
-    const narrowed = candidates.filter((row) => row.machineId === machineId && row.cwd === cwd);
+    const narrowed = candidates.filter(
+      (row) => row.machineId === machineId && row.cwd === cwd
+    );
     // A true duplicate — same machine, same cwd, same session — is settled by
     // picking whichever row moved most recently, not by minting a third one.
     live =
@@ -2478,7 +2871,10 @@ export function resumeSession({
         ? narrowed[0]
         : narrowed.length > 1
           ? narrowed.reduce((newest, row) =>
-              new Date(row.updatedAt ?? 0).getTime() > new Date(newest.updatedAt ?? 0).getTime() ? row : newest
+              new Date(row.updatedAt ?? 0).getTime() >
+              new Date(newest.updatedAt ?? 0).getTime()
+                ? row
+                : newest
             )
           : undefined;
   }
@@ -2491,9 +2887,17 @@ export function resumeSession({
     return live.id;
   }
 
-  const created = start({ machineId, cwd, harness, resume: { sessionKey: sessionId } });
+  const created = start({
+    machineId,
+    cwd,
+    harness,
+    resume: { sessionKey: sessionId },
+  });
   created.sessionId = sessionId;
-  created.messages = history.map((message) => ({ ...message, instanceId: created.instanceId }));
+  created.messages = history.map((message) => ({
+    ...message,
+    instanceId: created.instanceId,
+  }));
   void refresh();
   return created.instanceId;
 }
@@ -2508,7 +2912,7 @@ export function forkSession({
   machineId,
   cwd,
   sessionId,
-  harness = 'claude',
+  harness = "claude",
   history = [],
   at,
 }: {
@@ -2527,13 +2931,16 @@ export function forkSession({
     resume: { sessionKey: sessionId, fork: true, ...(at && { atMessage: at }) },
     scratch: {},
   });
-  created.messages = history.map((message) => ({ ...message, instanceId: created.instanceId }));
+  created.messages = history.map((message) => ({
+    ...message,
+    instanceId: created.instanceId,
+  }));
   void refresh();
   return created.instanceId;
 }
 
 /** What a turn carries besides its typed text — pastes turned into chips, images. */
-export type SendExtras = Pick<SendPayload, 'attachments' | 'images'>;
+export type SendExtras = Pick<SendPayload, "attachments" | "images">;
 
 export function sendText(
   instanceId: string,
@@ -2543,7 +2950,11 @@ export function sendText(
   /** The tracked command this send IS, when it has one. See {@link submitCommand}. */
   commandId?: string
 ): void {
-  const payload: SendPayload = { instanceId, message: userMessage(text), ...extras };
+  const payload: SendPayload = {
+    instanceId,
+    message: userMessage(text),
+    ...extras,
+  };
   // Optimistic, and marked as such. If the session was busy the daemon answers
   // with `message_queued` and this copy is retired in favour of the queue's own
   // row ({@link ingestQueued}); if it was idle, or the daemon predates the
@@ -2561,7 +2972,7 @@ export function sendText(
   // one object, and the only path that replaces it — `ingestQueued` — removes
   // the copy it supersedes.
   noteSendSubmitted(instanceId, text, extras, commandId);
-  send({ verb: 'send', machineId, instanceId, payload });
+  send({ verb: "send", machineId, instanceId, payload });
 }
 
 /**
@@ -2582,11 +2993,15 @@ function noteSendSubmitted(
   const echo = localUserMessage(instanceId, text, extras);
   target.messages.push({
     ...echo,
-    metadata: { ...echo.metadata, queuedLocally: true, ...(commandId && { sentAs: commandId }) },
+    metadata: {
+      ...echo.metadata,
+      queuedLocally: true,
+      ...(commandId && { sentAs: commandId }),
+    },
   });
   // A new attempt replaces the last one's announcement rather than stacking on
   // it: the live region says what is true now, not what was true before.
-  sendFailureNotices[instanceId] = '';
+  sendFailureNotices[instanceId] = "";
   target.busy = true;
   // Before any frame: the whole point of the clock is the wait for the first one.
   trackWorking(target);
@@ -2603,11 +3018,17 @@ function noteSendSubmitted(
  * crash — and the reader should not have to know which of their actions
  * happens to revive it. Returns once the session can take work again.
  */
-export async function ensureAlive(instanceId: string, machineId: string): Promise<void> {
+export async function ensureAlive(
+  instanceId: string,
+  machineId: string
+): Promise<void> {
   const target = session(instanceId);
   const row = state.instances.find((candidate) => candidate.id === instanceId);
   const dead =
-    row && (row.status === 'error' || row.status === 'stopped' || row.status === 'sleeping');
+    row &&
+    (row.status === "error" ||
+      row.status === "stopped" ||
+      row.status === "sleeping");
   if (dead && target.sessionId) {
     const requestId = newId();
     const payload: SpawnPayload = {
@@ -2623,17 +3044,19 @@ export async function ensureAlive(instanceId: string, machineId: string): Promis
       // session and a dead one has told it nothing — a tab opened after the
       // process died holds `null` for both, and sending nothing is how a
       // session comes back asking permission for everything.
-      permissionMode: (target.permissionMode ?? row?.permissionMode ?? undefined) as
-        | PermissionMode
-        | undefined,
+      permissionMode: (target.permissionMode ??
+        row?.permissionMode ??
+        undefined) as PermissionMode | undefined,
       model: target.model ?? row?.model ?? undefined,
-      effort: (target.effort ?? row?.effort ?? undefined) as EffortLevel | undefined,
+      effort: (target.effort ?? row?.effort ?? undefined) as
+        | EffortLevel
+        | undefined,
       requestId,
     };
     target.relaunching = true;
     try {
-      await ask<void>(requestId, 'revive', CONTROL_TIMEOUT_MS, () =>
-        send({ verb: 'spawn', machineId, instanceId, requestId, payload })
+      await ask<void>(requestId, "revive", CONTROL_TIMEOUT_MS, () =>
+        send({ verb: "spawn", machineId, instanceId, requestId, payload })
       );
     } finally {
       target.relaunching = false;
@@ -2672,7 +3095,7 @@ export async function sendToPeer(
     message: peerMessage(text, { id: from.instanceId, name: from.label }),
   };
   send({
-    verb: 'send',
+    verb: "send",
     machineId: target.machineId,
     instanceId: target.instanceId,
     payload,
@@ -2681,12 +3104,14 @@ export async function sendToPeer(
 
 /** Sessions this one can hand work to: every other live session in the fleet. */
 export function peerTargets(exceptInstanceId: string): InstanceRow[] {
-  return state.instances.filter((row) => row.id !== exceptInstanceId && isLive(row));
+  return state.instances.filter(
+    (row) => row.id !== exceptInstanceId && isLive(row)
+  );
 }
 
 export function stopSession(instanceId: string, machineId: string): void {
   const payload: StopPayload = { instanceId };
-  send({ verb: 'stop', machineId, instanceId, payload });
+  send({ verb: "stop", machineId, instanceId, payload });
 
   settleStopped(instanceId);
   void refresh();
@@ -2697,14 +3122,17 @@ export function stopSession(instanceId: string, machineId: string): void {
  * the spawn created for it. Resolves once the agent confirms the teardown, so a
  * worktree that could not be removed is reported rather than silently left.
  */
-export async function discardSession(instanceId: string, machineId: string): Promise<void> {
+export async function discardSession(
+  instanceId: string,
+  machineId: string
+): Promise<void> {
   const requestId = newId();
   const payload: StopPayload = { instanceId, discard: true, requestId };
   settleStopped(instanceId);
 
   try {
-    await ask<void>(requestId, 'discard', DISCARD_TIMEOUT_MS, () =>
-      send({ verb: 'stop', machineId, instanceId, requestId, payload })
+    await ask<void>(requestId, "discard", DISCARD_TIMEOUT_MS, () =>
+      send({ verb: "stop", machineId, instanceId, requestId, payload })
     );
   } finally {
     delete state.sessions[instanceId];
@@ -2722,12 +3150,14 @@ export async function discardSession(instanceId: string, machineId: string): Pro
 export async function keepSession(instanceId: string): Promise<void> {
   const target = session(instanceId);
   const response = await fetch(`/api/instances/${instanceId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kind: 'mainline' }),
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind: "mainline" }),
   });
   if (!response.ok) {
-    throw new Error(`Could not keep this session — the hub answered ${response.status}. Try again.`);
+    throw new Error(
+      `Could not keep this session — the hub answered ${response.status}. Try again.`
+    );
   }
 
   target.scratch = false;
@@ -2736,7 +3166,7 @@ export async function keepSession(instanceId: string): Promise<void> {
     // entry that has just stopped being hidden.
     await machineControl(
       target.machineId,
-      'tagSession',
+      "tagSession",
       [target.sessionId, null, { dir: target.cwd || undefined }],
       CONTROL_TIMEOUT_MS,
       target.harness
@@ -2757,9 +3187,25 @@ function settleStopped(instanceId: string): void {
   trackWorking(target);
 }
 
-function control(instanceId: string, machineId: string, method: string, args: unknown[]): void {
-  const payload: ControlPayload = { instanceId, requestId: newId(), method, args };
-  send({ verb: 'control', machineId, instanceId, requestId: payload.requestId, payload });
+function control(
+  instanceId: string,
+  machineId: string,
+  method: string,
+  args: unknown[]
+): void {
+  const payload: ControlPayload = {
+    instanceId,
+    requestId: newId(),
+    method,
+    args,
+  };
+  send({
+    verb: "control",
+    machineId,
+    instanceId,
+    requestId: payload.requestId,
+    payload,
+  });
 }
 
 /**
@@ -2776,9 +3222,14 @@ export async function machineControl<T>(
 ): Promise<T> {
   await waitForOpen();
   const requestId = newId();
-  const payload: ControlPayload = { requestId, method, args, ...(harness && { harness }) };
+  const payload: ControlPayload = {
+    requestId,
+    method,
+    args,
+    ...(harness && { harness }),
+  };
   return ask<T>(requestId, method, replyTimeoutMs, () =>
-    send({ verb: 'control', machineId, requestId, payload })
+    send({ verb: "control", machineId, requestId, payload })
   );
 }
 
@@ -2788,7 +3239,7 @@ export async function machineControl<T>(
  */
 export async function machineFs<T>(
   machineId: string,
-  op: FsPayload['op'],
+  op: FsPayload["op"],
   path: string,
   content?: string
 ): Promise<T> {
@@ -2796,7 +3247,7 @@ export async function machineFs<T>(
   const requestId = newId();
   const payload: FsPayload = { requestId, op, path, content };
   return ask<T>(requestId, `fs ${op} ${path}`, CONTROL_TIMEOUT_MS, () =>
-    send({ verb: 'fs', machineId, requestId, payload })
+    send({ verb: "fs", machineId, requestId, payload })
   );
 }
 
@@ -2806,13 +3257,15 @@ export async function createProject(project: {
   cwd: string;
   machineId: string;
 }): Promise<ProjectRow> {
-  const response = await fetch('/api/projects', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const response = await fetch("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(project),
   });
   if (!response.ok) {
-    throw new Error(`Could not save this project — the hub answered ${response.status}. Try again.`);
+    throw new Error(
+      `Could not save this project — the hub answered ${response.status}. Try again.`
+    );
   }
   const created = (await response.json()) as ProjectRow;
   await refresh();
@@ -2821,9 +3274,11 @@ export async function createProject(project: {
 
 /** Forgets the project; the sessions started from it stay, just unattached. */
 export async function deleteProject(id: string): Promise<void> {
-  const response = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+  const response = await fetch(`/api/projects/${id}`, { method: "DELETE" });
   if (!response.ok) {
-    throw new Error(`Could not forget this project — the hub answered ${response.status}. Try again.`);
+    throw new Error(
+      `Could not forget this project — the hub answered ${response.status}. Try again.`
+    );
   }
   await refresh();
 }
@@ -2838,7 +3293,11 @@ function ask<T>(
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
       if (inflight.delete(requestId)) {
-        reject(new Error(`${label} got no answer in time. The machine may be offline.`));
+        reject(
+          new Error(
+            `${label} got no answer in time. The machine may be offline.`
+          )
+        );
       }
     }, timeoutMs);
     inflight.set(requestId, {
@@ -2864,9 +3323,11 @@ function ask<T>(
 /** The machine's stored sessions, newest first. */
 export async function loadCatalog(machineId: string): Promise<void> {
   try {
-    state.catalog[machineId] = await machineControl<SDKSessionInfo[]>(machineId, 'listSessions', [
-      SESSION_CATALOG_LIMIT > 0 ? { limit: SESSION_CATALOG_LIMIT } : {},
-    ]);
+    state.catalog[machineId] = await machineControl<SDKSessionInfo[]>(
+      machineId,
+      "listSessions",
+      [SESSION_CATALOG_LIMIT > 0 ? { limit: SESSION_CATALOG_LIMIT } : {}]
+    );
   } catch (error) {
     console.error(`[whiffle] listSessions on ${machineId} failed:`, error);
   }
@@ -2891,9 +3352,15 @@ export async function loadCatalog(machineId: string): Promise<void> {
 function harvestCommands(target: SessionState, messages: Message[]): void {
   for (let i = messages.length - 1; i >= 0; i--) {
     const init = messages[i];
-    if (init.type !== 'system.init') continue;
-    if (init.metadata?.slashCommands) target.commands.names = init.metadata.slashCommands;
-    if (init.metadata?.skills) target.commands.skills = init.metadata.skills;
+    if (init.type !== "system.init") {
+      continue;
+    }
+    if (init.metadata?.slashCommands) {
+      target.commands.names = init.metadata.slashCommands;
+    }
+    if (init.metadata?.skills) {
+      target.commands.skills = init.metadata.skills;
+    }
     return;
   }
 }
@@ -2910,7 +3377,9 @@ async function ingestTranscript(
   // re-emits `system.init` every turn; without this, every reload re-arms the
   // flag and the next turn opens with "Session started" as if the process had
   // just come up — which is exactly what it does *not* mean.
-  if (transcript.length > 0) target.initialized = true;
+  if (transcript.length > 0) {
+    target.initialized = true;
+  }
 
   if (transcript.length <= TRANSCRIPT_CHUNK_THRESHOLD) {
     const { messages, subagents } = mapTranscript(viewId, transcript);
@@ -2922,7 +3391,10 @@ async function ingestTranscript(
   }
 
   const bounds = turnBoundaries(transcript, TRANSCRIPT_CHUNK_SIZE);
-  const newest = mapTranscript(viewId, transcript.slice(bounds[bounds.length - 1]));
+  const newest = mapTranscript(
+    viewId,
+    transcript.slice(bounds[bounds.length - 1])
+  );
   target.messages = newest.messages;
   target.subagents = newest.subagents;
   harvestCommands(target, newest.messages);
@@ -2934,8 +3406,13 @@ async function ingestTranscript(
     // Mapping a chunk is the blocking work, so the loop hands the event loop
     // back between them — this is what the reader scrolls and types through.
     await new Promise((resolve) => setTimeout(resolve, 0));
-    if (hydrations.get(viewId) !== epoch) return;
-    const older = mapTranscript(viewId, transcript.slice(bounds[i], bounds[i + 1]));
+    if (hydrations.get(viewId) !== epoch) {
+      return;
+    }
+    const older = mapTranscript(
+      viewId,
+      transcript.slice(bounds[i], bounds[i + 1])
+    );
     target.messages = [...older.messages, ...target.messages];
     // Branches are keyed by the Task `tool_use_id` that opened them, so an older
     // chunk mostly adds keys — except where a compacted transcript re-emits the
@@ -2943,8 +3420,11 @@ async function ingestTranscript(
     // back for it.
     for (const [toolUseId, branch] of Object.entries(older.subagents)) {
       const known = target.subagents[toolUseId];
-      if (known) known.messages = [...branch.messages, ...known.messages];
-      else target.subagents[toolUseId] = branch;
+      if (known) {
+        known.messages = [...branch.messages, ...known.messages];
+      } else {
+        target.subagents[toolUseId] = branch;
+      }
     }
   }
 }
@@ -2970,12 +3450,19 @@ export type TranscriptOutcome =
    */
   | { ok: true; skipped?: boolean }
   /** `status` is the hub's HTTP answer where there was one: 404 is "no such session", not a fault. */
-  | { ok: false; reason: 'offline' | 'failed'; message: string; status?: number };
+  | {
+      ok: false;
+      reason: "offline" | "failed";
+      message: string;
+      status?: number;
+    };
 
 /** Puts a session back to "nothing has been said about the read" — Try again's first move. */
 export function clearReadFault(instanceId: string): void {
   const held = state.sessions[instanceId];
-  if (held) held.readFault = null;
+  if (held) {
+    held.readFault = null;
+  }
 }
 
 /** Loads a stored session's transcript into the view it is being browsed under. */
@@ -2984,7 +3471,7 @@ export async function openTranscript({
   machineId,
   sessionId,
   cwd,
-  harness = 'claude',
+  harness = "claude",
 }: {
   viewId: string;
   machineId: string;
@@ -3002,15 +3489,17 @@ export async function openTranscript({
   refreshTasks(viewId);
   // Re-opening what is already read — or still hydrating, which has published
   // its newest turns by now — must not start a second read over the top of it.
-  if (target.messages.length > 0 || target.loading) return { ok: true, skipped: true };
+  if (target.messages.length > 0 || target.loading) {
+    return { ok: true, skipped: true };
+  }
 
   // Asked before the call rather than inferred from its failure: a machine the
   // hub has not heard from cannot answer, and "offline" is a different sentence
   // from "the read failed" — the first is a state, the second is a fault.
   const machine = state.machines.find((row) => row.machineId === machineId);
-  if (machine && machine.status !== 'online') {
+  if (machine && machine.status !== "online") {
     target.readFault = {
-      reason: 'offline',
+      reason: "offline",
       message: `${machine.hostname || machineId} is offline — its stored transcript can't be read right now.`,
     };
     return { ok: false, ...target.readFault };
@@ -3022,7 +3511,7 @@ export async function openTranscript({
   try {
     const transcript = await machineControl<SessionMessage[]>(
       machineId,
-      'getSessionMessages',
+      "getSessionMessages",
       [sessionId, { dir: cwd || undefined }],
       CONTROL_TIMEOUT_MS,
       harness
@@ -3037,11 +3526,14 @@ export async function openTranscript({
     // for the pane to state outright — a lone error row in an otherwise empty
     // scroller is the blank this exists to stop.
     if (target.messages.length > 0) {
-      target.messages = [errorMessage(viewId, `could not read transcript: ${message}`), ...target.messages];
+      target.messages = [
+        errorMessage(viewId, `could not read transcript: ${message}`),
+        ...target.messages,
+      ];
       return { ok: true };
     }
-    target.readFault = { reason: 'failed', message };
-    return { ok: false, reason: 'failed', message };
+    target.readFault = { reason: "failed", message };
+    return { ok: false, reason: "failed", message };
   } finally {
     target.loading = false;
     target.hydrating = false;
@@ -3054,12 +3546,16 @@ export async function openTranscript({
  * until what it has already said is read back out of SDK session storage.
  */
 export async function backfillSession(instanceId: string): Promise<void> {
-  if (backfilling.has(instanceId)) return;
+  if (backfilling.has(instanceId)) {
+    return;
+  }
   const target = session(instanceId);
   // A latch with nothing behind it does not hold — the same rule
   // `streamHistory` reads by, so the two paths agree on what "already read"
   // means.
-  if (backfilled.has(instanceId) && target.messages.length > 0) return;
+  if (backfilled.has(instanceId) && target.messages.length > 0) {
+    return;
+  }
   // Deliberately not "it already has messages, so it is loaded".
   //
   // This browser watches every session, not just the one on screen, so a
@@ -3068,9 +3564,13 @@ export async function backfillSession(instanceId: string): Promise<void> {
   // the last thing it said and nothing before — and `backfilled` latched that
   // for the rest of the tab, which is why only a hard refresh fixed it. Live
   // frames are the tail of a conversation, never the whole of one.
-  if (target.loading) return;
+  if (target.loading) {
+    return;
+  }
   const { machineId, sessionId, cwd } = target;
-  if (!machineId || !sessionId) return;
+  if (!(machineId && sessionId)) {
+    return;
+  }
 
   backfilled.add(instanceId);
   backfilling.set(instanceId, []);
@@ -3085,14 +3585,14 @@ export async function backfillSession(instanceId: string): Promise<void> {
   try {
     const transcript = await machineControl<SessionMessage[]>(
       machineId,
-      'getSessionMessages',
+      "getSessionMessages",
       [sessionId, { dir: cwd || undefined }],
       CONTROL_TIMEOUT_MS,
       target.harness
     );
     const seeded = new Set(transcript.map((entry) => entry.uuid));
     await ingestTranscript(instanceId, target, transcript, epoch, () => {
-      target.streaming = '';
+      target.streaming = "";
       clearTurnPhase(target);
       absorbLive(target, live, seeded);
       // What was held belongs to the end of the transcript, which is now on
@@ -3107,7 +3607,9 @@ export async function backfillSession(instanceId: string): Promise<void> {
     backfilled.delete(instanceId);
     replayHeld(instanceId, new Set());
     const message = error instanceof Error ? error.message : String(error);
-    if (target.messages.length === 0) target.readFault = { reason: 'failed', message };
+    if (target.messages.length === 0) {
+      target.readFault = { reason: "failed", message };
+    }
     console.error(`[whiffle] backfilling ${instanceId} failed:`, error);
   } finally {
     target.loading = false;
@@ -3116,32 +3618,36 @@ export async function backfillSession(instanceId: string): Promise<void> {
 }
 
 /** The content blocks of a stored entry, for the tool pairing a cut must not split. */
-function contentBlocks(entry: SessionMessage): { type?: string; id?: string; tool_use_id?: string }[] {
+function contentBlocks(
+  entry: SessionMessage
+): { type?: string; id?: string; tool_use_id?: string }[] {
   const content = (entry.message as { content?: unknown } | null)?.content;
-  return Array.isArray(content) ? (content as { type?: string; id?: string; tool_use_id?: string }[]) : [];
+  return Array.isArray(content)
+    ? (content as { type?: string; id?: string; tool_use_id?: string }[])
+    : [];
 }
 
 /** What a streamed history read carries, and how the URL that names it is built. */
 export interface HistorySource {
-  viewId: string;
+  cwd: string;
+  harness?: HarnessKind;
+  /** A running session, whose live frames have to be held and reconciled behind the read. */
+  live?: boolean;
   /**
    * Where the transcript is believed to live. A hint for naming the session
    * before the read answers, not an address: the hub resolves the id itself
    * and its answer is what the view ends up carrying.
    */
   machineId: string;
-  /** The key the transcript is stored under: the SDK session id, not the view. */
-  sessionId: string;
-  cwd: string;
-  harness?: HarnessKind;
-  /** A running session, whose live frames have to be held and reconciled behind the read. */
-  live?: boolean;
   /**
    * The machine/folder/harness above came from the URL itself — a link minted
    * while stored transcripts still carried them — and are sent to the hub as
    * an override rather than left to its resolver.
    */
   override?: boolean;
+  /** The key the transcript is stored under: the SDK session id, not the view. */
+  sessionId: string;
+  viewId: string;
 }
 
 /**
@@ -3152,10 +3658,12 @@ export interface HistorySource {
  */
 export function messagesUrl(source: HistorySource): string {
   const path = `/api/instances/${encodeURIComponent(source.viewId)}/messages`;
-  if (!source.override || !source.machineId) return path;
+  if (!(source.override && source.machineId)) {
+    return path;
+  }
   return `${path}?${new URLSearchParams({
     machine: source.machineId,
-    harness: source.harness ?? 'claude',
+    harness: source.harness ?? "claude",
     ...(source.cwd && { cwd: source.cwd }),
   })}`;
 }
@@ -3184,24 +3692,36 @@ export async function streamHistory({
   override,
 }: HistorySource): Promise<TranscriptOutcome> {
   const target = session(viewId);
-  if (machineId) target.machineId = machineId;
-  if (cwd) target.cwd = cwd;
-  if (sessionId) target.sessionId = sessionId;
-  if (harness) target.harness = harness;
+  if (machineId) {
+    target.machineId = machineId;
+  }
+  if (cwd) {
+    target.cwd = cwd;
+  }
+  if (sessionId) {
+    target.sessionId = sessionId;
+  }
+  if (harness) {
+    target.harness = harness;
+  }
   // A stored session's plan is still on its machine, and no frame will ever
   // arrive to say so — opening it is the only moment there is to ask.
   refreshTasks(viewId);
 
   // A read in hand, on either tense, is the one that answers: a second read
   // over the top of it would replace what it is publishing.
-  if (backfilling.has(viewId) || target.loading) return { ok: true, skipped: true };
+  if (backfilling.has(viewId) || target.loading) {
+    return { ok: true, skipped: true };
+  }
   if (live) {
     // The same latch the socket backfill takes, taken here: whichever path
     // reads this session's history first is the only one that reads it. But
     // only a latch with a transcript behind it holds — one left set by a read
     // that landed empty, or never landed, is read past, because the
     // alternative was a skeleton nothing would ever resolve.
-    if (backfilled.has(viewId) && target.messages.length > 0) return { ok: true, skipped: true };
+    if (backfilled.has(viewId) && target.messages.length > 0) {
+      return { ok: true, skipped: true };
+    }
     backfilled.add(viewId);
     backfilling.set(viewId, []);
   } else if (target.messages.length > 0) {
@@ -3211,9 +3731,13 @@ export async function streamHistory({
 
   /** Undoes the latch, so a failed read leaves the socket path free to try. */
   const release = (): void => {
-    if (!live) return;
+    if (!live) {
+      return;
+    }
     backfilled.delete(viewId);
-    if (backfilling.has(viewId)) replayHeld(viewId, new Set());
+    if (backfilling.has(viewId)) {
+      replayHeld(viewId, new Set());
+    }
   };
 
   /** A failure with nothing on screen, said where the pane can read it. */
@@ -3222,7 +3746,15 @@ export async function streamHistory({
     return { ok: false, ...fault, status };
   };
 
-  const url = messagesUrl({ viewId, machineId, sessionId, cwd, harness, live, override });
+  const url = messagesUrl({
+    viewId,
+    machineId,
+    sessionId,
+    cwd,
+    harness,
+    live,
+    override,
+  });
 
   const epoch = claimTranscript(viewId);
   // Whatever this session said while the reader was elsewhere. The transcript
@@ -3251,7 +3783,9 @@ export async function streamHistory({
       harvestCommands(target, mapped.messages);
       // A transcript that already has turns in it is a session that already
       // started, so the banner announcing the start has had its moment.
-      if (chunk.length > 0) target.initialized = true;
+      if (chunk.length > 0) {
+        target.initialized = true;
+      }
       target.loading = false;
       target.hydrating = true;
       // UNCONDITIONALLY, not `if (live)`: a switched-away tab's re-read arrives
@@ -3263,7 +3797,7 @@ export async function streamHistory({
       // is a no-op.
       absorbLive(target, seenLive, seeded);
       if (live) {
-        target.streaming = '';
+        target.streaming = "";
         clearTurnPhase(target);
         // What was held belongs to the end of the transcript, which is now on
         // screen: it appends while the older chunks prepend, so neither waits.
@@ -3277,8 +3811,11 @@ export async function streamHistory({
       // already read back for it.
       for (const [toolUseId, branch] of Object.entries(mapped.subagents)) {
         const known = target.subagents[toolUseId];
-        if (known) known.messages = [...branch.messages, ...known.messages];
-        else target.subagents[toolUseId] = branch;
+        if (known) {
+          known.messages = [...branch.messages, ...known.messages];
+        } else {
+          target.subagents[toolUseId] = branch;
+        }
       }
     }
     chunks++;
@@ -3286,23 +3823,26 @@ export async function streamHistory({
 
   try {
     const response = await fetch(url);
-    if (!response.ok || !response.body) {
-      const detail = (await response.text().catch(() => '')) || response.statusText;
+    if (!(response.ok && response.body)) {
+      const detail =
+        (await response.text().catch(() => "")) || response.statusText;
       release();
       target.loading = false;
       // 503 is the hub saying the machine is not connected — a state of the
       // fleet, not a fault in the read, and a different sentence to say.
       if (response.status === 503) {
-        const machine = state.machines.find((row) => row.machineId === machineId);
+        const machine = state.machines.find(
+          (row) => row.machineId === machineId
+        );
         return fail(
           {
-            reason: 'offline',
+            reason: "offline",
             message: `${machine?.hostname || machineId} is offline — its stored transcript can't be read right now.`,
           },
           response.status
         );
       }
-      return fail({ reason: 'failed', message: detail }, response.status);
+      return fail({ reason: "failed", message: detail }, response.status);
     }
 
     // Where the hub found it. A session addressed by id alone arrives here
@@ -3310,42 +3850,60 @@ export async function streamHistory({
     // machine's tools all want the machine — this is the one round trip that
     // learns it. The hub's word fills blanks only: a live row's own values
     // are already in place and are not walked back.
-    const found = response.headers.get('x-whiffle-machine');
-    if (found && !target.machineId) target.machineId = found;
-    const foundCwd = response.headers.get('x-whiffle-cwd');
-    if (foundCwd && !target.cwd) target.cwd = decodeURIComponent(foundCwd);
-    const foundKey = response.headers.get('x-whiffle-session');
-    if (foundKey && !target.sessionId) target.sessionId = decodeURIComponent(foundKey);
-    const foundHarness = response.headers.get('x-whiffle-harness');
-    if (foundHarness && !harness) target.harness = foundHarness as HarnessKind;
+    const found = response.headers.get("x-whiffle-machine");
+    if (found && !target.machineId) {
+      target.machineId = found;
+    }
+    const foundCwd = response.headers.get("x-whiffle-cwd");
+    if (foundCwd && !target.cwd) {
+      target.cwd = decodeURIComponent(foundCwd);
+    }
+    const foundKey = response.headers.get("x-whiffle-session");
+    if (foundKey && !target.sessionId) {
+      target.sessionId = decodeURIComponent(foundKey);
+    }
+    const foundHarness = response.headers.get("x-whiffle-harness");
+    if (foundHarness && !harness) {
+      target.harness = foundHarness as HarnessKind;
+    }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let carry = '';
+    let carry = "";
 
     /** One entry, oldest of everything read so far; flushes a chunk once one can start here. */
     const consume = async (entry: SessionMessage): Promise<void> => {
       for (const block of contentBlocks(entry)) {
-        if (block.type === 'tool_result' && block.tool_use_id) dangling.add(block.tool_use_id);
-        else if (block.type === 'tool_use' && block.id) dangling.delete(block.id);
+        if (block.type === "tool_result" && block.tool_use_id) {
+          dangling.add(block.tool_use_id);
+        } else if (block.type === "tool_use" && block.id) {
+          dangling.delete(block.id);
+        }
       }
       buffered.push(entry);
       seeded.add(entry.uuid);
       // Only a turn opener with no tool pair left hanging can begin a chunk:
       // anywhere else the slice would open mid-turn, with results arriving for
       // a `tool_use` on the other side of the cut.
-      const size = chunks === 0 ? TRANSCRIPT_FIRST_CHUNK : TRANSCRIPT_CHUNK_SIZE;
-      if (buffered.length < size || dangling.size > 0 || !turnStart(entry)) return;
+      const size =
+        chunks === 0 ? TRANSCRIPT_FIRST_CHUNK : TRANSCRIPT_CHUNK_SIZE;
+      if (buffered.length < size || dangling.size > 0 || !turnStart(entry)) {
+        return;
+      }
       // Mapping a chunk is the blocking work, so the loop hands the event loop
       // back between them — this is what the reader scrolls and types through.
-      if (chunks > 0) await new Promise((resolve) => setTimeout(resolve, 0));
+      if (chunks > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
       publish(buffered.reverse());
       buffered = [];
     };
 
     for (;;) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        break;
+      }
       // A later read for this view supersedes this one; the rest of the stream
       // is somebody else's transcript now.
       if (hydrations.get(viewId) !== epoch) {
@@ -3353,18 +3911,30 @@ export async function streamHistory({
         return { ok: true, skipped: true };
       }
       carry += decoder.decode(value, { stream: true });
-      for (let newline = carry.indexOf('\n'); newline >= 0; newline = carry.indexOf('\n')) {
+      for (
+        let newline = carry.indexOf("\n");
+        newline >= 0;
+        newline = carry.indexOf("\n")
+      ) {
         const line = carry.slice(0, newline);
         carry = carry.slice(newline + 1);
-        if (line) await consume(JSON.parse(line) as SessionMessage);
+        if (line) {
+          await consume(JSON.parse(line) as SessionMessage);
+        }
       }
     }
     carry += decoder.decode();
-    if (carry.trim()) await consume(JSON.parse(carry) as SessionMessage);
-    if (hydrations.get(viewId) !== epoch) return { ok: true, skipped: true };
+    if (carry.trim()) {
+      await consume(JSON.parse(carry) as SessionMessage);
+    }
+    if (hydrations.get(viewId) !== epoch) {
+      return { ok: true, skipped: true };
+    }
     // The head of a transcript is always somewhere a chunk can start, and an
     // empty one still has to publish: it is what says the session is empty.
-    if (buffered.length > 0 || chunks === 0) publish(buffered.reverse());
+    if (buffered.length > 0 || chunks === 0) {
+      publish(buffered.reverse());
+    }
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -3374,10 +3944,13 @@ export async function streamHistory({
     // on screen there is no transcript to join, so the failure is handed back
     // for the pane to state outright.
     if (chunks > 0) {
-      target.messages = [errorMessage(viewId, `could not read transcript: ${message}`), ...target.messages];
+      target.messages = [
+        errorMessage(viewId, `could not read transcript: ${message}`),
+        ...target.messages,
+      ];
       return { ok: true };
     }
-    return fail({ reason: 'failed', message });
+    return fail({ reason: "failed", message });
   } finally {
     target.loading = false;
     target.hydrating = false;
@@ -3390,27 +3963,41 @@ export async function streamHistory({
  * this is what stops the last thing on screen vanishing when history lands over
  * the top of it.
  */
-function absorbLive(target: SessionState, live: Message[], seeded: Set<string>): void {
+function absorbLive(
+  target: SessionState,
+  live: Message[],
+  seeded: Set<string>
+): void {
   const absorbed = new Set<Message>();
   for (const message of live) {
-    if (message.sdkUuid && seeded.has(message.sdkUuid)) continue;
-    if (target.messages.some((existing) => existing.id === message.id)) continue;
+    if (message.sdkUuid && seeded.has(message.sdkUuid)) {
+      continue;
+    }
+    if (target.messages.some((existing) => existing.id === message.id)) {
+      continue;
+    }
     // An unstamped local echo of a turn the transcript already carries. Its
     // stamping frame is about to be dropped by replayHeld (the uuid is seeded),
     // so left here it would double the stored turn — the "first prompt shows
     // twice" bug. Absorbed one-to-one by content so a genuine repeated send
     // keeps both bubbles.
     const echoOfStored =
-      message.type === 'user' &&
+      message.type === "user" &&
       !message.sdkUuid &&
       target.messages.find(
-        (m) => m.type === 'user' && m.sdkUuid && !absorbed.has(m) && m.content === message.content
+        (m) =>
+          m.type === "user" &&
+          m.sdkUuid &&
+          !absorbed.has(m) &&
+          m.content === message.content
       );
     if (echoOfStored) {
       absorbed.add(echoOfStored);
       continue;
     }
-    if (mergePeerMessage(target.messages, message)) continue;
+    if (mergePeerMessage(target.messages, message)) {
+      continue;
+    }
     target.messages.push(message);
   }
 }
@@ -3420,19 +4007,23 @@ function replayHeld(instanceId: string, seeded: Set<string>): void {
   const held = backfilling.get(instanceId) ?? [];
   backfilling.delete(instanceId);
   for (const frame of held) {
-    if (frame.kind === 'frame') {
+    if (frame.kind === "frame") {
       // A partial paints text whose final message may already be seeded. The
       // turn's own frames land right behind it, so dropping these costs nothing.
-      if (frame.message.type === 'stream_event') continue;
-      const uuid = 'uuid' in frame.message ? frame.message.uuid : undefined;
-      if (uuid && seeded.has(uuid)) continue;
+      if (frame.message.type === "stream_event") {
+        continue;
+      }
+      const uuid = "uuid" in frame.message ? frame.message.uuid : undefined;
+      if (uuid && seeded.has(uuid)) {
+        continue;
+      }
     }
     handleFrame(frame);
   }
 }
 
 export function interrupt(instanceId: string, machineId: string): void {
-  control(instanceId, machineId, 'interrupt', []);
+  control(instanceId, machineId, "interrupt", []);
   const target = session(instanceId);
   target.busy = false;
   // The block the partials were painting is not being finished, and a session
@@ -3463,12 +4054,12 @@ export async function setPermissionMode(
   const payload: ControlPayload = {
     instanceId,
     requestId,
-    method: 'setPermissionMode',
+    method: "setPermissionMode",
     args: [mode],
   };
   try {
-    await ask<void>(requestId, 'setPermissionMode', CONTROL_TIMEOUT_MS, () =>
-      send({ verb: 'control', machineId, instanceId, requestId, payload })
+    await ask<void>(requestId, "setPermissionMode", CONTROL_TIMEOUT_MS, () =>
+      send({ verb: "control", machineId, instanceId, requestId, payload })
     );
   } catch (error) {
     target.permissionMode = previous;
@@ -3485,20 +4076,30 @@ export async function setPermissionMode(
  * a dead one keeps its last number rather than dropping to zero, which would
  * read as "empty" when it means "nobody asked".
  */
-export async function refreshContext(instanceId: string, machineId: string): Promise<void> {
+export async function refreshContext(
+  instanceId: string,
+  machineId: string
+): Promise<void> {
   const target = session(instanceId);
-  if (target.contextPending) return;
+  if (target.contextPending) {
+    return;
+  }
   target.contextPending = true;
   const requestId = newId();
-  const payload: ControlPayload = { instanceId, requestId, method: 'getContextUsage', args: [] };
+  const payload: ControlPayload = {
+    instanceId,
+    requestId,
+    method: "getContextUsage",
+    args: [],
+  };
   try {
     const usage = await ask<{
       totalTokens: number;
       maxTokens: number;
       percentage: number;
       categories: { name: string; tokens: number; color: string }[];
-    }>(requestId, 'getContextUsage', CONTROL_TIMEOUT_MS, () =>
-      send({ verb: 'control', machineId, instanceId, requestId, payload })
+    }>(requestId, "getContextUsage", CONTROL_TIMEOUT_MS, () =>
+      send({ verb: "control", machineId, instanceId, requestId, payload })
     );
     target.context = {
       totalTokens: usage.totalTokens,
@@ -3506,7 +4107,9 @@ export async function refreshContext(instanceId: string, machineId: string): Pro
       percentage: usage.percentage,
       // "Free space" is the remainder, not a consumer: showing it as a slice
       // would make every session look mostly full of nothing.
-      categories: (usage.categories ?? []).filter((row) => row.name !== 'Free space'),
+      categories: (usage.categories ?? []).filter(
+        (row) => row.name !== "Free space"
+      ),
       readAt: Date.now(),
     };
   } catch {
@@ -3522,11 +4125,22 @@ export async function refreshContext(instanceId: string, machineId: string): Pro
  * either way, so `models.svelte.ts` asks once through whoever is running and
  * keeps it for the whole app.
  */
-export async function loadModels(instanceId: string, machineId: string): Promise<ModelInfo[]> {
+export async function loadModels(
+  instanceId: string,
+  machineId: string
+): Promise<ModelInfo[]> {
   const requestId = newId();
-  const payload: ControlPayload = { instanceId, requestId, method: 'supportedModels', args: [] };
-  return ask<ModelInfo[]>(requestId, 'supportedModels', CONTROL_TIMEOUT_MS, () =>
-    send({ verb: 'control', machineId, instanceId, requestId, payload })
+  const payload: ControlPayload = {
+    instanceId,
+    requestId,
+    method: "supportedModels",
+    args: [],
+  };
+  return ask<ModelInfo[]>(
+    requestId,
+    "supportedModels",
+    CONTROL_TIMEOUT_MS,
+    () => send({ verb: "control", machineId, instanceId, requestId, payload })
   );
 }
 
@@ -3536,7 +4150,7 @@ export async function loadModels(instanceId: string, machineId: string): Promise
  * is not an error to log or to show.
  */
 export const isCustodyRefusal = (error: unknown): boolean =>
-  error instanceof Error && error.message.includes('(custody)');
+  error instanceof Error && error.message.includes("(custody)");
 
 /** A `SlashCommand[]` answer as the lookup the menu reads its prose from. */
 const detailsOf = (commands: SlashCommand[]): Map<string, SlashCommand> =>
@@ -3549,26 +4163,39 @@ const detailsOf = (commands: SlashCommand[]): Map<string, SlashCommand> =>
  * a menu. Asked once, the first time somebody opens it; a `commands_changed`
  * push replaces the answer.
  */
-export async function loadCommands(instanceId: string, machineId: string): Promise<void> {
+export async function loadCommands(
+  instanceId: string,
+  machineId: string
+): Promise<void> {
   const target = session(instanceId);
-  if (target.commands.detailed || target.commandsPending) return;
+  if (target.commands.detailed || target.commandsPending) {
+    return;
+  }
   target.commandsPending = true;
 
   const requestId = newId();
-  const payload: ControlPayload = { instanceId, requestId, method: 'supportedCommands', args: [] };
+  const payload: ControlPayload = {
+    instanceId,
+    requestId,
+    method: "supportedCommands",
+    args: [],
+  };
   try {
     const commands = await ask<SlashCommand[]>(
       requestId,
-      'supportedCommands',
+      "supportedCommands",
       CONTROL_TIMEOUT_MS,
-      () => send({ verb: 'control', machineId, instanceId, requestId, payload })
+      () => send({ verb: "control", machineId, instanceId, requestId, payload })
     );
     target.commands = { ...target.commands, detailed: detailsOf(commands) };
   } catch (error) {
     // The menu is still every name the init frame listed, undescribed, and the
     // next opening asks again — nothing the reader needs to act on.
     if (!isCustodyRefusal(error)) {
-      console.error(`[whiffle] supportedCommands on ${instanceId} failed:`, error);
+      console.error(
+        `[whiffle] supportedCommands on ${instanceId} failed:`,
+        error
+      );
     }
   } finally {
     target.commandsPending = false;
@@ -3576,11 +4203,22 @@ export async function loadCommands(instanceId: string, machineId: string): Promi
 }
 
 /** The bare `mcpServerStatus` call; what the caller does with a refusal differs. */
-function askMcp(instanceId: string, machineId: string): Promise<McpServerStatus[]> {
+function askMcp(
+  instanceId: string,
+  machineId: string
+): Promise<McpServerStatus[]> {
   const requestId = newId();
-  const payload: ControlPayload = { instanceId, requestId, method: 'mcpServerStatus', args: [] };
-  return ask<McpServerStatus[]>(requestId, 'mcpServerStatus', CONTROL_TIMEOUT_MS, () =>
-    send({ verb: 'control', machineId, instanceId, requestId, payload })
+  const payload: ControlPayload = {
+    instanceId,
+    requestId,
+    method: "mcpServerStatus",
+    args: [],
+  };
+  return ask<McpServerStatus[]>(
+    requestId,
+    "mcpServerStatus",
+    CONTROL_TIMEOUT_MS,
+    () => send({ verb: "control", machineId, instanceId, requestId, payload })
   );
 }
 
@@ -3590,16 +4228,24 @@ function askMcp(instanceId: string, machineId: string): Promise<McpServerStatus[
  * rather than staying null: null is what re-triggers the asking effect, and a
  * machine that cannot answer must not be asked in a loop.
  */
-export async function loadMcpServers(instanceId: string, machineId: string): Promise<void> {
+export async function loadMcpServers(
+  instanceId: string,
+  machineId: string
+): Promise<void> {
   const target = session(instanceId);
-  if (target.mcp !== null || target.mcpPending) return;
+  if (target.mcp !== null || target.mcpPending) {
+    return;
+  }
   target.mcpPending = true;
 
   try {
     target.mcp = await askMcp(instanceId, machineId);
   } catch (error) {
     if (!isCustodyRefusal(error)) {
-      console.error(`[whiffle] mcpServerStatus on ${instanceId} failed:`, error);
+      console.error(
+        `[whiffle] mcpServerStatus on ${instanceId} failed:`,
+        error
+      );
     }
     target.mcp = [];
   } finally {
@@ -3608,9 +4254,14 @@ export async function loadMcpServers(instanceId: string, machineId: string): Pro
 }
 
 /** The same question again after a restart or a stop, cache ignored. */
-export async function refreshMcpServers(instanceId: string, machineId: string): Promise<void> {
+export async function refreshMcpServers(
+  instanceId: string,
+  machineId: string
+): Promise<void> {
   const target = session(instanceId);
-  if (target.mcpPending) return;
+  if (target.mcpPending) {
+    return;
+  }
   target.mcpPending = true;
 
   try {
@@ -3619,7 +4270,10 @@ export async function refreshMcpServers(instanceId: string, machineId: string): 
     // A failed refresh keeps the stale list: blanking chips that were fine is a
     // worse answer than showing the reading from a moment ago.
     if (!isCustodyRefusal(error)) {
-      console.error(`[whiffle] mcpServerStatus on ${instanceId} failed:`, error);
+      console.error(
+        `[whiffle] mcpServerStatus on ${instanceId} failed:`,
+        error
+      );
     }
   } finally {
     target.mcpPending = false;
@@ -3636,11 +4290,11 @@ export async function restartMcpServer(
   const payload: ControlPayload = {
     instanceId,
     requestId,
-    method: 'reconnectMcpServer',
+    method: "reconnectMcpServer",
     args: [name],
   };
-  await ask<void>(requestId, 'reconnectMcpServer', CONTROL_TIMEOUT_MS, () =>
-    send({ verb: 'control', machineId, instanceId, requestId, payload })
+  await ask<void>(requestId, "reconnectMcpServer", CONTROL_TIMEOUT_MS, () =>
+    send({ verb: "control", machineId, instanceId, requestId, payload })
   );
   await refreshMcpServers(instanceId, machineId);
 }
@@ -3656,11 +4310,11 @@ export async function setMcpServerEnabled(
   const payload: ControlPayload = {
     instanceId,
     requestId,
-    method: 'toggleMcpServer',
+    method: "toggleMcpServer",
     args: [name, enabled],
   };
-  await ask<void>(requestId, 'toggleMcpServer', CONTROL_TIMEOUT_MS, () =>
-    send({ verb: 'control', machineId, instanceId, requestId, payload })
+  await ask<void>(requestId, "toggleMcpServer", CONTROL_TIMEOUT_MS, () =>
+    send({ verb: "control", machineId, instanceId, requestId, payload })
   );
   await refreshMcpServers(instanceId, machineId);
 }
@@ -3683,10 +4337,15 @@ export async function setModel(
   target.model = model;
 
   const requestId = newId();
-  const payload: ControlPayload = { instanceId, requestId, method: 'setModel', args: [model] };
+  const payload: ControlPayload = {
+    instanceId,
+    requestId,
+    method: "setModel",
+    args: [model],
+  };
   try {
-    await ask<void>(requestId, 'setModel', CONTROL_TIMEOUT_MS, () =>
-      send({ verb: 'control', machineId, instanceId, requestId, payload })
+    await ask<void>(requestId, "setModel", CONTROL_TIMEOUT_MS, () =>
+      send({ verb: "control", machineId, instanceId, requestId, payload })
     );
   } catch (error) {
     target.model = previous;
@@ -3715,10 +4374,15 @@ export async function setEffort(
   target.effort = effort;
 
   const requestId = newId();
-  const payload: ControlPayload = { instanceId, requestId, method: 'setEffort', args: [effort] };
+  const payload: ControlPayload = {
+    instanceId,
+    requestId,
+    method: "setEffort",
+    args: [effort],
+  };
   try {
-    await ask<void>(requestId, 'setEffort', CONTROL_TIMEOUT_MS, () =>
-      send({ verb: 'control', machineId, instanceId, requestId, payload })
+    await ask<void>(requestId, "setEffort", CONTROL_TIMEOUT_MS, () =>
+      send({ verb: "control", machineId, instanceId, requestId, payload })
     );
   } catch (error) {
     target.effort = previous;
@@ -3741,7 +4405,9 @@ export async function relaunchSession(
 ): Promise<void> {
   const target = session(instanceId);
   if (!target.sessionId) {
-    throw new Error('This session has not named itself yet. Try again in a moment.');
+    throw new Error(
+      "This session has not named itself yet. Try again in a moment."
+    );
   }
 
   const requestId = newId();
@@ -3771,8 +4437,8 @@ export async function relaunchSession(
   // Whatever was in flight belongs to the process being replaced.
   settleStopped(instanceId);
   try {
-    await ask<void>(requestId, 'relaunch', CONTROL_TIMEOUT_MS, () =>
-      send({ verb: 'spawn', machineId, instanceId, requestId, payload })
+    await ask<void>(requestId, "relaunch", CONTROL_TIMEOUT_MS, () =>
+      send({ verb: "spawn", machineId, instanceId, requestId, payload })
     );
     if (hadWork) {
       sendText(
@@ -3800,17 +4466,28 @@ export async function relaunchSession(
  * result behind it, which the API refuses outright, so the search walks past
  * those to the last turn that closed.
  */
-function rewindPoint(target: SessionState, sdkUuid: string): { at: string; cut: number } | null {
-  const edited = target.messages.findIndex((message) => message.sdkUuid === sdkUuid);
-  if (edited < 0) return null;
+function rewindPoint(
+  target: SessionState,
+  sdkUuid: string
+): { at: string; cut: number } | null {
+  const edited = target.messages.findIndex(
+    (message) => message.sdkUuid === sdkUuid
+  );
+  if (edited < 0) {
+    return null;
+  }
   const calls = toolFrames(target.messages);
   for (let index = edited - 1; index >= 0; index--) {
     const { type, sdkUuid: uuid } = target.messages[index];
-    if (type !== 'assistant' || !uuid || calls.has(uuid)) continue;
+    if (type !== "assistant" || !uuid || calls.has(uuid)) {
+      continue;
+    }
     // One assistant turn is several messages under one uuid; the whole frame
     // the anchor belongs to stays, because the SDK keeps all of it too.
     let cut = index + 1;
-    while (cut < edited && target.messages[cut].sdkUuid === uuid) cut++;
+    while (cut < edited && target.messages[cut].sdkUuid === uuid) {
+      cut++;
+    }
     return { at: uuid, cut };
   }
   return null;
@@ -3820,7 +4497,10 @@ function rewindPoint(target: SessionState, sdkUuid: string): { at: string; cut: 
 function toolFrames(messages: Message[]): Set<string | undefined> {
   return new Set(
     messages
-      .filter((message) => message.type === 'tool.use' || message.type === 'tool.handoff')
+      .filter(
+        (message) =>
+          message.type === "tool.use" || message.type === "tool.handoff"
+      )
       .map((message) => message.sdkUuid)
   );
 }
@@ -3833,12 +4513,20 @@ function toolFrames(messages: Message[]): Set<string | undefined> {
 export function rewindableTurns(instanceId: string): Set<string> {
   const turns = new Set<string>();
   const target = state.sessions[instanceId];
-  if (!target) return turns;
+  if (!target) {
+    return turns;
+  }
   const calls = toolFrames(target.messages);
   let anchored = false;
   for (const message of target.messages) {
-    if (message.type === 'user' && message.sdkUuid && anchored) turns.add(message.sdkUuid);
-    if (message.type === 'assistant' && message.sdkUuid && !calls.has(message.sdkUuid)) {
+    if (message.type === "user" && message.sdkUuid && anchored) {
+      turns.add(message.sdkUuid);
+    }
+    if (
+      message.type === "assistant" &&
+      message.sdkUuid &&
+      !calls.has(message.sdkUuid)
+    ) {
       anchored = true;
     }
   }
@@ -3859,12 +4547,16 @@ export async function editAndResend(
 ): Promise<void> {
   const target = session(instanceId);
   const machineId = target.machineId;
-  if (!target.sessionId || !machineId) {
-    throw new Error('This session has not named itself yet. Try again in a moment.');
+  if (!(target.sessionId && machineId)) {
+    throw new Error(
+      "This session has not named itself yet. Try again in a moment."
+    );
   }
   const point = rewindPoint(target, sdkUuid);
   if (!point) {
-    throw new Error('There is no answered turn behind this message to go back to.');
+    throw new Error(
+      "There is no answered turn behind this message to go back to."
+    );
   }
 
   const requestId = newId();
@@ -3889,11 +4581,13 @@ export async function editAndResend(
   const branches = target.subagents;
   const read = backfilled.has(instanceId);
   target.messages = transcript.slice(0, point.cut);
-  const spawned = new Set(target.messages.map((message) => message.metadata?.toolId));
+  const spawned = new Set(
+    target.messages.map((message) => message.metadata?.toolId)
+  );
   target.subagents = Object.fromEntries(
     Object.entries(branches).filter(([toolUseId]) => spawned.has(toolUseId))
   );
-  target.streaming = '';
+  target.streaming = "";
   // Whatever was in flight belongs to the process being replaced.
   settleStopped(instanceId);
   // What is on screen is no longer the whole of what is on disk: the next join
@@ -3901,14 +4595,16 @@ export async function editAndResend(
   backfilled.delete(instanceId);
   target.relaunching = true;
   try {
-    await ask<void>(requestId, 'rewind', CONTROL_TIMEOUT_MS, () =>
-      send({ verb: 'spawn', machineId, instanceId, requestId, payload })
+    await ask<void>(requestId, "rewind", CONTROL_TIMEOUT_MS, () =>
+      send({ verb: "spawn", machineId, instanceId, requestId, payload })
     );
     sendText(instanceId, machineId, content);
   } catch (error) {
     target.messages = transcript;
     target.subagents = branches;
-    if (read) backfilled.add(instanceId);
+    if (read) {
+      backfilled.add(instanceId);
+    }
     throw error;
   } finally {
     target.relaunching = false;
@@ -3923,12 +4619,16 @@ export async function editAndResend(
  */
 export function forkFrom(instanceId: string, sdkUuid: string): string {
   const target = session(instanceId);
-  if (!target.sessionId || !target.machineId) {
-    throw new Error('This session has not named itself yet. Try again in a moment.');
+  if (!(target.sessionId && target.machineId)) {
+    throw new Error(
+      "This session has not named itself yet. Try again in a moment."
+    );
   }
   const point = rewindPoint(target, sdkUuid);
   if (!point) {
-    throw new Error('There is no answered turn behind this message to branch from.');
+    throw new Error(
+      "There is no answered turn behind this message to branch from."
+    );
   }
   return forkSession({
     machineId: target.machineId,
@@ -3941,7 +4641,7 @@ export function forkFrom(instanceId: string, sdkUuid: string): string {
 }
 
 /** The answers a permission card offers — the keyboard has one key for each. */
-export type PermissionAnswer = 'allow' | 'deny' | 'always';
+export type PermissionAnswer = "allow" | "deny" | "always";
 
 /**
  * What an answer means on the wire. `always` hands the SDK's own suggestions
@@ -3952,11 +4652,13 @@ export function permissionAnswer(
   request: PendingPermission,
   answer: PermissionAnswer
 ): PermissionResult {
-  if (answer === 'deny') return { behavior: 'deny', message: 'User denied permission' };
+  if (answer === "deny") {
+    return { behavior: "deny", message: "User denied permission" };
+  }
   return {
-    behavior: 'allow',
+    behavior: "allow",
     updatedInput: request.input,
-    ...(answer === 'always' && { updatedPermissions: request.suggestions }),
+    ...(answer === "always" && { updatedPermissions: request.suggestions }),
   };
 }
 
@@ -3972,7 +4674,7 @@ export function resolvePermission(
     method: RESOLVE_PERMISSION,
     args: [requestId, result],
   };
-  send({ verb: 'control', machineId, instanceId, requestId, payload });
+  send({ verb: "control", machineId, instanceId, requestId, payload });
 
   const target = session(instanceId);
   target.pending = target.pending.filter((p) => p.requestId !== requestId);
@@ -3991,12 +4693,18 @@ function blockedRequests(): BlockedRequest[] {
 
   const rows: BlockedRequest[] = [];
   for (const target of Object.values(state.sessions)) {
-    if (target.pending.length === 0 || stopped.has(target.instanceId)) continue;
-    const machine = state.machines.find((row) => row.machineId === target.machineId);
+    if (target.pending.length === 0 || stopped.has(target.instanceId)) {
+      continue;
+    }
+    const machine = state.machines.find(
+      (row) => row.machineId === target.machineId
+    );
     for (const request of target.pending) {
       // A delegate's ask is the parent's to answer, not the user's: it stays on
       // the delegate's own transcript but never lands in this queue.
-      if (routedToParent(request)) continue;
+      if (routedToParent(request)) {
+        continue;
+      }
       rows.push({
         instanceId: target.instanceId,
         machineId: target.machineId,
@@ -4010,7 +4718,7 @@ function blockedRequests(): BlockedRequest[] {
 }
 
 /** What the palette groups by: what this machine was given, then the harness's own. */
-const COMMAND_ORDER: Record<AvailableCommand['type'], number> = {
+const COMMAND_ORDER: Record<AvailableCommand["type"], number> = {
   skill: 0,
   custom: 1,
   builtin: 2,
@@ -4022,8 +4730,10 @@ const COMMAND_ORDER: Record<AvailableCommand['type'], number> = {
  * its plugin (`plugin:command`), an MCP prompt its server (`mcp__server__prompt`).
  */
 function sourceOf(name: string): string | undefined {
-  if (name.startsWith('mcp__')) return name.split('__')[1] || undefined;
-  const namespace = name.indexOf(':');
+  if (name.startsWith("mcp__")) {
+    return name.split("__")[1] || undefined;
+  }
+  const namespace = name.indexOf(":");
   return namespace > 0 ? name.slice(0, namespace) : undefined;
 }
 
@@ -4033,7 +4743,11 @@ function sourceOf(name: string): string | undefined {
  * arrives on every turn and is free — the descriptions are one lazy call behind
  * it, and are all there is before the first init.
  */
-function availableCommands({ names, skills, detailed }: CommandState): AvailableCommand[] {
+function availableCommands({
+  names,
+  skills,
+  detailed,
+}: CommandState): AvailableCommand[] {
   const listed = names.length > 0 ? names : [...(detailed?.keys() ?? [])];
   return listed
     .map((name) => {
@@ -4047,7 +4761,11 @@ function availableCommands({ names, skills, detailed }: CommandState): Available
         source: sourceOf(name),
       };
     })
-    .sort((a, b) => COMMAND_ORDER[a.type] - COMMAND_ORDER[b.type] || a.name.localeCompare(b.name));
+    .sort(
+      (a, b) =>
+        COMMAND_ORDER[a.type] - COMMAND_ORDER[b.type] ||
+        a.name.localeCompare(b.name)
+    );
 }
 
 /**
@@ -4057,14 +4775,21 @@ function availableCommands({ names, skills, detailed }: CommandState): Available
  * filtered out of the rail's subagent list.
  */
 const isRealSubagent = (branch: SubagentState): boolean =>
-  branch.subagentType !== 'subagent';
+  branch.subagentType !== "subagent";
 
 /** Running first, then starting, then error, then complete; within each, newest activity first. */
-const STATUS_RANK: Record<string, number> = { running: 0, starting: 1, error: 2, complete: 3 };
+const STATUS_RANK: Record<string, number> = {
+  running: 0,
+  starting: 1,
+  error: 2,
+  complete: 3,
+};
 const branchOrder = (a: SubagentState, b: SubagentState): number => {
   const rankA = STATUS_RANK[a.status] ?? 3;
   const rankB = STATUS_RANK[b.status] ?? 3;
-  if (rankA !== rankB) return rankA - rankB;
+  if (rankA !== rankB) {
+    return rankA - rankB;
+  }
   const timeA = (a.lastEventAt ?? a.startedAt).getTime();
   const timeB = (b.lastEventAt ?? b.startedAt).getTime();
   return timeB - timeA;
@@ -4076,9 +4801,13 @@ export const whiffle = {
   },
   /** {@link HubState} — the socket's state as something worth saying out loud. */
   get hub(): HubState {
-    if (state.status === 'connected') return 'connected';
-    if (state.status === 'connecting' || !state.attempted) return 'connecting';
-    return 'unreachable';
+    if (state.status === "connected") {
+      return "connected";
+    }
+    if (state.status === "connecting" || !state.attempted) {
+      return "connecting";
+    }
+    return "unreachable";
   },
   /**
    * Whether the last attempt to reach the hub came back empty-handed. What
@@ -4102,10 +4831,11 @@ export const whiffle = {
     return state.hubBuild;
   },
   get onlineMachines() {
-    return state.machines.filter((machine) => machine.status === 'online');
+    return state.machines.filter((machine) => machine.status === "online");
   },
   /** One machine's latest Claude limit reading, or null until it has reported. */
-  usageLimitsFor: (machineId: string): ClaudeLimits | null => state.usageLimits[machineId] ?? null,
+  usageLimitsFor: (machineId: string): ClaudeLimits | null =>
+    state.usageLimits[machineId] ?? null,
   /**
    * Any machine's reading. Limits belong to the account, not the host: every
    * machine signed in to the same account reports the same percentages, so the
@@ -4129,7 +4859,8 @@ export const whiffle = {
   /** Mainline sessions on one machine — what the sidebar groups under it. */
   listedOn,
   /** The ones the hub can still reach: what this machine is doing right now. */
-  liveOn: (machineId: string): InstanceRow[] => listedOn(machineId).filter(isLive),
+  liveOn: (machineId: string): InstanceRow[] =>
+    listedOn(machineId).filter(isLive),
   /**
    * The ones whose process is gone — asleep, or failed. A different question
    * from the live list, so it is a different list rather than a heading that
@@ -4143,7 +4874,9 @@ export const whiffle = {
   },
   /** Side quests across the fleet — kept in their own section, not per machine. */
   get scratchInstances(): InstanceRow[] {
-    return state.instances.filter((row) => isListed(row) && row.kind === 'scratch');
+    return state.instances.filter(
+      (row) => isListed(row) && row.kind === "scratch"
+    );
   },
   /** Stored sessions on one machine, minus the side quests hiding among them. */
   catalogOf: (machineId: string): SDKSessionInfo[] =>
@@ -4167,9 +4900,11 @@ export const whiffle = {
   /** Stored sessions the SDK recorded somewhere inside the project's checkout. */
   storedIn: (project: ProjectRow): SDKSessionInfo[] =>
     (state.catalog[project.machineId] ?? []).filter(
-      (info) => listedInHistory(info) && info.cwd && under(project.cwd, info.cwd)
+      (info) =>
+        listedInHistory(info) && info.cwd && under(project.cwd, info.cwd)
     ),
-  session: (instanceId: string): SessionState | null => state.sessions[instanceId] ?? null,
+  session: (instanceId: string): SessionState | null =>
+    state.sessions[instanceId] ?? null,
   /**
    * The hub's record of one delegate's exchange with its parent, oldest first.
    * Empty for a delegate whose traffic predates the table — its card falls back
@@ -4192,16 +4927,29 @@ export const whiffle = {
    */
   supervisorActivityOf: (instanceId: string) => {
     const activity = state.supervisorActivity[instanceId];
-    if (!activity) return undefined;
-    if (activity.phase === 'evaluating' && Date.now() - activity.since > 300_000) return undefined;
-    if (activity.phase === 'settled' && Date.now() - activity.at > 2_600) return undefined;
+    if (!activity) {
+      return;
+    }
+    if (
+      activity.phase === "evaluating" &&
+      Date.now() - activity.since > 300_000
+    ) {
+      return;
+    }
+    if (activity.phase === "settled" && Date.now() - activity.at > 2600) {
+      return;
+    }
     return activity;
   },
   /** The ask a permission requestId belongs to, whichever delegate raised it. */
   delegateAskOf: (requestId: string): DelegateAskEvent | null => {
     for (const events of Object.values(state.delegateEvents)) {
-      const ask = events.find((event) => event.kind === 'ask' && event.requestId === requestId);
-      if (ask?.kind === 'ask') return ask;
+      const ask = events.find(
+        (event) => event.kind === "ask" && event.requestId === requestId
+      );
+      if (ask?.kind === "ask") {
+        return ask;
+      }
     }
     return null;
   },
@@ -4209,18 +4957,28 @@ export const whiffle = {
   activityOf: (instanceId: string): Activity => {
     const target = state.sessions[instanceId];
     // Blocked wins everywhere: a parked permission is broadcast, not filtered.
-    if (target && target.pending.length > 0) return 'blocked';
+    if (target && target.pending.length > 0) {
+      return "blocked";
+    }
     // An open session's frames are live and authoritative; anything else falls
     // back to the daemon's pulse — the only word on a session this browser has
     // not subscribed to, whose frame-fed state is frozen at the tab that closed.
-    if (target && isSubscribed(instanceId)) return activityOf(target);
+    if (target && isSubscribed(instanceId)) {
+      return activityOf(target);
+    }
     const pulse = state.pulses[instanceId];
-    if (pulse) return pulse.activity;
-    return target ? activityOf(target) : 'idle';
+    if (pulse) {
+      return pulse.activity;
+    }
+    return target ? activityOf(target) : "idle";
   },
-  currentToolOf: (instanceId: string): { name: string; glance: string } | null => {
+  currentToolOf: (
+    instanceId: string
+  ): { name: string; glance: string } | null => {
     const target = state.sessions[instanceId];
-    if (target && isSubscribed(instanceId)) return target.currentTool;
+    if (target && isSubscribed(instanceId)) {
+      return target.currentTool;
+    }
     return state.pulses[instanceId]?.currentTool ?? null;
   },
   /**
@@ -4228,7 +4986,8 @@ export const whiffle = {
    * rail has for an unsubscribed session, since the pulse is broadcast for
    * every session while its transcript frames only flow to a watcher.
    */
-  pulseAt: (instanceId: string): number | undefined => state.pulses[instanceId]?.at,
+  pulseAt: (instanceId: string): number | undefined =>
+    state.pulses[instanceId]?.at,
   /**
    * The ledger stats the fleet table shows per session — turns, context %, cost.
    * Only populated for a session this browser has state for (subscribed / a turn
@@ -4244,9 +5003,16 @@ export const whiffle = {
     cost: number | null;
   } => {
     const t = state.sessions[instanceId];
-    if (!t)
-      return { turns: null, contextPct: null, totalTokens: null, maxTokens: null, cost: null };
-    const turns = t.messages.filter((m) => m.type === 'assistant').length;
+    if (!t) {
+      return {
+        turns: null,
+        contextPct: null,
+        totalTokens: null,
+        maxTokens: null,
+        cost: null,
+      };
+    }
+    const turns = t.messages.filter((m) => m.type === "assistant").length;
     return {
       turns: turns > 0 ? turns : null,
       contextPct: t.context?.percentage ?? null,
@@ -4273,7 +5039,9 @@ export const whiffle = {
   /** Just the count of running *real* subagents, for the badge. */
   runningSubagentsOf: (instanceId: string): number => {
     const target = state.sessions[instanceId];
-    if (target && isSubscribed(instanceId)) return runningSubagents(target.subagents);
+    if (target && isSubscribed(instanceId)) {
+      return runningSubagents(target.subagents);
+    }
     return state.pulses[instanceId]?.runningSubagents ?? 0;
   },
   get blocked(): BlockedRequest[] {

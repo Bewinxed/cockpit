@@ -1,8 +1,8 @@
-import type { FleetConfig } from '@whiffle/core';
-import type { FleetSnapshot } from '$lib/whiffle/fleet';
-import type { HooksPayload } from '$lib/whiffle/hooks';
-import type { ToolsSnapshot } from '$lib/whiffle/tools';
-import type { PageLoad } from './$types';
+import type { FleetConfig } from "@whiffle/core";
+import type { FleetSnapshot } from "$lib/whiffle/fleet";
+import type { HooksPayload } from "$lib/whiffle/hooks";
+import type { ToolsSnapshot } from "$lib/whiffle/tools";
+import type { PageLoad } from "./$types";
 
 const EMPTY: FleetConfig = { mcp: [], marketplaces: [], plugins: [] };
 
@@ -20,21 +20,27 @@ const EMPTY: FleetConfig = { mcp: [], marketplaces: [], plugins: [] };
  */
 export const load: PageLoad = async ({ fetch }) => {
   const [tools, fleet, hooks] = await Promise.all([
-    fetch('/api/tools')
+    fetch("/api/tools")
       .then(async (response) => {
-        if (!response.ok) throw new Error(`the hub answered ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`the hub answered ${response.status}`);
+        }
         return (await response.json()) as ToolsSnapshot;
       })
       .catch((error: unknown) => error as Error),
-    fetch('/api/fleet')
+    fetch("/api/fleet")
       .then(async (response) => {
-        if (!response.ok) throw new Error(`the hub answered ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`the hub answered ${response.status}`);
+        }
         return (await response.json()) as FleetSnapshot;
       })
       .catch((error: unknown) => error as Error),
-    fetch('/api/fleet/hooks')
+    fetch("/api/fleet/hooks")
       .then(async (response) => {
-        if (!response.ok) throw new Error(`the hub answered ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`the hub answered ${response.status}`);
+        }
         return (await response.json()) as HooksPayload;
       })
       .catch((error: unknown) => error as Error),
@@ -43,15 +49,24 @@ export const load: PageLoad = async ({ fetch }) => {
   return {
     catalog: tools instanceof Error ? [] : (tools.catalog ?? []),
     policies: tools instanceof Error ? [] : (tools.policies ?? []),
-    toolsError: tools instanceof Error ? `Could not read the tool catalog — ${tools.message}.` : null,
+    toolsError:
+      tools instanceof Error
+        ? `Could not read the tool catalog — ${tools.message}.`
+        : null,
     config: fleet instanceof Error ? EMPTY : { ...EMPTY, ...fleet.config },
     skills: fleet instanceof Error ? [] : (fleet.skills ?? []),
     agents: fleet instanceof Error ? [] : (fleet.agents ?? []),
     memory: fleet instanceof Error ? null : (fleet.memory ?? null),
     // Absent from a hub that predates the set, which is a fleet of one document.
     memoryDocs: fleet instanceof Error ? [] : (fleet.memoryDocs ?? []),
-    fleetError: fleet instanceof Error ? `Could not read the fleet's setup — ${fleet.message}.` : null,
+    fleetError:
+      fleet instanceof Error
+        ? `Could not read the fleet's setup — ${fleet.message}.`
+        : null,
     hooks: hooks instanceof Error ? [] : (hooks.hooks ?? []),
-    hooksError: hooks instanceof Error ? `Could not read the hooks — ${hooks.message}.` : null,
+    hooksError:
+      hooks instanceof Error
+        ? `Could not read the hooks — ${hooks.message}.`
+        : null,
   };
 };

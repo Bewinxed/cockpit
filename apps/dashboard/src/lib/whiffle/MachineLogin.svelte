@@ -1,4 +1,9 @@
 <script lang="ts">
+  import type { AuthState } from "@whiffle/core";
+  import { toast } from "svelte-sonner";
+  import { Button } from "$lib/components/ui/button";
+  import * as Dialog from "$lib/components/ui/dialog";
+  import { Input } from "$lib/components/ui/input";
   /**
    * Logs a machine in from here.
    *
@@ -9,25 +14,24 @@
    * login keychain is locked stops being a problem rather than being worked
    * around.
    */
-  import { IconExternal, IconKey } from '$lib/icons';
-  import { toast } from 'svelte-sonner';
-  import * as Dialog from '$lib/components/ui/dialog';
-  import { Button } from '$lib/components/ui/button';
-  import { Input } from '$lib/components/ui/input';
-  import { machineControl, type Machine } from './client.svelte';
-  import type { AuthState } from '@whiffle/core';
+  import { IconExternal, IconKey } from "$lib/icons";
+  import { type Machine, machineControl } from "./client.svelte";
 
-  let { machine, open = $bindable(false) }: { machine: Machine; open?: boolean } = $props();
+  let {
+    machine,
+    open = $bindable(false),
+  }: { machine: Machine; open?: boolean } = $props();
 
   let url = $state<string | null>(null);
-  let code = $state('');
+  let code = $state("");
   let busy = $state(false);
   let failed = $state<string | null>(null);
 
   const SAID: Record<string, string> = {
-    authenticated: 'is logged in',
-    unauthenticated: 'saved the token, but still reports nobody logged in',
-    'unreadable-credentials': 'saved the token, but cannot read its credentials',
+    authenticated: "is logged in",
+    unauthenticated: "saved the token, but still reports nobody logged in",
+    "unreadable-credentials":
+      "saved the token, but cannot read its credentials",
   };
 
   /**
@@ -44,7 +48,9 @@
       asked = false;
       return;
     }
-    if (asked) return;
+    if (asked) {
+      return;
+    }
     asked = true;
     void begin();
   });
@@ -56,7 +62,7 @@
     try {
       const challenge = await machineControl<{ url: string }>(
         machine.machineId,
-        'beginLogin',
+        "beginLogin",
         []
       );
       url = challenge.url;
@@ -69,16 +75,20 @@
 
   async function finish(event: SubmitEvent) {
     event.preventDefault();
-    if (!code.trim() || busy) return;
+    if (!code.trim() || busy) {
+      return;
+    }
     busy = true;
     failed = null;
     try {
-      const state = await machineControl<AuthState>(machine.machineId, 'completeLogin', [
-        code.trim(),
-      ]);
-      code = '';
+      const state = await machineControl<AuthState>(
+        machine.machineId,
+        "completeLogin",
+        [code.trim()]
+      );
+      code = "";
       open = false;
-      toast.success(`${machine.hostname} ${SAID[state] ?? 'is logged in'}.`);
+      toast.success(`${machine.hostname} ${SAID[state] ?? "is logged in"}.`);
     } catch (error) {
       failed = error instanceof Error ? error.message : String(error);
     } finally {
@@ -88,13 +98,13 @@
 </script>
 
 <Dialog.Root
-  bind:open
   onOpenChange={(next) => {
     if (next) return;
     url = null;
     code = '';
     failed = null;
   }}
+  bind:open
 >
   <Dialog.Content class="sm:max-w-lg">
     <Dialog.Header>
@@ -103,36 +113,38 @@
         Log in {machine.hostname}
       </Dialog.Title>
       <Dialog.Description>
-        Authorise in your browser here, then paste the code back. Nothing needs to be typed on
-        that machine.
+        Authorise in your browser here, then paste the code back. Nothing needs
+        to be typed on that machine.
       </Dialog.Description>
     </Dialog.Header>
 
     <form class="flex flex-col gap-[var(--space-4)]" onsubmit={finish}>
       {#if url}
         <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
           class="flex items-center justify-center gap-2 rounded-[var(--radius-control)] bg-primary px-3 py-2 text-sm
                  font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          href={url}
+          rel="noopener noreferrer"
+          target="_blank"
         >
           <IconExternal class="size-4" />
           Open the authorisation page
         </a>
       {:else if !failed}
-        <p class="text-sm text-muted-foreground">Asking {machine.hostname} for a login link…</p>
+        <p class="text-sm text-muted-foreground">
+          Asking {machine.hostname} for a login link…
+        </p>
       {/if}
 
       <Input
-        bind:value={code}
-        autocomplete="off"
-        spellcheck="false"
-        placeholder="Paste the code from that page"
-        aria-label="Authorisation code"
         aria-invalid={failed ? 'true' : undefined}
-        disabled={busy || !url}
+        aria-label="Authorisation code"
+        autocomplete="off"
         class="font-mono"
+        disabled={busy || !url}
+        placeholder="Paste the code from that page"
+        spellcheck="false"
+        bind:value={code}
       />
 
       {#if failed}
@@ -140,10 +152,15 @@
       {/if}
 
       <div class="flex justify-end gap-[var(--space-2)]">
-        <Button type="button" variant="outline" onclick={() => (open = false)} disabled={busy}>
+        <Button
+          disabled={busy}
+          onclick={() => (open = false)}
+          type="button"
+          variant="outline"
+        >
           Cancel
         </Button>
-        <Button type="submit" disabled={!code.trim() || busy || !url}>
+        <Button disabled={!code.trim() || busy || !url} type="submit">
           {busy ? 'Finishing…' : 'Log in'}
         </Button>
       </div>

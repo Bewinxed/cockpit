@@ -1,3 +1,4 @@
+import Root from "./command.svelte";
 import Dialog from "./command-dialog.svelte";
 import Empty from "./command-empty.svelte";
 import Group from "./command-group.svelte";
@@ -8,30 +9,29 @@ import List from "./command-list.svelte";
 import Loading from "./command-loading.svelte";
 import Separator from "./command-separator.svelte";
 import Shortcut from "./command-shortcut.svelte";
-import Root from "./command.svelte";
 
 export {
-	Root,
-	Dialog,
-	Empty,
-	Group,
-	Item,
-	LinkItem,
-	Input,
-	List,
-	Separator,
-	Shortcut,
-	Loading,
-	//
-	Root as Command,
-	Dialog as CommandDialog,
-	Empty as CommandEmpty,
-	Group as CommandGroup,
-	Item as CommandItem,
-	LinkItem as CommandLinkItem,
-	Input as CommandInput,
-	List as CommandList,
-	Separator as CommandSeparator,
-	Shortcut as CommandShortcut,
-	Loading as CommandLoading,
+  Dialog,
+  Dialog as CommandDialog,
+  Empty,
+  Empty as CommandEmpty,
+  Group,
+  Group as CommandGroup,
+  Input,
+  Input as CommandInput,
+  Item,
+  Item as CommandItem,
+  LinkItem,
+  LinkItem as CommandLinkItem,
+  List,
+  List as CommandList,
+  Loading,
+  Loading as CommandLoading,
+  Root,
+  //
+  Root as Command,
+  Separator,
+  Separator as CommandSeparator,
+  Shortcut,
+  Shortcut as CommandShortcut,
 };

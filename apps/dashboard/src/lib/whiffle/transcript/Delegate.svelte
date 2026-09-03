@@ -1,4 +1,24 @@
 <script lang="ts">
+  import * as Collapsible from "$lib/components/ui/collapsible";
+  import CollapsibleLazy from "$lib/components/ui/collapsible/collapsible-lazy.svelte";
+  import { IconChevronRight, IconExternal } from "$lib/icons";
+  import { formatDuration } from "$lib/utils/time";
+  import {
+    backfillSession,
+    unwatchDelegate,
+    watchDelegate,
+    whiffle,
+  } from "../client.svelte";
+  import {
+    askDetail,
+    askDetailOf,
+    askShort,
+    askShortOf,
+    matchesSession,
+  } from "../frames";
+  import { delegateHandle } from "../links";
+  import { markHue, sessionSprite } from "../mark";
+  import { modelLabel } from "../models.svelte";
   /**
    * A fleet delegate — a session this one spawned with `delegate` or
    * `start_session` — folded onto the parent's spine the way a subagent branch
@@ -7,45 +27,44 @@
    * only composes what the store already holds: the hub's record of its asks
    * and reports, the daemon's pulse, and, once opened, its live transcript.
    */
-  import type { Message } from '../types';
-  import type { DelegateAskEvent, DelegateReportEvent, DelegateAskStatus } from '../types';
-  import { askShortOf, askDetailOf, askShort, askDetail, matchesSession } from '../frames';
-  import { backfillSession, unwatchDelegate, watchDelegate, whiffle } from '../client.svelte';
-  import { delegateHandle } from '../links';
-  import { foldMessages } from './rows';
-  import { markHue, sessionSprite } from '../mark';
-  import { modelLabel } from '../models.svelte';
-  import { IconChevronRight, IconExternal } from '$lib/icons';
-  import { formatDuration } from '$lib/utils/time';
-  import * as Collapsible from '$lib/components/ui/collapsible';
-  import CollapsibleLazy from '$lib/components/ui/collapsible/collapsible-lazy.svelte';
-  import MessageBody from './MessageBody.svelte';
-  import MessageRow from './MessageRow.svelte';
-  import ToolGroup from './ToolGroup.svelte';
-  import Thinking from './Thinking.svelte';
-  import Subagent from './Subagent.svelte';
-  import Self from './Delegate.svelte';
+  import type {
+    DelegateAskEvent,
+    DelegateAskStatus,
+    DelegateReportEvent,
+    Message,
+  } from "../types";
+  import Self from "./Delegate.svelte";
+  import MessageBody from "./MessageBody.svelte";
+  import MessageRow from "./MessageRow.svelte";
+  import { foldMessages } from "./rows";
+  import Subagent from "./Subagent.svelte";
+  import Thinking from "./Thinking.svelte";
+  import ToolGroup from "./ToolGroup.svelte";
 
   let { message }: { message: Message } = $props();
 
   const meta = $derived(message.metadata ?? {});
   /** Set by `applyToolResult` once the spawn returned; absent while it is in flight. */
   const id = $derived(meta.delegateInstanceId ?? null);
-  const started = $derived(meta.handoffKind === 'start');
+  const started = $derived(meta.handoffKind === "start");
 
-  const row = $derived(id ? whiffle.instances.find((r) => r.id === id) : undefined);
+  const row = $derived(
+    id ? whiffle.instances.find((r) => r.id === id) : undefined
+  );
   const branch = $derived(id ? whiffle.session(id) : null);
 
   const events = $derived(id ? whiffle.delegateEventsOf(id) : []);
-  const askEvents = $derived(events.filter((e): e is DelegateAskEvent => e.kind === 'ask'));
+  const askEvents = $derived(
+    events.filter((e): e is DelegateAskEvent => e.kind === "ask")
+  );
   const reportEvents = $derived(
-    events.filter((e): e is DelegateReportEvent => e.kind === 'report')
+    events.filter((e): e is DelegateReportEvent => e.kind === "report")
   );
   const parent = $derived(whiffle.session(message.instanceId));
 
   const toolInput = $derived.by((): Record<string, unknown> => {
     const raw = meta.toolInput;
-    return typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+    return typeof raw === "object" && raw !== null && !Array.isArray(raw)
       ? (raw as Record<string, unknown>)
       : {};
   });
@@ -54,14 +73,22 @@
     row
       ? delegateHandle(row)
       : id
-        ? `${(message.content.split('/').filter(Boolean).pop() ?? 'session')}#${id.slice(0, 8)}`
-        : (message.content.split('/').filter(Boolean).pop() ?? 'delegate')
+        ? `${message.content.split("/").filter(Boolean).pop() ?? "session"}#${id.slice(0, 8)}`
+        : (message.content.split("/").filter(Boolean).pop() ?? "delegate")
   );
-  const type = $derived(typeof toolInput.type === 'string' ? toolInput.type : '');
-  const harness = $derived(row?.harness ?? branch?.harness ?? String(toolInput.harness ?? ''));
-  const model = $derived(branch?.model ?? row?.model ?? String(toolInput.model ?? ''));
-  const mayDelegate = $derived(row?.canDelegate === true || toolInput.can_delegate === true);
-  const brief = $derived(meta.handoffBrief ?? '');
+  const type = $derived(
+    typeof toolInput.type === "string" ? toolInput.type : ""
+  );
+  const harness = $derived(
+    row?.harness ?? branch?.harness ?? String(toolInput.harness ?? "")
+  );
+  const model = $derived(
+    branch?.model ?? row?.model ?? String(toolInput.model ?? "")
+  );
+  const mayDelegate = $derived(
+    row?.canDelegate === true || toolInput.can_delegate === true
+  );
+  const brief = $derived(meta.handoffBrief ?? "");
 
   /**
    * The newest turn it reported and how many there were — off the hub's rows,
@@ -69,7 +96,12 @@
    * for a delegate that ran before the hub kept them.
    */
   const report = $derived.by(
-    (): { body: string; failed: boolean; count: number; at: number | undefined } | null => {
+    (): {
+      body: string;
+      failed: boolean;
+      count: number;
+      at: number | undefined;
+    } | null => {
       if (reportEvents.length > 0) {
         const last = reportEvents[reportEvents.length - 1];
         return {
@@ -79,15 +111,20 @@
           at: new Date(last.createdAt).getTime(),
         };
       }
-      if (!id) return null;
+      if (!id) {
+        return null;
+      }
       const peers = (parent?.messages ?? []).filter(
-        (m) => m.type === 'user.peer' && matchesSession(m.metadata?.peerSession, id)
+        (m) =>
+          m.type === "user.peer" && matchesSession(m.metadata?.peerSession, id)
       );
       const latest = peers[peers.length - 1];
-      if (!latest) return null;
+      if (!latest) {
+        return null;
+      }
       return {
         body: latest.content,
-        failed: latest.metadata?.reportKind === 'failed',
+        failed: latest.metadata?.reportKind === "failed",
         count: peers.length,
         at: latest.timestamp?.getTime(),
       };
@@ -100,34 +137,50 @@
    * answered where the parent's `answer_delegate` call names their requestId.
    */
   const asks = $derived.by(
-    (): Array<{ key: string; status: DelegateAskStatus; short: string; detail: string }> => {
-      if (!id) return [];
+    (): Array<{
+      key: string;
+      status: DelegateAskStatus;
+      short: string;
+      detail: string;
+    }> => {
+      if (!id) {
+        return [];
+      }
       if (askEvents.length > 0) {
         return askEvents.map((ask) => ({
           key: String(ask.id),
-          status: ask.status ?? 'pending',
+          status: ask.status ?? "pending",
           short: askShortOf(ask.toolName, ask.payload.input ?? {}),
           detail: askDetailOf(ask.toolName, ask.payload.input ?? {}),
         }));
       }
       const parentMessages = parent?.messages ?? [];
       return parentMessages
-        .filter((m) => m.type === 'user.delegate_ask' && matchesSession(m.metadata?.peerSession, id))
+        .filter(
+          (m) =>
+            m.type === "user.delegate_ask" &&
+            matchesSession(m.metadata?.peerSession, id)
+        )
         .map((ask, index) => {
           const requestId = ask.metadata?.askRequestId;
-          let status: DelegateAskStatus = 'pending';
+          let status: DelegateAskStatus = "pending";
           if (requestId) {
             const answer = parentMessages.find(
               (m) =>
-                m.type === 'tool.use' &&
-                (m.metadata?.toolName ?? '').includes('answer_delegate') &&
-                JSON.stringify(m.metadata?.toolInput ?? null).includes(requestId)
+                m.type === "tool.use" &&
+                (m.metadata?.toolName ?? "").includes("answer_delegate") &&
+                JSON.stringify(m.metadata?.toolInput ?? null).includes(
+                  requestId
+                )
             );
             if (answer) {
               const input = answer.metadata?.toolInput;
               const denied =
-                typeof input === 'object' && input !== null && !Array.isArray(input) && input.deny === true;
-              status = denied ? 'denied' : 'answered';
+                typeof input === "object" &&
+                input !== null &&
+                !Array.isArray(input) &&
+                input.deny === true;
+              status = denied ? "denied" : "answered";
             }
           }
           return {
@@ -139,68 +192,88 @@
         });
     }
   );
-  const pendingAsks = $derived(asks.filter((ask) => ask.status === 'pending').length);
+  const pendingAsks = $derived(
+    asks.filter((ask) => ask.status === "pending").length
+  );
 
-  const live = $derived(row?.status === 'running' || row?.status === 'starting');
-  const activity = $derived(id ? whiffle.activityOf(id) : 'idle');
+  const live = $derived(
+    row?.status === "running" || row?.status === "starting"
+  );
+  const activity = $derived(id ? whiffle.activityOf(id) : "idle");
   const currentTool = $derived(id ? whiffle.currentToolOf(id) : null);
-  const spawnFailed = $derived(!id && meta.toolStatus === 'error');
+  const spawnFailed = $derived(!id && meta.toolStatus === "error");
 
-  type Phase = 'spawning' | 'working' | 'blocked' | 'reported' | 'idle' | 'sleeping' | 'stopped' | 'failed';
+  type Phase =
+    | "spawning"
+    | "working"
+    | "blocked"
+    | "reported"
+    | "idle"
+    | "sleeping"
+    | "stopped"
+    | "failed";
   const phase = $derived<Phase>(
-    spawnFailed || row?.status === 'error'
-      ? 'failed'
-      : !id
-        ? 'spawning'
-        : pendingAsks > 0 || activity === 'blocked'
-          ? 'blocked'
-          : live && activity === 'working'
-            ? 'working'
-            : row?.status === 'sleeping'
-              ? 'sleeping'
-              : row?.status === 'stopped'
-                ? 'stopped'
+    spawnFailed || row?.status === "error"
+      ? "failed"
+      : id
+        ? pendingAsks > 0 || activity === "blocked"
+          ? "blocked"
+          : live && activity === "working"
+            ? "working"
+            : row?.status === "sleeping"
+              ? "sleeping"
+              : row?.status === "stopped"
+                ? "stopped"
                 : report
-                  ? 'reported'
-                  : 'idle'
+                  ? "reported"
+                  : "idle"
+        : "spawning"
   );
-  const inFlight = $derived(phase === 'spawning' || phase === 'working');
+  const inFlight = $derived(phase === "spawning" || phase === "working");
   const tone = $derived(
-    phase === 'failed'
-      ? 'fail'
-      : phase === 'blocked'
-        ? 'attn'
+    phase === "failed"
+      ? "fail"
+      : phase === "blocked"
+        ? "attn"
         : inFlight
-          ? 'live'
-          : phase === 'reported'
-            ? 'done'
-            : 'idle'
+          ? "live"
+          : phase === "reported"
+            ? "done"
+            : "idle"
   );
-  const phaseWord = $derived(phase === 'blocked' ? 'needs an answer' : phase);
+  const phaseWord = $derived(phase === "blocked" ? "needs an answer" : phase);
 
   // Elapsed is a clock: while it runs the card re-reads it on its own, and once
   // it has settled the last report is the end of the run.
   let now = $state(Date.now());
   $effect(() => {
-    if (!inFlight) return;
+    if (!inFlight) {
+      return;
+    }
     const tick = setInterval(() => (now = Date.now()), 1000);
     return () => clearInterval(tick);
   });
   const startedAt = $derived(message.timestamp?.getTime());
   const endedAt = $derived(inFlight ? now : report?.at);
   const elapsed = $derived(
-    startedAt && endedAt && endedAt > startedAt ? formatDuration(endedAt - startedAt) : ''
+    startedAt && endedAt && endedAt > startedAt
+      ? formatDuration(endedAt - startedAt)
+      : ""
   );
 
   const headline = (text: string): string => {
-    const line = text.split('\n').map((each) => each.trim()).find(Boolean) ?? '';
+    const line =
+      text
+        .split("\n")
+        .map((each) => each.trim())
+        .find(Boolean) ?? "";
     return line.length > 120 ? `${line.slice(0, 119)}…` : line;
   };
 
   const failure = $derived(
     spawnFailed
-      ? headline(String(meta.toolResult ?? 'The spawn failed.'))
-      : row?.lastError ?? (report?.failed ? headline(report.body) : '')
+      ? headline(String(meta.toolResult ?? "The spawn failed."))
+      : (row?.lastError ?? (report?.failed ? headline(report.body) : ""))
   );
 
   let open = $state(false);
@@ -210,7 +283,9 @@
    */
   const onToggle = (next: boolean) => {
     open = next;
-    if (!id) return;
+    if (!id) {
+      return;
+    }
     if (next) {
       watchDelegate(id);
       void backfillSession(id);
@@ -220,67 +295,107 @@
   };
 
   const rows = $derived.by(() => {
-    if (!branch) return [];
+    if (!branch) {
+      return [];
+    }
     const folded = foldMessages(branch.messages, branch.subagents);
-    if (branch.streaming) folded.push({ kind: 'stream', key: 'delegate:stream', text: branch.streaming });
+    if (branch.streaming) {
+      folded.push({
+        kind: "stream",
+        key: "delegate:stream",
+        text: branch.streaming,
+      });
+    }
     return folded;
   });
-  const loading = $derived(open && !!id && (!branch || branch.loading || branch.hydrating) && rows.length === 0);
-  const agentName = $derived(harness || 'delegate');
+  const loading = $derived(
+    open &&
+      !!id &&
+      (!branch || branch.loading || branch.hydrating) &&
+      rows.length === 0
+  );
+  const agentName = $derived(harness || "delegate");
   const seed = $derived(id ?? meta.toolId);
   const Sprite = $derived(sessionSprite(seed));
 </script>
 
 <div class="branch delegate">
-  <Collapsible.Root {open} onOpenChange={onToggle}>
+  <Collapsible.Root onOpenChange={onToggle} {open}>
     <div class="head">
-    <Collapsible.Trigger class="bhead">
-      <span class="chev" aria-hidden="true"><IconChevronRight /></span>
-      <span class="mark m{markHue(seed)}" aria-hidden="true"><Sprite /></span>
-      <span class="tk">{label}</span>
-      {#if started}<span class="kind">session</span>{:else if type}<span class="kind">{type}</span>{/if}
-      {#if harness}<span class="meta">{harness}</span>{/if}
-      {#if model}<span class="meta">{modelLabel(model)}</span>{/if}
-      {#if mayDelegate}<span class="may">may delegate</span>{/if}
-      <span class="pill {tone}">
-        {#if phase !== 'reported'}{phaseWord}{/if}{#if report?.count}{#if phase !== 'reported'}{' · '}{/if}{report.count} report{report.count === 1 ? '' : 's'}{/if}{#if elapsed}{' · '}{elapsed}{/if}
-      </span>
-    </Collapsible.Trigger>
-    {#if id}
-      <a class="jump" href="/session/{id}" title="Open {label} in its own view" aria-label="Open {label} in its own view">
-        <IconExternal />
-      </a>
-    {/if}
+      <Collapsible.Trigger class="bhead">
+        <span aria-hidden="true" class="chev"><IconChevronRight /></span>
+        <span aria-hidden="true" class="mark m{markHue(seed)}"><Sprite /></span>
+        <span class="tk">{label}</span>
+        {#if started}
+          <span class="kind">session</span>
+        {:else if type}
+          <span class="kind">{type}</span>
+        {/if}
+        {#if harness}
+          <span class="meta">{harness}</span>
+        {/if}
+        {#if model}
+          <span class="meta">{modelLabel(model)}</span>
+        {/if}
+        {#if mayDelegate}
+          <span class="may">may delegate</span>
+        {/if}
+        <span class="pill {tone}">
+          {#if phase !== 'reported'}
+            {phaseWord}
+          {/if}
+          {#if report?.count}
+            {#if phase !== 'reported'}
+              {' · '}
+            {/if}
+            {report.count}
+            report{report.count === 1 ? '' : 's'}
+          {/if}
+          {#if elapsed}
+            {' · '}{elapsed}
+          {/if}
+        </span>
+      </Collapsible.Trigger>
+      {#if id}
+        <a
+          aria-label="Open {label} in its own view"
+          class="jump"
+          href="/session/{id}"
+          title="Open {label} in its own view"
+        >
+          <IconExternal />
+        </a>
+      {/if}
     </div>
 
-  {#if brief}
-    <p class="brief">{headline(brief)}</p>
-  {/if}
+    {#if brief}
+      <p class="brief">{headline(brief)}</p>
+    {/if}
 
-  {#if phase === 'working'}
-    <p class="now">
-      <span class="beat" aria-hidden="true"></span>
-      {currentTool ? `${currentTool.name} ${currentTool.glance}`.trim() : 'working'}
-    </p>
-  {:else if phase === 'spawning'}
-    <p class="now"><span class="beat" aria-hidden="true"></span>starting</p>
-  {:else if phase === 'failed' && failure}
-    <p class="now err">{failure}</p>
-  {:else if report && !open}
-    <p class="now" class:err={report.failed}>{headline(report.body)}</p>
-  {/if}
+    {#if phase === 'working'}
+      <p class="now">
+        <span aria-hidden="true" class="beat"></span>
+        {currentTool ? `${currentTool.name} ${currentTool.glance}`.trim() : 'working'}
+      </p>
+    {:else if phase === 'spawning'}
+      <p class="now"><span aria-hidden="true" class="beat"></span>starting</p>
+    {:else if phase === 'failed' && failure}
+      <p class="now err">{failure}</p>
+    {:else if report && !open}
+      <p class="now" class:err={report.failed}>{headline(report.body)}</p>
+    {/if}
 
-  {#if asks.length}
-    <ul class="asks">
-      {#each asks as ask (ask.key)}
-        <li class="ask {ask.status}" title={ask.detail}>
-          <span class="dot" aria-hidden="true"></span>
-          <span class="astate">{ask.status}</span>
-          <span class="ashort">{ask.short}</span>
-        </li>
-      {/each}
-    </ul>
-  {/if}
+    {#if asks.length}
+      <ul class="asks">
+        {#each asks as ask (ask.key)}
+          <li class="ask {ask.status}" title={ask.detail}>
+            <span aria-hidden="true" class="dot"></span>
+            <span class="astate">{ask.status}</span>
+            <span class="ashort">{ask.short}</span>
+          </li>
+        {/each}
+      </ul>
+    {/if}
 
     <Collapsible.Content>
       <CollapsibleLazy {open}>
@@ -302,17 +417,22 @@
             {:else if r.kind === 'subagent'}
               <Subagent branch={r.branch} spawn={r.spawn} />
             {:else if r.kind === 'thinking'}
-              <Thinking text={r.text} live={r.live} />
+              <Thinking live={r.live} text={r.text} />
             {:else if r.kind === 'stream'}
               <div class="say"><MessageBody source={r.text} streaming /></div>
             {:else if r.kind === 'single'}
-              <MessageRow message={r.message} {agentName} />
+              <MessageRow {agentName} message={r.message} />
             {/if}
           {/each}
 
           {#if report}
             <section class="report" class:failed={report.failed}>
-              <h4>{report.failed ? 'Report — failed' : 'Report'}{#if report.count > 1} · latest of {report.count}{/if}</h4>
+              <h4>
+                {report.failed ? 'Report — failed' : 'Report'}
+                {#if report.count > 1}
+                  · latest of {report.count}
+                {/if}
+              </h4>
               <MessageBody source={report.body} />
             </section>
           {/if}
@@ -363,22 +483,30 @@
       color: var(--accent-text);
     }
   }
-  :global(.delegate [data-slot='collapsible-content']) {
+  :global(.delegate [data-slot="collapsible-content"]) {
     overflow: hidden;
   }
-  :global(.delegate [data-slot='collapsible-content'][data-state='open']) {
+  :global(.delegate [data-slot="collapsible-content"][data-state="open"]) {
     animation: delegate-down calc(var(--c-100) * 2) var(--e-in);
   }
-  :global(.delegate [data-slot='collapsible-content'][data-state='closed']) {
+  :global(.delegate [data-slot="collapsible-content"][data-state="closed"]) {
     animation: delegate-up calc(var(--c-100) * 2) var(--e-out);
   }
   @keyframes delegate-down {
-    from { height: 0; }
-    to { height: var(--bits-collapsible-content-height); }
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--bits-collapsible-content-height);
+    }
   }
   @keyframes delegate-up {
-    from { height: var(--bits-collapsible-content-height); }
-    to { height: 0; }
+    from {
+      height: var(--bits-collapsible-content-height);
+    }
+    to {
+      height: 0;
+    }
   }
 
   .chev {
@@ -390,7 +518,7 @@
     color: var(--ink-muted);
     transition: transform var(--c-100) var(--e-in);
   }
-  :global(.delegate .bhead[data-state='open']) .chev {
+  :global(.delegate .bhead[data-state="open"]) .chev {
     transform: rotate(90deg);
   }
   .chev :global(svg) {
@@ -415,13 +543,27 @@
     display: block;
     color: var(--mark-glyph);
   }
-  .mark.m2 { background-color: var(--mark-2); }
-  .mark.m3 { background-color: var(--mark-3); }
-  .mark.m4 { background-color: var(--mark-4); }
-  .mark.m5 { background-color: var(--mark-5); }
-  .mark.m6 { background-color: var(--mark-6); }
-  .mark.m7 { background-color: var(--mark-7); }
-  .mark.m8 { background-color: var(--mark-8); }
+  .mark.m2 {
+    background-color: var(--mark-2);
+  }
+  .mark.m3 {
+    background-color: var(--mark-3);
+  }
+  .mark.m4 {
+    background-color: var(--mark-4);
+  }
+  .mark.m5 {
+    background-color: var(--mark-5);
+  }
+  .mark.m6 {
+    background-color: var(--mark-6);
+  }
+  .mark.m7 {
+    background-color: var(--mark-7);
+  }
+  .mark.m8 {
+    background-color: var(--mark-8);
+  }
 
   .tk {
     font-family: var(--font-mono);
@@ -469,10 +611,22 @@
     color: var(--status-idle-ink);
     white-space: nowrap;
   }
-  .pill.live { background: var(--status-live-bg); color: var(--status-live-ink); }
-  .pill.attn { background: var(--status-attn-bg); color: var(--status-attn-ink); }
-  .pill.done { background: var(--status-done-bg); color: var(--status-done-ink); }
-  .pill.fail { background: var(--status-fail-bg); color: var(--status-fail-ink); }
+  .pill.live {
+    background: var(--status-live-bg);
+    color: var(--status-live-ink);
+  }
+  .pill.attn {
+    background: var(--status-attn-bg);
+    color: var(--status-attn-ink);
+  }
+  .pill.done {
+    background: var(--status-done-bg);
+    color: var(--status-done-ink);
+  }
+  .pill.fail {
+    background: var(--status-fail-bg);
+    color: var(--status-fail-ink);
+  }
 
   /* The way out to the delegate's own view — a glyph beside the head, in the
      muted ink until pointed at, so the head stays a disclosure and this stays
@@ -485,7 +639,9 @@
     place-items: center;
     border-radius: var(--radius-mark);
     color: var(--ink-muted);
-    transition: color var(--c-100) var(--e-in), background var(--c-100) var(--e-in);
+    transition:
+      color var(--c-100) var(--e-in),
+      background var(--c-100) var(--e-in);
   }
   .jump :global(svg) {
     width: 13px;
@@ -532,7 +688,9 @@
     animation: beat var(--breath) var(--e-toggle) infinite;
   }
   @keyframes beat {
-    50% { opacity: 0.3; }
+    50% {
+      opacity: 0.3;
+    }
   }
 
   /* The asks register: each ask on its own line with its state in words —
@@ -563,9 +721,15 @@
     background: var(--status-idle-ink);
     align-self: center;
   }
-  .ask.pending .dot { background: var(--status-attn-ink); }
-  .ask.answered .dot { background: var(--status-done-ink); }
-  .ask.denied .dot { background: var(--status-fail-ink); }
+  .ask.pending .dot {
+    background: var(--status-attn-ink);
+  }
+  .ask.answered .dot {
+    background: var(--status-done-ink);
+  }
+  .ask.denied .dot {
+    background: var(--status-fail-ink);
+  }
   .astate {
     flex: 0 0 auto;
     font-size: var(--text-xs);
@@ -573,8 +737,12 @@
     text-transform: uppercase;
     letter-spacing: 0.02em;
   }
-  .ask.pending .astate { color: var(--status-attn-ink); }
-  .ask.denied .astate { color: var(--status-fail-ink); }
+  .ask.pending .astate {
+    color: var(--status-attn-ink);
+  }
+  .ask.denied .astate {
+    color: var(--status-fail-ink);
+  }
   .ashort {
     min-width: 0;
     overflow-wrap: anywhere;
@@ -650,8 +818,8 @@
     .jump {
       transition: none;
     }
-    :global(.delegate [data-slot='collapsible-content'][data-state='open']),
-    :global(.delegate [data-slot='collapsible-content'][data-state='closed']) {
+    :global(.delegate [data-slot="collapsible-content"][data-state="open"]),
+    :global(.delegate [data-slot="collapsible-content"][data-state="closed"]) {
       animation: none;
     }
     .beat {

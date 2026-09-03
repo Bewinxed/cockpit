@@ -55,13 +55,13 @@ const CADENCE = 250;
 const HIDDEN_EVERY = 4;
 
 /** How a registrant's turn comes round: on screen but unfocused, or off screen entirely. */
-export type Tier = 'visible' | 'hidden';
+export type Tier = "visible" | "hidden";
 
 interface Registrant {
-  /** Cheap state summary; a rebuild is skipped unless this changed. */
-  fingerprint: () => string;
   /** Invalidate this pane's rows, once. */
   bump: () => void;
+  /** Cheap state summary; a rebuild is skipped unless this changed. */
+  fingerprint: () => string;
   last: string;
   tier: Tier;
 }
@@ -75,7 +75,9 @@ let round = 0;
 
 function tick(): void {
   const ids = [...registry.keys()];
-  if (ids.length === 0) return;
+  if (ids.length === 0) {
+    return;
+  }
   round += 1;
   const hiddenToo = round % HIDDEN_EVERY === 0;
   // One pass, one rebuild: walk from where we left off and stop at the first
@@ -85,10 +87,16 @@ function tick(): void {
   for (let i = 0; i < ids.length; i += 1) {
     const id = ids[(cursor + i) % ids.length];
     const entry = registry.get(id);
-    if (!entry) continue;
-    if (entry.tier === 'hidden' && !hiddenToo) continue;
+    if (!entry) {
+      continue;
+    }
+    if (entry.tier === "hidden" && !hiddenToo) {
+      continue;
+    }
     const now = entry.fingerprint();
-    if (now === entry.last) continue;
+    if (now === entry.last) {
+      continue;
+    }
     entry.last = now;
     cursor = (cursor + i + 1) % ids.length;
     entry.bump();
@@ -98,12 +106,16 @@ function tick(): void {
 }
 
 function start(): void {
-  if (timer !== null || typeof window === 'undefined') return;
+  if (timer !== null || typeof window === "undefined") {
+    return;
+  }
   timer = setInterval(tick, CADENCE);
 }
 
 function stop(): void {
-  if (timer === null) return;
+  if (timer === null) {
+    return;
+  }
   clearInterval(timer);
   timer = null;
 }
@@ -118,12 +130,19 @@ export const rebuildScheduler = {
    * built its rows, or is about to catch up on its own account, so a rebuild
    * on the next tick would be work for an unchanged picture.
    */
-  join(id: string, fingerprint: () => string, bump: () => void, tier: Tier = 'visible'): () => void {
+  join(
+    id: string,
+    fingerprint: () => string,
+    bump: () => void,
+    tier: Tier = "visible"
+  ): () => void {
     registry.set(id, { fingerprint, bump, last: fingerprint(), tier });
     start();
     return () => {
       registry.delete(id);
-      if (registry.size === 0) stop();
+      if (registry.size === 0) {
+        stop();
+      }
     };
   },
 

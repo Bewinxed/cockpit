@@ -1,29 +1,35 @@
-import { browser } from '$app/environment';
+import { browser } from "$app/environment";
 
-type Theme = 'light' | 'dark' | 'system';
+type Theme = "light" | "dark" | "system";
 
 function getInitialTheme(): Theme {
-  if (!browser) return 'light';
-  const stored = localStorage.getItem('whiffle-theme') as Theme | null;
-  return stored || 'light';
+  if (!browser) {
+    return "light";
+  }
+  const stored = localStorage.getItem("whiffle-theme") as Theme | null;
+  return stored || "light";
 }
 
 function applyTheme(themeValue: Theme) {
-  if (!browser) return;
+  if (!browser) {
+    return;
+  }
 
   const root = document.documentElement;
 
-  if (themeValue === 'system') {
-    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  if (themeValue === "system") {
+    const systemPrefersDark = window.matchMedia(
+      "(prefers-color-scheme: dark)"
+    ).matches;
     if (systemPrefersDark) {
-      root.classList.add('dark');
+      root.classList.add("dark");
     } else {
-      root.classList.remove('dark');
+      root.classList.remove("dark");
     }
-  } else if (themeValue === 'dark') {
-    root.classList.add('dark');
+  } else if (themeValue === "dark") {
+    root.classList.add("dark");
   } else {
-    root.classList.remove('dark');
+    root.classList.remove("dark");
   }
 }
 
@@ -35,10 +41,10 @@ class ThemeState {
       applyTheme(this.current);
 
       // Listen for system theme changes
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      mediaQuery.addEventListener('change', () => {
-        if (this.current === 'system') {
-          applyTheme('system');
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      mediaQuery.addEventListener("change", () => {
+        if (this.current === "system") {
+          applyTheme("system");
         }
       });
     }
@@ -47,13 +53,13 @@ class ThemeState {
   set(value: Theme) {
     this.current = value;
     if (browser) {
-      localStorage.setItem('whiffle-theme', value);
+      localStorage.setItem("whiffle-theme", value);
       applyTheme(value);
     }
   }
 
   toggle() {
-    this.set(this.current === 'light' ? 'dark' : 'light');
+    this.set(this.current === "light" ? "dark" : "light");
   }
 }
 

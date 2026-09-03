@@ -1,17 +1,17 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
-  import { goto } from '$app/navigation';
-  import { toast } from 'svelte-sonner';
-  import type { DelegateType } from '$lib/whiffle/delegate-types';
-  import { message, removeDelegateType } from '$lib/whiffle/delegate-types';
-  import { IconPlus, IconSubagent, IconTrash } from '$lib/icons';
-  import { Button } from '$lib/components/ui/button';
-  import * as Card from '$lib/components/ui/card';
-  import * as Alert from '$lib/components/ui/alert';
-  import { Badge } from '$lib/components/ui/badge';
-  import * as Tooltip from '$lib/components/ui/tooltip';
-  import { confirm } from '$lib/whiffle/confirm.svelte';
-  import type { PageData } from './$types';
+  import { untrack } from "svelte";
+  import { toast } from "svelte-sonner";
+  import { goto } from "$app/navigation";
+  import * as Alert from "$lib/components/ui/alert";
+  import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
+  import * as Card from "$lib/components/ui/card";
+  import * as Tooltip from "$lib/components/ui/tooltip";
+  import { IconPlus, IconSubagent, IconTrash } from "$lib/icons";
+  import { confirm } from "$lib/whiffle/confirm.svelte";
+  import type { DelegateType } from "$lib/whiffle/delegate-types";
+  import { message, removeDelegateType } from "$lib/whiffle/delegate-types";
+  import type { PageData } from "./$types";
 
   /**
    * The delegate-type library — the named presets a `delegate` call's `type`
@@ -31,7 +31,9 @@
 
   let latch = $state.raw(untrack(() => data));
   $effect(() => {
-    if (latch === data) return;
+    if (latch === data) {
+      return;
+    }
     latch = data;
     types = data.types;
   });
@@ -39,12 +41,13 @@
   async function askRemove(row: DelegateType) {
     const ok = await confirm({
       title: `Delete ${row.name}?`,
-      body:
-        'A session already running keeps the type list it started with — the prompt cache is frozen for its lifetime. This only stops the name from being offered to new sessions.',
-      confirmLabel: 'Delete delegate type',
+      body: "A session already running keeps the type list it started with — the prompt cache is frozen for its lifetime. This only stops the name from being offered to new sessions.",
+      confirmLabel: "Delete delegate type",
       destructive: true,
     });
-    if (ok) await remove(row);
+    if (ok) {
+      await remove(row);
+    }
   }
 
   async function remove(row: DelegateType) {
@@ -62,20 +65,28 @@
   /** Every field that narrows what the delegate can do, read as a short list. */
   function narrowing(row: DelegateType): string | null {
     const parts: string[] = [];
-    if (row.skills?.length) parts.push(`${row.skills.length} skill${row.skills.length === 1 ? '' : 's'}`);
-    if (row.denyTools?.length) parts.push(`${row.denyTools.length} tool${row.denyTools.length === 1 ? '' : 's'} denied`);
-    return parts.length ? parts.join(', ') : null;
+    if (row.skills?.length) {
+      parts.push(
+        `${row.skills.length} skill${row.skills.length === 1 ? "" : "s"}`
+      );
+    }
+    if (row.denyTools?.length) {
+      parts.push(
+        `${row.denyTools.length} tool${row.denyTools.length === 1 ? "" : "s"} denied`
+      );
+    }
+    return parts.length ? parts.join(", ") : null;
   }
 
   /* Quiet Ledger dressing for shadcn primitives — see routes/rules/+page.svelte. */
   const panelClass =
-    'gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--space-5)] shadow-[var(--shadow-lifted)] ring-0';
+    "gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--space-5)] shadow-[var(--shadow-lifted)] ring-0";
   const tileClass =
-    'h-full gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--c-card-pad)] shadow-[var(--shadow-lifted)] ring-0';
+    "h-full gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--c-card-pad)] shadow-[var(--shadow-lifted)] ring-0";
   const btnPrimary =
-    'h-[var(--c-btn-h)] gap-[var(--c-btn-gap)] rounded-[var(--radius-control)] border-transparent bg-[var(--brand-solid)] bg-[image:var(--gradient-action)] px-[var(--c-btn-pad)] text-[length:var(--c-btn-fs)] font-medium !text-[color:var(--on-brand)] shadow-[var(--shadow-action)] hover:brightness-110';
+    "h-[var(--c-btn-h)] gap-[var(--c-btn-gap)] rounded-[var(--radius-control)] border-transparent bg-[var(--brand-solid)] bg-[image:var(--gradient-action)] px-[var(--c-btn-pad)] text-[length:var(--c-btn-fs)] font-medium !text-[color:var(--on-brand)] shadow-[var(--shadow-action)] hover:brightness-110";
   const alertDanger =
-    'rounded-[var(--radius-control)] border-[var(--error-9)] bg-[var(--error-3)] !text-[color:var(--error-11)]';
+    "rounded-[var(--radius-control)] border-[var(--error-9)] bg-[var(--error-3)] !text-[color:var(--error-11)]";
 </script>
 
 <svelte:head><title>Delegates &middot; Whiffle</title></svelte:head>
@@ -85,7 +96,9 @@
     <div class="well">
       <span class="k">{label}</span>
       <span class="v">{value}</span>
-      {#if unit}<span class="u">{unit}</span>{/if}
+      {#if unit}
+        <span class="u">{unit}</span>
+      {/if}
     </div>
   </Card.Root>
 {/snippet}
@@ -93,9 +106,10 @@
   <div class="col">
     <header class="head">
       <p class="sub">
-        The routing table a session's own <code>delegate</code> call reads: each row is a named
-        preset — a description, a harness, a model, an effort — and a calling agent picks one by
-        matching what it needs done against the description, never by knowing a model string.
+        The routing table a session's own <code>delegate</code> call reads: each
+        row is a named preset — a description, a harness, a model, an effort —
+        and a calling agent picks one by matching what it needs done against the
+        description, never by knowing a model string.
       </p>
       <Button class={btnPrimary} onclick={() => goto('/delegates/new')}>
         <IconPlus class="shrink-0" />
@@ -103,7 +117,7 @@
       </Button>
     </header>
 
-    <section class="stats" aria-label="Delegate library at a glance">
+    <section aria-label="Delegate library at a glance" class="stats">
       {@render stat('Delegate types', types.length)}
       {@render stat('Harnesses in use', new Set(types.map((row) => row.harness)).size)}
     </section>
@@ -121,7 +135,8 @@
         <header class="phead">
           <h2>No delegate types yet</h2>
           <span class="psub">
-            A fresh hub seeds five on first read; delete all of them and this is what is left.
+            A fresh hub seeds five on first read; delete all of them and this is
+            what is left.
           </span>
         </header>
         <div class="pbody">
@@ -135,7 +150,9 @@
       <Card.Root class={panelClass}>
         <header class="phead">
           <h2>Delegate library</h2>
-          <span class="psub">Every preset a <code>delegate</code> call can route to</span>
+          <span class="psub"
+            >Every preset a <code>delegate</code> call can route to</span
+          >
         </header>
         <div class="pbody">
           <ul class="rows">
@@ -147,11 +164,23 @@
                   </span>
                   <span class="line desc">{row.description}</span>
                   <span class="badgerow">
-                    <Badge variant="outline" class="capitalize">{row.harness}</Badge>
-                    <Badge variant="outline" class="font-mono">{row.model}</Badge>
-                    {#if row.effort}<Badge variant="outline" class="capitalize">{row.effort}</Badge>{/if}
-                    {#if narrowing(row)}<Badge variant="secondary">{narrowing(row)}</Badge>{/if}
-                    {#if row.canDelegate}<Badge variant="secondary">may delegate</Badge>{/if}
+                    <Badge class="capitalize" variant="outline"
+                      >{row.harness}</Badge
+                    >
+                    <Badge class="font-mono" variant="outline"
+                      >{row.model}</Badge
+                    >
+                    {#if row.effort}
+                      <Badge class="capitalize" variant="outline"
+                        >{row.effort}</Badge
+                      >
+                    {/if}
+                    {#if narrowing(row)}
+                      <Badge variant="secondary">{narrowing(row)}</Badge>
+                    {/if}
+                    {#if row.canDelegate}
+                      <Badge variant="secondary">may delegate</Badge>
+                    {/if}
                   </span>
                   <span class="line servedrow">
                     <span class="served">
@@ -175,12 +204,12 @@
                         {#snippet child({ props })}
                           <Button
                             {...props}
-                            variant="ghost"
-                            size="icon"
+                            aria-label="Delete {row.name}"
                             class="text-muted-foreground hover:text-destructive"
                             disabled={busy[row.name] === true}
-                            aria-label="Delete {row.name}"
                             onclick={() => askRemove(row)}
+                            size="icon"
+                            variant="ghost"
                           >
                             <IconTrash class="size-4" />
                           </Button>
@@ -331,7 +360,7 @@
     text-decoration: none;
   }
   .name a::after {
-    content: '';
+    content: "";
     position: absolute;
     inset: 0;
   }

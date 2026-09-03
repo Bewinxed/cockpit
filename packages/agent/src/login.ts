@@ -1,13 +1,13 @@
-import type { AuthState } from '@whiffle/core';
+import { homedir, platform, userInfo } from "node:os";
 import {
   buildAuthorizationUrl,
   exchangeCodeForTokens,
   generateCodeChallenge,
   generateCodeVerifier,
   saveCredentials,
-} from '@whiffle/auth';
-import { homedir, platform, userInfo } from 'node:os';
-import { probeAuth } from './auth';
+} from "@whiffle/auth";
+import type { AuthState } from "@whiffle/core";
+import { probeAuth } from "./auth";
 
 /**
  * Logging a machine in from the dashboard, over the tunnel.
@@ -56,9 +56,15 @@ export const beginLogin = async (): Promise<LoginChallenge> => {
  * until something tries to use it.
  */
 export const completeLogin = async (code: string): Promise<AuthState> => {
-  if (!pending) throw new Error('Start the login again — this machine has no login waiting.');
+  if (!pending) {
+    throw new Error(
+      "Start the login again — this machine has no login waiting."
+    );
+  }
   const trimmed = code.trim();
-  if (!trimmed) throw new Error('Paste the code from the authorisation page.');
+  if (!trimmed) {
+    throw new Error("Paste the code from the authorisation page.");
+  }
 
   const { verifier, state } = pending;
   try {
@@ -73,7 +79,7 @@ export const completeLogin = async (code: string): Promise<AuthState> => {
 };
 
 /** What macOS calls the item Claude Code keeps its account credentials in. */
-const KEYCHAIN_SERVICE = 'Claude Code-credentials';
+const KEYCHAIN_SERVICE = "Claude Code-credentials";
 
 /**
  * Puts the token where macOS Claude Code actually looks.
@@ -89,7 +95,9 @@ const KEYCHAIN_SERVICE = 'Claude Code-credentials';
  * its login reported as failed.
  */
 async function storeInKeychain(tokens: unknown): Promise<void> {
-  if (platform() !== 'darwin') return;
+  if (platform() !== "darwin") {
+    return;
+  }
   const secret = JSON.stringify({ claudeAiOauth: tokens });
   // `-U` updates the item in place when it is already there, which it will be
   // on any machine that has ever been logged in.
@@ -114,19 +122,27 @@ export const exportCredentials = async (): Promise<Record<string, unknown>> => {
   const file = Bun.file(CREDENTIALS_FILE);
   if (await file.exists()) {
     const parsed = JSON.parse(await file.text()) as Record<string, unknown>;
-    if (parsed.claudeAiOauth) return { claudeAiOauth: parsed.claudeAiOauth };
-  }
-  // On macOS the account credential lives in the keychain instead.
-  if (platform() === 'darwin') {
-    const item = await Bun.$`security find-generic-password -s ${KEYCHAIN_SERVICE} -w`
-      .quiet()
-      .nothrow();
-    if (item.exitCode === 0) {
-      const parsed = JSON.parse(item.stdout.toString().trim()) as Record<string, unknown>;
-      if (parsed.claudeAiOauth) return { claudeAiOauth: parsed.claudeAiOauth };
+    if (parsed.claudeAiOauth) {
+      return { claudeAiOauth: parsed.claudeAiOauth };
     }
   }
-  throw new Error('This machine has no account credential to share.');
+  // On macOS the account credential lives in the keychain instead.
+  if (platform() === "darwin") {
+    const item =
+      await Bun.$`security find-generic-password -s ${KEYCHAIN_SERVICE} -w`
+        .quiet()
+        .nothrow();
+    if (item.exitCode === 0) {
+      const parsed = JSON.parse(item.stdout.toString().trim()) as Record<
+        string,
+        unknown
+      >;
+      if (parsed.claudeAiOauth) {
+        return { claudeAiOauth: parsed.claudeAiOauth };
+      }
+    }
+  }
+  throw new Error("This machine has no account credential to share.");
 };
 
 /**
@@ -137,15 +153,22 @@ export const exportCredentials = async (): Promise<Record<string, unknown>> => {
 export const importCredentials = async (
   credentials: Record<string, unknown>
 ): Promise<AuthState> => {
-  if (!credentials || typeof credentials !== 'object' || !credentials.claudeAiOauth) {
-    throw new Error('That is not a credential this machine can adopt.');
+  if (
+    !credentials ||
+    typeof credentials !== "object" ||
+    !credentials.claudeAiOauth
+  ) {
+    throw new Error("That is not a credential this machine can adopt.");
   }
   // Merged, not replaced: the file also carries MCP OAuth entries.
   const file = Bun.file(CREDENTIALS_FILE);
   const existing = (await file.exists())
     ? ((JSON.parse(await file.text()) as Record<string, unknown>) ?? {})
     : {};
-  await Bun.write(CREDENTIALS_FILE, JSON.stringify({ ...existing, claudeAiOauth: credentials.claudeAiOauth }));
+  await Bun.write(
+    CREDENTIALS_FILE,
+    JSON.stringify({ ...existing, claudeAiOauth: credentials.claudeAiOauth })
+  );
   await storeInKeychain(credentials.claudeAiOauth);
   return await probeAuth();
 };
@@ -165,8 +188,10 @@ export const clearCredentials = async (): Promise<AuthState> => {
     delete parsed.claudeAiOauth;
     await Bun.write(CREDENTIALS_FILE, JSON.stringify(parsed));
   }
-  if (platform() === 'darwin') {
-    await Bun.$`security delete-generic-password -s ${KEYCHAIN_SERVICE}`.quiet().nothrow();
+  if (platform() === "darwin") {
+    await Bun.$`security delete-generic-password -s ${KEYCHAIN_SERVICE}`
+      .quiet()
+      .nothrow();
   }
   return await probeAuth();
 };

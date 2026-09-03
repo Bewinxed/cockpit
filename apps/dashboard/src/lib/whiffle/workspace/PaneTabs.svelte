@@ -10,29 +10,36 @@
    * Ported from the app strip: the active tab is raised off the strip and
    * carries strong ink, so the selection survives greyscale.
    */
-  import { untrack } from 'svelte';
-  import { page } from '$app/state';
-  import { IconClose } from '$lib/icons';
-  import { whiffle } from '../client.svelte';
-  import { sessionName } from '../session-name';
-  import { markHue } from '../mark';
-  import HarnessGlyph from '../HarnessGlyph.svelte';
-  import * as ContextMenu from '$lib/components/ui/context-menu';
-  import { copyToClipboard } from '../copy';
-  import { workingSet } from '../working-set.svelte';
-  import { workspace, urlFor, contextOf, type LeafNode } from './workspace.svelte';
-  import { dragSession, tabDropTarget, dropHint } from './dnd.svelte';
+  import { untrack } from "svelte";
+  import { page } from "$app/state";
+  import * as ContextMenu from "$lib/components/ui/context-menu";
+  import { IconClose } from "$lib/icons";
+  import { whiffle } from "../client.svelte";
+  import { copyToClipboard } from "../copy";
+  import HarnessGlyph from "../HarnessGlyph.svelte";
+  import { markHue } from "../mark";
+  import { sessionName } from "../session-name";
+  import { workingSet } from "../working-set.svelte";
+  import { dragSession, dropHint, tabDropTarget } from "./dnd.svelte";
+  import {
+    contextOf,
+    type LeafNode,
+    urlFor,
+    workspace,
+  } from "./workspace.svelte";
 
   let { leaf }: { leaf: LeafNode } = $props();
 
-  const servedNames = $derived((page.data as { names?: Record<string, string> }).names ?? {});
+  const servedNames = $derived(
+    (page.data as { names?: Record<string, string> }).names ?? {}
+  );
 
   interface Tab {
-    id: string;
-    href: string;
-    label: string;
-    hue: ReturnType<typeof markHue>;
     harness: string;
+    href: string;
+    hue: ReturnType<typeof markHue>;
+    id: string;
+    label: string;
     named: boolean;
   }
 
@@ -46,7 +53,7 @@
       href: urlFor(id),
       label,
       hue: markHue(view?.cwd || row?.cwd || ctx?.cwd || id),
-      harness: ctx?.harness || row?.harness || view?.harness || 'claude',
+      harness: ctx?.harness || row?.harness || view?.harness || "claude",
       named,
     };
   }
@@ -57,9 +64,13 @@
   // board no longer lists is called by its name and not eight characters of
   // its id until its transcript arrives.
   $effect(() => {
-    const named = tabs.filter((tab) => tab.named).map((tab) => [tab.id, tab.label] as const);
+    const named = tabs
+      .filter((tab) => tab.named)
+      .map((tab) => [tab.id, tab.label] as const);
     untrack(() => {
-      for (const [id, label] of named) workingSet.setTitle(id, label);
+      for (const [id, label] of named) {
+        workingSet.setTitle(id, label);
+      }
     });
   });
 
@@ -69,16 +80,22 @@
    * copies something that works; modified clicks fall through to the browser.
    */
   function show(event: MouseEvent, id: string) {
-    if (event.defaultPrevented || event.button !== 0) return;
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (event.defaultPrevented || event.button !== 0) {
+      return;
+    }
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
     event.preventDefault();
     workspace.activate(id, leaf.id);
   }
 
-  const otherLeaves = $derived(workspace.leaves.filter((other) => other.id !== leaf.id));
+  const otherLeaves = $derived(
+    workspace.leaves.filter((other) => other.id !== leaf.id)
+  );
 </script>
 
-<div class="tabstrip" role="tablist" aria-label="Open sessions in this group">
+<div aria-label="Open sessions in this group" class="tabstrip" role="tablist">
   {#each tabs as tab, i (tab.id)}
     {@const active = leaf.active === tab.id}
     <ContextMenu.Root>
@@ -88,31 +105,31 @@
              the one loud colour belongs to a session asking for something. -->
         <div
           class="tab"
-          class:on={active}
-          class:drop-before={dropHint.tabIndexIn(leaf.id) === i}
           class:drop-after={dropHint.tabIndexIn(leaf.id) === i + 1 && i === tabs.length - 1}
+          class:drop-before={dropHint.tabIndexIn(leaf.id) === i}
+          class:on={active}
           use:dragSession={{ sessionId: tab.id, from: leaf.id }}
           use:tabDropTarget={{ leafId: leaf.id, index: i, sessionId: tab.id }}
         >
           <a
-            draggable="false"
-            class="tl"
-            href={tab.href}
-            role="tab"
             aria-selected={active}
-            title={tab.label}
+            class="tl"
+            draggable="false"
+            href={tab.href}
             onclick={(e) => show(e, tab.id)}
+            role="tab"
+            title={tab.label}
           >
-            <span class="tm m{tab.hue}" aria-hidden="true">
+            <span aria-hidden="true" class="tm m{tab.hue}">
               <HarnessGlyph harness={tab.harness} />
             </span>
             <span class="nm">{tab.label}</span>
           </a>
           <button
-            type="button"
-            class="tclose"
             aria-label="Close {tab.label}"
+            class="tclose"
             onclick={() => workspace.close(tab.id)}
+            type="button"
           >
             <IconClose />
           </button>
@@ -122,10 +139,14 @@
         <!-- Every gesture has a command that does the same thing. Splitting
              and moving are reachable from here before drag-and-drop exists,
              and stay reachable for anyone not using a pointer. -->
-        <ContextMenu.Item onSelect={() => workspace.split(leaf.id, 'right', tab.id)}>
+        <ContextMenu.Item
+          onSelect={() => workspace.split(leaf.id, 'right', tab.id)}
+        >
           Split right
         </ContextMenu.Item>
-        <ContextMenu.Item onSelect={() => workspace.split(leaf.id, 'bottom', tab.id)}>
+        <ContextMenu.Item
+          onSelect={() => workspace.split(leaf.id, 'bottom', tab.id)}
+        >
           Split down
         </ContextMenu.Item>
         {#if otherLeaves.length > 0}
@@ -137,12 +158,14 @@
           {/each}
         {/if}
         <ContextMenu.Separator />
-        <ContextMenu.Item onSelect={() => workspace.close(tab.id)}>Close</ContextMenu.Item>
+        <ContextMenu.Item onSelect={() => workspace.close(tab.id)}
+          >Close</ContextMenu.Item
+        >
         <ContextMenu.Item
+          disabled={leaf.tabs.length < 2}
           onSelect={() => {
             for (const id of [...leaf.tabs]) if (id !== tab.id) workspace.close(id);
           }}
-          disabled={leaf.tabs.length < 2}
         >
           Close others
         </ContextMenu.Item>
@@ -210,7 +233,7 @@
      answer is unambiguous about WHICH side without moving anything. */
   .tab.drop-before::before,
   .tab.drop-after::after {
-    content: '';
+    content: "";
     position: absolute;
     top: 3px;
     bottom: 3px;
@@ -267,13 +290,27 @@
     display: block;
     color: var(--mark-glyph);
   }
-  .tm.m2 { background-color: var(--mark-2); }
-  .tm.m3 { background-color: var(--mark-3); }
-  .tm.m4 { background-color: var(--mark-4); }
-  .tm.m5 { background-color: var(--mark-5); }
-  .tm.m6 { background-color: var(--mark-6); }
-  .tm.m7 { background-color: var(--mark-7); }
-  .tm.m8 { background-color: var(--mark-8); }
+  .tm.m2 {
+    background-color: var(--mark-2);
+  }
+  .tm.m3 {
+    background-color: var(--mark-3);
+  }
+  .tm.m4 {
+    background-color: var(--mark-4);
+  }
+  .tm.m5 {
+    background-color: var(--mark-5);
+  }
+  .tm.m6 {
+    background-color: var(--mark-6);
+  }
+  .tm.m7 {
+    background-color: var(--mark-7);
+  }
+  .tm.m8 {
+    background-color: var(--mark-8);
+  }
 
   .nm {
     min-width: 0;

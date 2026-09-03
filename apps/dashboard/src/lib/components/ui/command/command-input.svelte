@@ -1,35 +1,39 @@
 <script lang="ts">
-	import { Command as CommandPrimitive } from "bits-ui";
-	import * as InputGroup from "$lib/components/ui/input-group/index.js";
-	import { HugeiconsIcon } from "@hugeicons/svelte"
-	import { SearchIcon } from '@hugeicons/core-free-icons';
-	import { cn } from "$lib/utils.js";
+  import { SearchIcon } from "@hugeicons/core-free-icons";
+  import { HugeiconsIcon } from "@hugeicons/svelte";
+  import { Command as CommandPrimitive } from "bits-ui";
+  import * as InputGroup from "$lib/components/ui/input-group/index.js";
+  import { cn } from "$lib/utils.js";
 
-	let {
-		ref = $bindable(null),
-		class: className,
-		value = $bindable(""),
-		...restProps
-	}: CommandPrimitive.InputProps = $props();
+  let {
+    ref = $bindable(null),
+    class: className,
+    value = $bindable(""),
+    ...restProps
+  }: CommandPrimitive.InputProps = $props();
 </script>
 
-<div data-slot="command-input-wrapper" class="p-1 pb-0">
-	<InputGroup.Root class="h-[var(--c-nav-h)] bg-input/30">
-		<CommandPrimitive.Input
-			{value}
-			data-slot="command-input"
-			class={cn(
+<div class="p-1 pb-0" data-slot="command-input-wrapper">
+  <InputGroup.Root class="h-[var(--c-nav-h)] bg-input/30">
+    <CommandPrimitive.Input
+      class={cn(
 				"w-full text-sm outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
 				className
 			)}
-			{...restProps}
-		>
-			{#snippet child({ props })}
-				<InputGroup.Input {...props} bind:value bind:ref />
-			{/snippet}
-		</CommandPrimitive.Input>
-		<InputGroup.Addon>
-			<HugeiconsIcon icon={SearchIcon} strokeWidth={2} class="size-4 shrink-0 opacity-50" />
-		</InputGroup.Addon>
-	</InputGroup.Root>
+      data-slot="command-input"
+      {value}
+      {...restProps}
+    >
+      {#snippet child({ props })}
+        <InputGroup.Input {...props} bind:ref bind:value />
+      {/snippet}
+    </CommandPrimitive.Input>
+    <InputGroup.Addon>
+      <HugeiconsIcon
+        class="size-4 shrink-0 opacity-50"
+        icon={SearchIcon}
+        strokeWidth={2}
+      />
+    </InputGroup.Addon>
+  </InputGroup.Root>
 </div>

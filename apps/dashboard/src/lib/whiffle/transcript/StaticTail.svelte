@@ -13,25 +13,26 @@
    * the server's tail is cut exactly where `streamHistory`'s first chunk is cut,
    * the rows on screen are the rows that arrive, so the swap moves nothing.
    */
-  import type { SessionMessage } from '@whiffle/core';
-  import { mapTranscript } from '../frames';
-  import { foldMessages } from './rows';
-  import { describeTool } from '$lib/components/features/tool-cards/descriptors';
-  import MessageRow from './MessageRow.svelte';
-  import ToolGroup from './ToolGroup.svelte';
-  import QuestionCard from './QuestionCard.svelte';
-  import Subagent from './Subagent.svelte';
-  import Thinking from './Thinking.svelte';
-  import Queued from './Queued.svelte';
-  import MessageBody from './MessageBody.svelte';
-  import SystemLine from './SystemLine.svelte';
-  import Who from './Who.svelte';
+  import type { SessionMessage } from "@whiffle/core";
+  import { describeTool } from "$lib/components/features/tool-cards/descriptors";
+  import { mapTranscript } from "../frames";
+  import MessageBody from "./MessageBody.svelte";
+  import MessageRow from "./MessageRow.svelte";
+  import QuestionCard from "./QuestionCard.svelte";
+  import Queued from "./Queued.svelte";
+  import { foldMessages } from "./rows";
+  import Subagent from "./Subagent.svelte";
+  import SystemLine from "./SystemLine.svelte";
+  import Thinking from "./Thinking.svelte";
+  import ToolGroup from "./ToolGroup.svelte";
+  import Who from "./Who.svelte";
 
   let {
     viewId,
     messages,
     agentName,
-  }: { viewId: string; messages: SessionMessage[]; agentName: string } = $props();
+  }: { viewId: string; messages: SessionMessage[]; agentName: string } =
+    $props();
 
   const folded = $derived(mapTranscript(viewId, messages));
   const rows = $derived(foldMessages(folded.messages, folded.subagents));
@@ -52,49 +53,49 @@
      announce into it. Two logs on one screen would double every announcement
      for the instant both exist. -->
 <div class="tail">
-<div class="tr" aria-label="Session transcript">
-  {#if rows.length === 0}
-    <p class="empty">Loading transcript…</p>
-  {/if}
-  <!-- The row switch is Transcript.svelte's, component for component, so the
+  <div aria-label="Session transcript" class="tr">
+    {#if rows.length === 0}
+      <p class="empty">Loading transcript…</p>
+    {/if}
+    <!-- The row switch is Transcript.svelte's, component for component, so the
        static tail and the virtualized transcript are the same picture. -->
-  {#each painted as row (row.key)}
-    <div class="renter">
-      {#if row.kind === 'single'}
-        <MessageRow message={row.message} {agentName} />
-      {:else if row.kind === 'tools'}
-        <ToolGroup messages={row.messages} />
-      {:else if row.kind === 'question'}
-        <QuestionCard message={row.message} />
-      {:else if row.kind === 'harness'}
-        <SystemLine harness={row.note} />
-      {:else if row.kind === 'subagent'}
-        <Subagent branch={row.branch} spawn={row.spawn} />
-      {:else if row.kind === 'thinking'}
-        <Thinking text={row.text} live={row.live} />
-      {:else if row.kind === 'stream'}
-        <section class="turn">
-          <Who name={agentName} />
-          <MessageBody source={row.text} streaming />
-        </section>
-      {:else if row.kind === 'queued'}
-        <Queued queued={row.queued} />
-      {:else if row.kind === 'livetool'}
-        {@const d = describeTool(row.glance.name, undefined, undefined, 'pending')}
-        {@const LiveIcon = d.icon}
-        <div class="livetool">
-          <span class="ic {d.color}"><LiveIcon /></span>
-          <span class="tk">{row.glance.name}</span>
-          <span class="arg">{row.glance.glance}</span>
-        </div>
-      {/if}
-    </div>
-  {/each}
-</div>
-<!-- The seal. It exists only once every row above it has parsed, which is the
+    {#each painted as row (row.key)}
+      <div class="renter">
+        {#if row.kind === 'single'}
+          <MessageRow {agentName} message={row.message} />
+        {:else if row.kind === 'tools'}
+          <ToolGroup messages={row.messages} />
+        {:else if row.kind === 'question'}
+          <QuestionCard message={row.message} />
+        {:else if row.kind === 'harness'}
+          <SystemLine harness={row.note} />
+        {:else if row.kind === 'subagent'}
+          <Subagent branch={row.branch} spawn={row.spawn} />
+        {:else if row.kind === 'thinking'}
+          <Thinking live={row.live} text={row.text} />
+        {:else if row.kind === 'stream'}
+          <section class="turn">
+            <Who name={agentName} />
+            <MessageBody source={row.text} streaming />
+          </section>
+        {:else if row.kind === 'queued'}
+          <Queued queued={row.queued} />
+        {:else if row.kind === 'livetool'}
+          {@const d = describeTool(row.glance.name, undefined, undefined, 'pending')}
+          {@const LiveIcon = d.icon}
+          <div class="livetool">
+            <span class="ic {d.color}"><LiveIcon /></span>
+            <span class="tk">{row.glance.name}</span>
+            <span class="arg">{row.glance.glance}</span>
+          </div>
+        {/if}
+      </div>
+    {/each}
+  </div>
+  <!-- The seal. It exists only once every row above it has parsed, which is the
      one thing the stylesheet can ask about and the parser can answer honestly.
      See `.tail > .tr` below. -->
-<i class="sealed" aria-hidden="true"></i>
+  <i aria-hidden="true" class="sealed"></i>
 </div>
 
 <style>

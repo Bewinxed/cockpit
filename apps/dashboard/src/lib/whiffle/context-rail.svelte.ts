@@ -9,9 +9,9 @@
  * is wide enough for three columns.  The user can still close it manually;
  * the next resize crossing re-syncs.
  */
-import { MediaQuery } from 'svelte/reactivity';
+import { MediaQuery } from "svelte/reactivity";
 
-const roomForRail = new MediaQuery('min-width: 1920px');
+const roomForRail = new MediaQuery("min-width: 1920px");
 
 /** Shared sidebar state — all panes bind to this. */
 let open = $state(roomForRail.current);

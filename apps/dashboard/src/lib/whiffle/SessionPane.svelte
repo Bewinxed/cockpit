@@ -1,4 +1,11 @@
 <script lang="ts">
+  import type {
+    EffortLevel,
+    HarnessKind,
+    PermissionMode,
+    PermissionResult,
+    SessionMessage,
+  } from "@whiffle/core";
   /**
    * One conversation, whole: the identity header, the transcript (Chat) or its
    * graph (Flow), and the floating composer with any parked permission or
@@ -6,53 +13,48 @@
    * scroll offset and half-typed message survive a switch — nothing here
    * unmounts on navigation.
    */
-  import { untrack } from 'svelte';
-  import type { TransitionConfig } from 'svelte/transition';
-  import type {
-    EffortLevel,
-    HarnessKind,
-    PermissionMode,
-    PermissionResult,
-    SessionMessage,
-  } from '@whiffle/core';
+  import { untrack } from "svelte";
+  import type { TransitionConfig } from "svelte/transition";
+  import { page } from "$app/state";
+  import FlowView from "$lib/components/features/flow/FlowView.svelte";
+  import AutopilotToggle from "./AutopilotToggle.svelte";
   import {
     blankSession,
-    clearRestore,
-    whiffle,
-    commandRecord,
-    latestCommandFor,
-    pendingRestore,
-    sendFailureNotice,
-    streamCapable,
-    submitCommand,
-    openSession,
     clearReadFault,
-    streamHistory,
-    type HistorySource,
+    clearRestore,
+    commandRecord,
     ensureAlive,
+    type HistorySource,
     interrupt,
-    loadMcpServers,
+    latestCommandFor,
     loadCommands,
-    relaunchSession,
+    loadMcpServers,
+    openSession,
     type PendingPermission,
+    pendingRestore,
+    relaunchSession,
     type SendExtras,
     type SessionState,
-  } from './client.svelte';
-  import { PERMISSION_MODES } from './permission-modes';
-  import { effortStops, hasEffortScale } from './effort-levels';
-  import { covers, ensureModels, models } from './models.svelte';
-  import { mapTranscript, routedToParent } from './frames';
-  import { page } from '$app/state';
-  import { delegateHandle } from './links';
-  import { sessionName } from './session-name';
-  import SessionHeader, { type SettingChange } from './transcript/SessionHeader.svelte';
-  import Transcript from './transcript/Transcript.svelte';
-  import TranscriptSkeleton from './transcript/TranscriptSkeleton.svelte';
+    sendFailureNotice,
+    streamCapable,
+    streamHistory,
+    submitCommand,
+    whiffle,
+  } from "./client.svelte";
+  import { effortStops, hasEffortScale } from "./effort-levels";
+  import { mapTranscript, routedToParent } from "./frames";
+  import { delegateHandle } from "./links";
+  import { covers, ensureModels, models } from "./models.svelte";
+  import { PERMISSION_MODES } from "./permission-modes";
+  import { sessionName } from "./session-name";
   // StaticTail removed — virtua's ssrCount renders the tail directly.
-  import Composer, { type Mention } from './transcript/Composer.svelte';
-  import AutopilotToggle from './AutopilotToggle.svelte';
-  import Prompt from './transcript/Prompt.svelte';
-  import FlowView from '$lib/components/features/flow/FlowView.svelte';
+  import Composer, { type Mention } from "./transcript/Composer.svelte";
+  import Prompt from "./transcript/Prompt.svelte";
+  import SessionHeader, {
+    type SettingChange,
+  } from "./transcript/SessionHeader.svelte";
+  import Transcript from "./transcript/Transcript.svelte";
+  import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
 
   let {
     viewId,
@@ -60,12 +62,12 @@
     browsingCwd,
     browsingHarness,
     visible,
-    focused = undefined,
+    focused,
     serverTail = null,
     serverHistory = null,
     hideHeader = false,
-    view = 'chat' as 'chat' | 'flow',
-    onview = (() => {}) as (v: 'chat' | 'flow') => void,
+    view = "chat" as "chat" | "flow",
+    onview = (() => {}) as (v: "chat" | "flow") => void,
   }: {
     viewId: string;
     browsing: string | null;
@@ -94,23 +96,26 @@
     /** When true, the SessionHeader is not rendered (a shared header is drawn by the parent). */
     hideHeader?: boolean;
     /** Which view to show: chat transcript or flow graph. Managed by parent. */
-    view?: 'chat' | 'flow';
+    view?: "chat" | "flow";
     /** Called when the user toggles between chat and flow. */
-    onview?: (v: 'chat' | 'flow') => void;
+    onview?: (v: "chat" | "flow") => void;
   } = $props();
 
   /** The newest turns the server read back, and the identity that names them. */
   interface ServerTail {
-    viewId: string;
-    machineId: string;
-    sessionId: string;
     cwd: string;
     harness: string;
+    machineId: string;
     messages: SessionMessage[];
+    sessionId: string;
+    viewId: string;
   }
 
   /** Why this pane has nothing to show, when it has nothing to show. */
-  let failure = $state<{ reason: 'offline' | 'failed'; message: string } | null>(null);
+  let failure = $state<{
+    reason: "offline" | "failed";
+    message: string;
+  } | null>(null);
   /** The hub answered 404: no row, no stored file, no machine that knows the id. */
   let missing = $state(false);
   /** The read finished, cleanly, with nothing in it — a transcript with no turns yet. */
@@ -161,9 +166,9 @@
         ? { ...named, live: named.live || running }
         : {
             viewId: id,
-            machineId: hint?.machineId ?? '',
+            machineId: hint?.machineId ?? "",
             sessionId: id,
-            cwd: hint?.cwd ?? '',
+            cwd: hint?.cwd ?? "",
             harness: hint?.harness as never,
             live: running,
           }
@@ -171,18 +176,25 @@
     if (!outcome.ok) {
       // 404 is an answer, not a fault: nothing the hub or any machine holds
       // goes by this id. Retrying would ask the same question.
-      if (outcome.status === 404) missing = true;
-      else failure = { reason: outcome.reason, message: outcome.message };
+      if (outcome.status === 404) {
+        missing = true;
+      } else {
+        failure = { reason: outcome.reason, message: outcome.message };
+      }
       return;
     }
     // Skipped means another read already holds this view; its outcome is the
     // one that counts, and this one has nothing to say about emptiness.
-    if (outcome.skipped) return;
+    if (outcome.skipped) {
+      return;
+    }
     // A clean read of nothing. For a running session that is a conversation
     // that has not started, and the stream will say so when it does; for a
     // stored one it is the whole answer, and the skeleton would otherwise
     // wait for turns that are never coming.
-    if (!running && (whiffle.session(id)?.messages.length ?? 0) === 0) empty = true;
+    if (!running && (whiffle.session(id)?.messages.length ?? 0) === 0) {
+      empty = true;
+    }
   }
 
   // Bring the conversation into being: a stored session reads its transcript
@@ -201,7 +213,9 @@
     const hint = browsing ? { machineId: browsing, cwd, harness } : null;
     const running = isLive;
     void attempt;
-    if (!id) return;
+    if (!id) {
+      return;
+    }
     // Retry the read once the hub can actually answer. On a reload the effect
     // first runs while the socket is still reconnecting — a live session's
     // machineId isn't known yet and a stored read can't reach the socket.
@@ -218,7 +232,9 @@
       // — on every pass, and ahead of the guard below: the guard skips a pane
       // whose read landed before the hub's rows arrived, and that pane would
       // otherwise never subscribe. Opening is idempotent; reading is not.
-      if (running || !hint) openSession(id);
+      if (running || !hint) {
+        openSession(id);
+      }
     });
     // A pane the reader RETURNS to needs no re-read: the store kept ingesting
     // while the tab was hidden (only the transcript's row-building froze), so
@@ -228,7 +244,9 @@
     // the stream heals any gap on its own; on a legacy hub the re-read stays,
     // because there a reconnect really can have dropped frames on the floor.
     const held = whiffle.session(id);
-    if (held?.initialized && held.messages.length > 0 && streamCapable()) return;
+    if (held?.initialized && held.messages.length > 0 && streamCapable()) {
+      return;
+    }
     // The server's answer for whichever conversation the URL names; a pane the
     // reader left open in another tab was never part of this navigation and
     // is read by its id like any other.
@@ -260,7 +278,9 @@
     // Nothing read back means nothing to stand in for: the store's own empty
     // and loading states are better than a blank pane pretending to be one.
     // tail may be a deferred placeholder during SSR streaming (no .messages yet).
-    if (!tail || tail.viewId !== viewId || tail.messages.length === 0) return null;
+    if (!tail || tail.viewId !== viewId || tail.messages.length === 0) {
+      return null;
+    }
     const blank = blankSession(viewId);
     const mapped = mapTranscript(viewId, tail.messages);
     blank.machineId = tail.machineId;
@@ -283,12 +303,16 @@
   let live = $state(false);
   $effect(() => {
     const held = whiffle.session(viewId);
-    if (!held) return;
-    if (held.messages.length > 0 || held.busy || held.pending.length > 0) live = true;
+    if (!held) {
+      return;
+    }
+    if (held.messages.length > 0 || held.busy || held.pending.length > 0) {
+      live = true;
+    }
   });
 
   const session = $derived(live || !seeded ? whiffle.session(viewId) : seeded);
-  const machineId = $derived(whiffle.session(viewId)?.machineId ?? '');
+  const machineId = $derived(whiffle.session(viewId)?.machineId ?? "");
 
   /**
    * Whether the virtualized transcript may be shown.
@@ -367,8 +391,10 @@
       !!session &&
       whiffle.runningInstances.some((row) => row.id === viewId) &&
       !!machineId &&
-      whiffle.status === 'connected';
-    if (!live) return;
+      whiffle.status === "connected";
+    if (!live) {
+      return;
+    }
     const id = viewId;
     const mid = machineId;
     untrack(() => {
@@ -378,22 +404,27 @@
   });
 
   const HARNESS_LABEL: Record<string, string> = {
-    claude: 'Claude Code',
-    opencode: 'opencode',
-    code: 'opencode',
-    pi: 'pi',
+    claude: "Claude Code",
+    opencode: "opencode",
+    code: "opencode",
+    pi: "pi",
   };
-  const agentName = $derived(HARNESS_LABEL[session?.harness ?? ''] ?? (session?.harness ?? 'Agent'));
+  const agentName = $derived(
+    HARNESS_LABEL[session?.harness ?? ""] ?? session?.harness ?? "Agent"
+  );
 
   const machineName = $derived(
-    whiffle.machines.find((m) => m.machineId === machineId)?.hostname ?? machineId
+    whiffle.machines.find((m) => m.machineId === machineId)?.hostname ??
+      machineId
   );
 
   /**
    * What this conversation is called. The same helper the tab strip uses, so
    * the tab and the bar under it are never naming two different sessions.
    */
-  const servedNames = $derived((page.data as { names?: Record<string, string> }).names ?? {});
+  const servedNames = $derived(
+    (page.data as { names?: Record<string, string> }).names ?? {}
+  );
   const title = $derived(sessionName(viewId, servedNames, browsingCwd).label);
 
   const stats = $derived(whiffle.statsOf(viewId));
@@ -403,9 +434,13 @@
   // The session settings — model, permission mode, effort — are switchable from
   // the header now, so the same reference data the spawn form uses is derived
   // here and the store setters are the exact desktop path a change takes.
-  const machineRow = $derived(whiffle.machines.find((m) => m.machineId === machineId) ?? null);
+  const machineRow = $derived(
+    whiffle.machines.find((m) => m.machineId === machineId) ?? null
+  );
   const harnessReport = $derived(
-    machineRow?.harnesses?.find((report) => report.harness === session?.harness) ?? null
+    machineRow?.harnesses?.find(
+      (report) => report.harness === session?.harness
+    ) ?? null
   );
   /** The permission modes this session's harness can honour; empty hides the picker. */
   const offeredModes = $derived(
@@ -417,7 +452,9 @@
   );
   /** The offered row for the model in force, which is what carries its scale. */
   const chosenModel = $derived(
-    session?.model ? (models.offered.find((row) => covers(row, session.model!)) ?? null) : null
+    session?.model
+      ? (models.offered.find((row) => covers(row, session.model!)) ?? null)
+      : null
   );
   /** Whether the harness runs at an effort at all — the row is named either way. */
   const harnessEffort = $derived(harnessReport?.capabilities.effort !== false);
@@ -461,24 +498,32 @@
    * legacy one (where the same calls run and their promises are the stages).
    */
   function onmodel(model: string): SettingChange {
-    if (!machineId) return null;
-    return submitCommand(viewId, machineId, 'set-model', { model });
+    if (!machineId) {
+      return null;
+    }
+    return submitCommand(viewId, machineId, "set-model", { model });
   }
 
   function onpermission(mode: PermissionMode): SettingChange {
-    if (!machineId) return null;
+    if (!machineId) {
+      return null;
+    }
     // bypassPermissions is a launch decision the SDK refuses to switch into, so
     // that one mode relaunches the session in place; the rest switch live. A
     // relaunch is a different operation on the wire, not a `set-permission-mode`
     // command, so it stays its own call and hands the header its promise —
     // sending it as that command would put the call the SDK refuses on the wire.
-    if (mode === 'bypassPermissions') return relaunchSession(viewId, machineId, mode);
-    return submitCommand(viewId, machineId, 'set-permission-mode', { mode });
+    if (mode === "bypassPermissions") {
+      return relaunchSession(viewId, machineId, mode);
+    }
+    return submitCommand(viewId, machineId, "set-permission-mode", { mode });
   }
 
   function oneffort(level: EffortLevel): SettingChange {
-    if (!machineId) return null;
-    return submitCommand(viewId, machineId, 'set-effort', { effort: level });
+    if (!machineId) {
+      return null;
+    }
+    return submitCommand(viewId, machineId, "set-effort", { effort: level });
   }
 
   /**
@@ -486,9 +531,14 @@
    * asked, which is the only thing that reads it: several cards can be parked
    * at once and they all answer in the same kind.
    */
-  function onanswer(request: PendingPermission, result: PermissionResult): string | null {
-    if (!machineId) return null;
-    return submitCommand(request.instanceId, machineId, 'permission.answer', {
+  function onanswer(
+    request: PendingPermission,
+    result: PermissionResult
+  ): string | null {
+    if (!machineId) {
+      return null;
+    }
+    return submitCommand(request.instanceId, machineId, "permission.answer", {
       requestId: request.requestId,
       result,
     });
@@ -499,7 +549,7 @@
     (session?.pending ?? []).filter((p) => !routedToParent(p))
   );
 
-  let draft = $state('');
+  let draft = $state("");
   /** The composer instance, for the one thing a binding cannot hand back. */
   let composer = $state<ReturnType<typeof Composer> | null>(null);
 
@@ -515,7 +565,9 @@
    */
   $effect(() => {
     const slot = pendingRestore(viewId);
-    if (!slot) return;
+    if (!slot) {
+      return;
+    }
     const id = viewId;
     untrack(() => {
       draft = slot.text;
@@ -534,7 +586,9 @@
    */
   let composerHeight = $state(0);
 
-  const flowSubagents = $derived(new Map(Object.entries(session?.subagents ?? {})));
+  const flowSubagents = $derived(
+    new Map(Object.entries(session?.subagents ?? {}))
+  );
 
   /**
    * The gap in front of the send command: a dead session is revived before the
@@ -546,7 +600,7 @@
 
   /** Whether this session's last message is out of this tab but not yet taken. */
   const sending = $derived(
-    reviving || latestCommandFor(viewId, 'send')?.stage === 'submitted'
+    reviving || latestCommandFor(viewId, "send")?.stage === "submitted"
   );
 
   function onsubmit(text: string, extras: SendExtras = {}): void {
@@ -555,10 +609,14 @@
       // renders no composer at all. A render race can still land one keystroke
       // here, so it stays — but loud in development, because the whole point of
       // this change is that a typed sentence never disappears without a word.
-      if (import.meta.env.DEV) console.warn('composer rendered without a machine', viewId);
+      if (import.meta.env.DEV) {
+        console.warn("composer rendered without a machine", viewId);
+      }
       return;
     }
-    if (sending) return;
+    if (sending) {
+      return;
+    }
     const mid = machineId;
     reviving = true;
     // A message to a dead session revives it first. A revive that FAILS no
@@ -567,7 +625,7 @@
     // failed stage. The ledger is the report — which is why there is nothing
     // to catch here, and why the `.catch(() => {})` that used to sit on this
     // chain (and ate every send made from a plain-http origin) is gone.
-    const submit = () => submitCommand(viewId, mid, 'send', { text, extras });
+    const submit = () => submitCommand(viewId, mid, "send", { text, extras });
     void ensureAlive(viewId, mid)
       .then(submit, submit)
       .finally(() => (reviving = false));
@@ -583,8 +641,12 @@
    * than guessed at. On an idle session it is exactly a send.
    */
   function oninterruptsend(text: string, extras: SendExtras = {}): void {
-    if (!machineId || sending) return;
-    if (session?.busy) submitCommand(viewId, machineId, 'interrupt', {});
+    if (!machineId || sending) {
+      return;
+    }
+    if (session?.busy) {
+      submitCommand(viewId, machineId, "interrupt", {});
+    }
     onsubmit(text, extras);
   }
 
@@ -592,15 +654,17 @@
     // Through the tracker, not the bare legacy call: the record it leaves is
     // how the transcript recognises the coming `result.error` as the receipt
     // of THIS stop and renders "Interrupted" instead of a failure card.
-    if (machineId) submitCommand(viewId, machineId, 'interrupt', {});
+    if (machineId) {
+      submitCommand(viewId, machineId, "interrupt", {});
+    }
   }
 
   /* ---- the parked prompt's exit --------------------------------------- */
 
   const reduceMotionQuery =
-    typeof window !== 'undefined'
-      ? window.matchMedia('(prefers-reduced-motion: reduce)')
-      : null;
+    typeof window === "undefined"
+      ? null
+      : window.matchMedia("(prefers-reduced-motion: reduce)");
 
   /**
    * `cubic-bezier(x1, y1, x2, y2)` as a JS easing, so a Svelte transition rides
@@ -608,7 +672,12 @@
    * `svelte/easing`. Svelte samples the `css` function through this and bakes
    * linear keyframes, so the curve has to live here to survive the trip.
    */
-  function cubicBezier(x1: number, y1: number, x2: number, y2: number): (t: number) => number {
+  function cubicBezier(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number
+  ): (t: number) => number {
     const at = (a: number, b: number, t: number): number =>
       3 * (1 - t) ** 2 * t * a + 3 * (1 - t) * t ** 2 * b + t ** 3;
     return (t) => {
@@ -617,8 +686,13 @@
       let g = t;
       for (let i = 0; i < 8; i += 1) {
         const err = at(x1, x2, g) - t;
-        const slope = 3 * (1 - g) ** 2 * x1 + 6 * (1 - g) * g * (x2 - x1) + 3 * g ** 2 * (1 - x2);
-        if (Math.abs(err) < 1e-5 || slope === 0) break;
+        const slope =
+          3 * (1 - g) ** 2 * x1 +
+          6 * (1 - g) * g * (x2 - x1) +
+          3 * g ** 2 * (1 - x2);
+        if (Math.abs(err) < 1e-5 || slope === 0) {
+          break;
+        }
         g -= err / slope;
       }
       return at(y1, y2, g);
@@ -640,7 +714,9 @@
    * simply removed.
    */
   function promptExit(_node: Element): TransitionConfig {
-    if (reduceMotionQuery?.matches) return { duration: 0 };
+    if (reduceMotionQuery?.matches) {
+      return { duration: 0 };
+    }
     return {
       duration: 120,
       easing: easeOut,
@@ -652,33 +728,33 @@
 <div class="pane">
   {#if session}
     {#if !hideHeader}
-    <SessionHeader
-      {title}
-      seed={session.cwd || browsingCwd || viewId}
-      harness={session.harness}
-      {machineName}
-      cwd={session.cwd || browsingCwd}
-      {activity}
-      model={session.model}
-      permissionMode={session.permissionMode}
-      effort={session.effort}
-      mcpCount={session.mcp?.length ?? null}
-      turns={stats.turns}
-      totalTokens={stats.totalTokens}
-      maxTokens={stats.maxTokens}
-      cost={stats.cost}
-      {view}
-      {onview}
-      {offeredModes}
-      effortStops={effortStopsForModel}
-      {showEffort}
-      {harnessEffort}
-      {onmodel}
-      {onpermission}
-      {oneffort}
-      trackedCommand={commandRecord}
-      streaming={streamCapable()}
-    />
+      <SessionHeader
+        {activity}
+        cost={stats.cost}
+        cwd={session.cwd || browsingCwd}
+        effort={session.effort}
+        effortStops={effortStopsForModel}
+        harness={session.harness}
+        {harnessEffort}
+        {machineName}
+        maxTokens={stats.maxTokens}
+        mcpCount={session.mcp?.length ?? null}
+        model={session.model}
+        {offeredModes}
+        {oneffort}
+        {onmodel}
+        {onpermission}
+        {onview}
+        permissionMode={session.permissionMode}
+        seed={session.cwd || browsingCwd || viewId}
+        {showEffort}
+        streaming={streamCapable()}
+        {title}
+        totalTokens={stats.totalTokens}
+        trackedCommand={commandRecord}
+        turns={stats.turns}
+        {view}
+      />
     {/if}
 
     <div
@@ -697,15 +773,15 @@
                 : "This transcript couldn't be read"}
             </h2>
             <p>{fault.message}</p>
-            <button type="button" onclick={retry}>Try again</button>
+            <button onclick={retry} type="button">Try again</button>
           </div>
         {:else if unaddressable}
           <div class="stateful">
             <h2>This session isn't reachable from here</h2>
             <p>
-              The hub has no record of <code>{viewId}</code>, and no machine it can reach has a
-              transcript filed under it. It may live on a machine that is offline, or it may have
-              been deleted.
+              The hub has no record of <code>{viewId}</code>, and no machine it
+              can reach has a transcript filed under it. It may live on a
+              machine that is offline, or it may have been deleted.
             </p>
             <a href="/session">Back to the fleet</a>
           </div>
@@ -720,18 +796,18 @@
           <FlowView
             instanceId={viewId}
             messages={session.messages}
-            subagents={flowSubagents}
             streamingToolId={session.currentTool?.toolId}
+            subagents={flowSubagents}
             totalCostUsd={session.totalCost}
           />
         {:else}
           <Transcript
-            {session}
             {agentName}
-            {visible}
+            cwd={session.cwd || browsingCwd}
             {focused}
             {machineName}
-            cwd={session.cwd || browsingCwd}
+            {session}
+            {visible}
           />
         {/if}
       </div>
@@ -743,31 +819,34 @@
         </p>
       {:else if !fault}
         <Composer
-          bind:this={composer}
-          bind:value={draft}
-          bind:height={composerHeight}
           busy={session.busy}
-          {sending}
           {commands}
           {mentions}
-          {onsubmit}
           {oninterruptsend}
           {onstop}
+          {onsubmit}
+          {sending}
+          bind:this={composer}
+          bind:height={composerHeight}
+          bind:value={draft}
         >
           {#snippet leading()}
-            <AutopilotToggle instanceId={viewId} instance={instanceRow} />
+            <AutopilotToggle instance={instanceRow} instanceId={viewId} />
           {/snippet}
           {#snippet prompts()}
             {#each parked as request (request.requestId)}
               <div class="parked" out:promptExit>
-                <Prompt {request} onanswer={(result) => onanswer(request, result)} />
+                <Prompt
+                  onanswer={(result) => onanswer(request, result)}
+                  {request}
+                />
               </div>
             {/each}
           {/snippet}
         </Composer>
       {/if}
 
-      <p class="announce" aria-live="polite" role="status">{sendFailure}</p>
+      <p aria-live="polite" class="announce" role="status">{sendFailure}</p>
     </div>
   {:else}
     <!-- No session in the store yet: the same placeholder the transcript

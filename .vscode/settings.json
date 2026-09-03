@@ -14,7 +14,7 @@
 
   // Tell Svelte LSP where the dashboard tsconfig is
   "[svelte]": {
-    "editor.defaultFormatter": "svelte.svelte-vscode"
+    "editor.defaultFormatter": "biomejs.biome"
   },
 
   // Tailwind CSS settings
@@ -27,18 +27,6 @@
     ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"]
   ],
   "tailwindCSS.rootFontSize": 16,
-
-  // ESLint settings (when/if you add eslint config)
-  "eslint.workingDirectories": [
-    { "directory": "apps/dashboard", "changeProcessCWD": true },
-    { "directory": "packages/core", "changeProcessCWD": true },
-    { "directory": "packages/hub-server", "changeProcessCWD": true },
-    { "directory": "packages/agent-service", "changeProcessCWD": true },
-    { "directory": "packages/db", "changeProcessCWD": true },
-    { "directory": "packages/auth", "changeProcessCWD": true },
-    { "directory": "packages/mcp-task-tracker", "changeProcessCWD": true }
-  ],
-  "eslint.validate": ["javascript", "typescript", "svelte"],
 
   // File associations
   "files.associations": {
@@ -68,6 +56,16 @@
   // Format on save
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
-    "source.organizeImports": "explicit"
-  }
+    "source.fixAll.biome": "explicit",
+    "source.organizeImports.biome": "explicit"
+  },
+
+  // Ultracite (Biome) formats and lints everything it parses
+  "editor.defaultFormatter": "biomejs.biome",
+  "[javascript]": { "editor.defaultFormatter": "biomejs.biome" },
+  "[typescript]": { "editor.defaultFormatter": "biomejs.biome" },
+  "[json]": { "editor.defaultFormatter": "biomejs.biome" },
+  "[jsonc]": { "editor.defaultFormatter": "biomejs.biome" },
+  "[css]": { "editor.defaultFormatter": "biomejs.biome" },
+  "[html]": { "editor.defaultFormatter": "biomejs.biome" }
 }

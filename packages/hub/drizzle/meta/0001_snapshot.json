@@ -170,12 +170,8 @@
           "name": "instances_machine_id_agents_machine_id_fk",
           "tableFrom": "instances",
           "tableTo": "agents",
-          "columnsFrom": [
-            "machine_id"
-          ],
-          "columnsTo": [
-            "machine_id"
-          ],
+          "columnsFrom": ["machine_id"],
+          "columnsTo": ["machine_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -183,12 +179,8 @@
           "name": "instances_project_id_projects_id_fk",
           "tableFrom": "instances",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -242,12 +234,8 @@
           "name": "projects_machine_id_agents_machine_id_fk",
           "tableFrom": "projects",
           "tableTo": "agents",
-          "columnsFrom": [
-            "machine_id"
-          ],
-          "columnsTo": [
-            "machine_id"
-          ],
+          "columnsFrom": ["machine_id"],
+          "columnsTo": ["machine_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }

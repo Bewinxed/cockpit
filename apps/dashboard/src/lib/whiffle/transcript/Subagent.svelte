@@ -1,4 +1,11 @@
 <script lang="ts">
+  import * as Collapsible from "$lib/components/ui/collapsible";
+  import { IconChevronRight } from "$lib/icons";
+  import type { SubagentState } from "$lib/utils/flow-types";
+  import { formatDuration } from "$lib/utils/time";
+  import { subagentView } from "../frames";
+  import { markHue, sessionSprite } from "../mark";
+  import { modelLabel } from "../models.svelte";
   /**
    * A harness subagent — the run a Task call spawned in-process, folded onto
    * the parent's spine as a branch you can watch rather than a paragraph you
@@ -7,19 +14,12 @@
    * instant; the fold opens its own transcript, rendered through the same row
    * grammar as the main one (`branchRows`).
    */
-  import type { Message } from '../types';
-  import type { SubagentState } from '$lib/utils/flow-types';
-  import { subagentView } from '../frames';
-  import { branchRows } from './rows';
-  import { markHue, sessionSprite } from '../mark';
-  import { modelLabel } from '../models.svelte';
-  import { IconChevronRight } from '$lib/icons';
-  import { formatDuration } from '$lib/utils/time';
-  import * as Collapsible from '$lib/components/ui/collapsible';
-  import MessageBody from './MessageBody.svelte';
-  import MessageRow from './MessageRow.svelte';
-  import ToolGroup from './ToolGroup.svelte';
-  import Thinking from './Thinking.svelte';
+  import type { Message } from "../types";
+  import MessageBody from "./MessageBody.svelte";
+  import MessageRow from "./MessageRow.svelte";
+  import { branchRows } from "./rows";
+  import Thinking from "./Thinking.svelte";
+  import ToolGroup from "./ToolGroup.svelte";
 
   let { branch, spawn }: { branch: SubagentState; spawn: Message } = $props();
 
@@ -28,27 +28,37 @@
   const seed = $derived(branch.toolUseId || branch.subagentType);
   const Sprite = $derived(sessionSprite(seed));
   const title = $derived(
-    branch.description || spawn.metadata?.subagentDescription || branch.subagentType
+    branch.description ||
+      spawn.metadata?.subagentDescription ||
+      branch.subagentType
   );
   const model = $derived(branch.model ?? spawn.metadata?.subagentModel);
-  const failed = $derived(branch.status === 'error');
-  const phase = $derived(failed ? 'failed' : view.running ? 'running' : 'done');
+  const failed = $derived(branch.status === "error");
+  const phase = $derived(failed ? "failed" : view.running ? "running" : "done");
 
   // Elapsed is a clock, not a frame: a running branch has to re-read it on its
   // own, or the pill freezes at whatever second its last message arrived.
   let now = $state(Date.now());
   $effect(() => {
-    if (!view.running) return;
+    if (!view.running) {
+      return;
+    }
     const tick = setInterval(() => (now = Date.now()), 1000);
     return () => clearInterval(tick);
   });
   const elapsed = $derived(
-    formatDuration((branch.completedAt?.getTime() ?? now) - branch.startedAt.getTime())
+    formatDuration(
+      (branch.completedAt?.getTime() ?? now) - branch.startedAt.getTime()
+    )
   );
 
   /** A settled branch's headline: its first line, at a scannable length. */
   const headline = (text: string): string => {
-    const line = text.split('\n').map((each) => each.trim()).find(Boolean) ?? '';
+    const line =
+      text
+        .split("\n")
+        .map((each) => each.trim())
+        .find(Boolean) ?? "";
     return line.length > 120 ? `${line.slice(0, 119)}…` : line;
   };
 </script>
@@ -56,19 +66,29 @@
 <div class="branch">
   <Collapsible.Root>
     <Collapsible.Trigger class="bhead">
-      <span class="chev" aria-hidden="true"><IconChevronRight /></span>
-      <span class="mark m{markHue(seed)}" aria-hidden="true"><Sprite /></span>
+      <span aria-hidden="true" class="chev"><IconChevronRight /></span>
+      <span aria-hidden="true" class="mark m{markHue(seed)}"><Sprite /></span>
       <span class="tk">{branch.subagentType}</span>
-      {#if title !== branch.subagentType}<span class="arg">{title}</span>{/if}
-      {#if model}<span class="model">{modelLabel(model)}</span>{/if}
+      {#if title !== branch.subagentType}
+        <span class="arg">{title}</span>
+      {/if}
+      {#if model}
+        <span class="model">{modelLabel(model)}</span>
+      {/if}
       <span class="pill {phase}">
-        {phase}{#if view.steps} · {view.steps} step{view.steps === 1 ? '' : 's'}{/if} · {elapsed}
+        {phase}
+        {#if view.steps}
+          · {view.steps} step{view.steps === 1 ? '' : 's'}
+        {/if}
+        · {elapsed}
       </span>
     </Collapsible.Trigger>
 
     <!-- Always visible: the observability at a glance, no expand needed. -->
     {#if view.running}
-      <p class="now"><span class="beat" aria-hidden="true"></span>{view.currentStep}</p>
+      <p class="now">
+        <span aria-hidden="true" class="beat"></span>{view.currentStep}
+      </p>
     {:else if failed && branch.error}
       <p class="now err">{headline(branch.error)}</p>
     {:else if view.report}
@@ -83,11 +103,11 @@
           {:else if row.kind === 'question'}
             <ToolGroup messages={[row.message]} />
           {:else if row.kind === 'thinking'}
-            <Thinking text={row.text} live={row.live} />
+            <Thinking live={row.live} text={row.text} />
           {:else if row.kind === 'stream'}
             <div class="say"><MessageBody source={row.text} streaming /></div>
           {:else if row.kind === 'single'}
-            <MessageRow message={row.message} agentName={branch.subagentType} />
+            <MessageRow agentName={branch.subagentType} message={row.message} />
           {/if}
         {/each}
 
@@ -142,17 +162,17 @@
   /* Animate the disclosure open/close. bits-ui exposes the measured content
      height on the content element; shadcn's bare Collapsible.Content never got
      the CSS to use it, so it opened instantly. */
-  :global(.branch [data-slot='collapsible-content']) {
+  :global(.branch [data-slot="collapsible-content"]) {
     overflow: hidden;
   }
   /* 200ms, matched to collapsible-lazy's 220ms unmount hold — at the old
      var(--c-300) the content vanished at 220ms, mid-collapse, and the last
      80ms animated an emptying box. Entry decelerates (--e-in), exit
      accelerates (--e-out): the rail's one collapsible vocabulary. */
-  :global(.branch [data-slot='collapsible-content'][data-state='open']) {
+  :global(.branch [data-slot="collapsible-content"][data-state="open"]) {
     animation: branch-down calc(var(--c-100) * 2) var(--e-in);
   }
-  :global(.branch [data-slot='collapsible-content'][data-state='closed']) {
+  :global(.branch [data-slot="collapsible-content"][data-state="closed"]) {
     animation: branch-up calc(var(--c-100) * 2) var(--e-out);
   }
   @keyframes branch-down {
@@ -172,8 +192,8 @@
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    :global(.branch [data-slot='collapsible-content'][data-state='open']),
-    :global(.branch [data-slot='collapsible-content'][data-state='closed']) {
+    :global(.branch [data-slot="collapsible-content"][data-state="open"]),
+    :global(.branch [data-slot="collapsible-content"][data-state="closed"]) {
       animation: none;
     }
   }
@@ -189,7 +209,7 @@
     color: var(--ink-muted);
     transition: transform var(--c-100) var(--e-in);
   }
-  :global(.branch .bhead[data-state='open']) .chev {
+  :global(.branch .bhead[data-state="open"]) .chev {
     transform: rotate(90deg);
   }
   .chev :global(svg) {
@@ -215,13 +235,27 @@
     display: block;
     color: var(--mark-glyph);
   }
-  .mark.m2 { background-color: var(--mark-2); }
-  .mark.m3 { background-color: var(--mark-3); }
-  .mark.m4 { background-color: var(--mark-4); }
-  .mark.m5 { background-color: var(--mark-5); }
-  .mark.m6 { background-color: var(--mark-6); }
-  .mark.m7 { background-color: var(--mark-7); }
-  .mark.m8 { background-color: var(--mark-8); }
+  .mark.m2 {
+    background-color: var(--mark-2);
+  }
+  .mark.m3 {
+    background-color: var(--mark-3);
+  }
+  .mark.m4 {
+    background-color: var(--mark-4);
+  }
+  .mark.m5 {
+    background-color: var(--mark-5);
+  }
+  .mark.m6 {
+    background-color: var(--mark-6);
+  }
+  .mark.m7 {
+    background-color: var(--mark-7);
+  }
+  .mark.m8 {
+    background-color: var(--mark-8);
+  }
 
   .tk {
     font-family: var(--font-mono);

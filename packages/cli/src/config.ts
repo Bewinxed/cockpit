@@ -1,10 +1,9 @@
-import { chmod } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { chmod } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 /** Everything the CLI remembers between runs: where the hub was, last time. */
 export interface CliConfig {
-  hubUrl: string;
   /**
    * A `claude setup-token` token, for a machine whose daemon cannot reach the
    * credentials the user logged in with — a headless Linux box, or a Mac whose
@@ -12,13 +11,14 @@ export interface CliConfig {
    * `CLAUDE_CODE_OAUTH_TOKEN`, which bypasses the keychain entirely.
    */
   claudeToken?: string;
+  hubUrl: string;
   updatedAt: string;
 }
 
 export const CONFIG_PATH = join(
-  process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'),
-  'whiffle',
-  'config.json'
+  process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
+  "whiffle",
+  "config.json"
 );
 
 /** The config can name a credential, so it is readable by its owner and nobody else. */
@@ -27,9 +27,11 @@ const CONFIG_MODE = 0o600;
 /** Undefined for a first run, and for a file someone has since broken. */
 export const readConfig = async (): Promise<CliConfig | undefined> => {
   const file = Bun.file(CONFIG_PATH);
-  if (!(await file.exists())) return undefined;
+  if (!(await file.exists())) {
+    return undefined;
+  }
   const config = await file.json().catch(() => undefined);
-  return typeof config?.hubUrl === 'string' ? (config as CliConfig) : undefined;
+  return typeof config?.hubUrl === "string" ? (config as CliConfig) : undefined;
 };
 
 /**
@@ -39,7 +41,7 @@ export const readConfig = async (): Promise<CliConfig | undefined> => {
  */
 export const writeConfig = async (patch: Partial<CliConfig>): Promise<void> => {
   const config: CliConfig = {
-    hubUrl: '',
+    hubUrl: "",
     ...(await readConfig()),
     ...patch,
     updatedAt: new Date().toISOString(),

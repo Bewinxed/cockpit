@@ -1,15 +1,19 @@
 <script lang="ts">
-  import { useStore, useSvelteFlow, type Node } from '@xyflow/svelte';
+  import { type Node, useStore, useSvelteFlow } from "@xyflow/svelte";
   import {
-    ZOOM_THRESHOLD_LAYOUT,
     NODE_CENTER_X,
-  } from '$lib/utils/flow-constants';
-  import type { ZoomMode, PendingCompensation, Point } from '$lib/utils/flow-types';
+    ZOOM_THRESHOLD_LAYOUT,
+  } from "$lib/utils/flow-constants";
+  import type {
+    PendingCompensation,
+    Point,
+    ZoomMode,
+  } from "$lib/utils/flow-types";
 
   interface Props {
-    onZoomChange: (zoom: number) => void;
-    onTransitionsDisabled?: (disabled: boolean) => void;
     nodes: Node[];
+    onTransitionsDisabled?: (disabled: boolean) => void;
+    onZoomChange: (zoom: number) => void;
   }
 
   let { onZoomChange, onTransitionsDisabled, nodes }: Props = $props();
@@ -29,28 +33,32 @@
    * Check if a number is valid (not NaN, not Infinity)
    */
   function isValidNumber(n: unknown): n is number {
-    return typeof n === 'number' && !isNaN(n) && isFinite(n);
+    return typeof n === "number" && !isNaN(n) && isFinite(n);
   }
 
   /**
    * Check if a point has valid coordinates
    */
   function isValidPoint(p: Point | null | undefined): p is Point {
-    return p !== null && p !== undefined && isValidNumber(p.x) && isValidNumber(p.y);
+    return (
+      p !== null && p !== undefined && isValidNumber(p.x) && isValidNumber(p.y)
+    );
   }
 
   /**
    * Find the node closest to a point
    */
   function findClosestNode(point: Point): Node | null {
-    if (nodes.length === 0 || !isValidPoint(point)) return null;
+    if (nodes.length === 0 || !isValidPoint(point)) {
+      return null;
+    }
 
     let closest: Node | null = null;
-    let minDist = Infinity;
+    let minDist = Number.POSITIVE_INFINITY;
 
     for (const node of nodes) {
       // Skip nodes with invalid positions
-      if (!isValidNumber(node.position.x) || !isValidNumber(node.position.y)) {
+      if (!(isValidNumber(node.position.x) && isValidNumber(node.position.y))) {
         continue;
       }
 
@@ -82,7 +90,8 @@
       return;
     }
 
-    const newMode: ZoomMode = zoom >= ZOOM_THRESHOLD_LAYOUT ? 'expanded' : 'compact';
+    const newMode: ZoomMode =
+      zoom >= ZOOM_THRESHOLD_LAYOUT ? "expanded" : "compact";
 
     // Initialize on first valid zoom
     if (prevZoom === null || prevMode === null) {
@@ -112,7 +121,11 @@
           if (isValidPoint(focalPoint)) {
             // Find the node closest to the focal point and record its OLD position
             const closestNode = findClosestNode(focalPoint);
-            if (closestNode && isValidNumber(closestNode.position.x) && isValidNumber(closestNode.position.y)) {
+            if (
+              closestNode &&
+              isValidNumber(closestNode.position.x) &&
+              isValidNumber(closestNode.position.y)
+            ) {
               pendingCompensation = {
                 nodeId: closestNode.id,
                 oldPosition: { ...closestNode.position },
@@ -135,20 +148,33 @@
   $effect(() => {
     if (pendingCompensation && !isCompensating) {
       const { nodeId, oldPosition } = pendingCompensation;
-      const focalNode = nodes.find(n => n.id === nodeId);
+      const focalNode = nodes.find((n) => n.id === nodeId);
 
-      if (focalNode && isValidNumber(focalNode.position.x) && isValidNumber(focalNode.position.y)) {
+      if (
+        focalNode &&
+        isValidNumber(focalNode.position.x) &&
+        isValidNumber(focalNode.position.y)
+      ) {
         // Calculate how much the node moved
         const deltaX = focalNode.position.x - oldPosition.x;
         const deltaY = focalNode.position.y - oldPosition.y;
 
         // Only compensate if there's actual movement and deltas are valid
-        if ((deltaX !== 0 || deltaY !== 0) && isValidNumber(deltaX) && isValidNumber(deltaY)) {
+        if (
+          (deltaX !== 0 || deltaY !== 0) &&
+          isValidNumber(deltaX) &&
+          isValidNumber(deltaY)
+        ) {
           try {
             const currentViewport = getViewport();
 
             // Validate viewport values before using
-            if (isValidNumber(currentViewport.x) && isValidNumber(currentViewport.y) && isValidNumber(currentViewport.zoom) && currentViewport.zoom > 0) {
+            if (
+              isValidNumber(currentViewport.x) &&
+              isValidNumber(currentViewport.y) &&
+              isValidNumber(currentViewport.zoom) &&
+              currentViewport.zoom > 0
+            ) {
               // Set flag to prevent zoom effect from re-triggering
               isCompensating = true;
 

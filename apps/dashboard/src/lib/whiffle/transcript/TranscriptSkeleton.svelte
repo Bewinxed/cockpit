@@ -12,12 +12,14 @@
    */
 </script>
 
-<div class="skeleton" role="status" aria-busy="true">
+<div aria-busy="true" class="skeleton" role="status">
   <span class="spoken">Reading transcript…</span>
 
   <!-- The reader's turn: the sunken well, its raised mark, one short line. -->
   <div class="block you">
-    <div class="who"><span class="mark raised"></span><span class="name"></span></div>
+    <div class="who">
+      <span class="mark raised"></span><span class="name"></span>
+    </div>
     <div class="ln" style="width: 52%"></div>
   </div>
 
@@ -32,9 +34,18 @@
 
   <!-- Its tool calls, on the rail. -->
   <div class="block tools">
-    <div class="trow"><span class="ic"></span><span class="tk"></span><span class="arg" style="width: 46%"></span></div>
-    <div class="trow"><span class="ic"></span><span class="tk"></span><span class="arg" style="width: 31%"></span></div>
-    <div class="trow"><span class="ic"></span><span class="tk"></span><span class="arg" style="width: 58%"></span></div>
+    <div class="trow">
+      <span class="ic"></span><span class="tk"></span
+      ><span class="arg" style="width: 46%"></span>
+    </div>
+    <div class="trow">
+      <span class="ic"></span><span class="tk"></span
+      ><span class="arg" style="width: 31%"></span>
+    </div>
+    <div class="trow">
+      <span class="ic"></span><span class="tk"></span
+      ><span class="arg" style="width: 58%"></span>
+    </div>
   </div>
 
   <!-- And what it said about them. -->
@@ -175,7 +186,7 @@
      transform only, so it composites without repainting the bars beneath.
      Linear on purpose: a sweep that eases reads as something arriving. */
   .skeleton::after {
-    content: '';
+    content: "";
     position: absolute;
     inset: 0;
     pointer-events: none;

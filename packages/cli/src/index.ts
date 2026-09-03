@@ -1,2 +1,7 @@
-export { CONFIG_PATH, readConfig, writeConfig, type CliConfig } from './config';
-export { discoverHub, type DiscoverOptions, type Hub, type HubSource } from './discover';
+export { type CliConfig, CONFIG_PATH, readConfig, writeConfig } from "./config";
+export {
+  type DiscoverOptions,
+  discoverHub,
+  type Hub,
+  type HubSource,
+} from "./discover";

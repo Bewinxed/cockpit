@@ -1,37 +1,44 @@
 <script lang="ts">
-	import { RangeCalendar as RangeCalendarPrimitive } from "bits-ui";
-	import { HugeiconsIcon } from "@hugeicons/svelte"
-	import { ArrowRightIcon } from '@hugeicons/core-free-icons';
-	import { buttonVariants, type ButtonVariant } from "$lib/components/ui/button/index.js";
-	import { cn } from "$lib/utils.js";
+  import { ArrowRightIcon } from "@hugeicons/core-free-icons";
+  import { HugeiconsIcon } from "@hugeicons/svelte";
+  import { RangeCalendar as RangeCalendarPrimitive } from "bits-ui";
+  import {
+    type ButtonVariant,
+    buttonVariants,
+  } from "$lib/components/ui/button/index.js";
+  import { cn } from "$lib/utils.js";
 
-	let {
-		ref = $bindable(null),
-		class: className,
-		children,
-		variant = "ghost",
-		...restProps
-	}: RangeCalendarPrimitive.NextButtonProps & {
-		variant?: ButtonVariant;
-	} = $props();
+  let {
+    ref = $bindable(null),
+    class: className,
+    children,
+    variant = "ghost",
+    ...restProps
+  }: RangeCalendarPrimitive.NextButtonProps & {
+    variant?: ButtonVariant;
+  } = $props();
 </script>
 
 {#snippet Fallback()}
-	<HugeiconsIcon icon={ArrowRightIcon} strokeWidth={2} class={cn("size-4", className)} />
+  <HugeiconsIcon
+    class={cn("size-4", className)}
+    icon={ArrowRightIcon}
+    strokeWidth={2}
+  />
 {/snippet}
 
 <RangeCalendarPrimitive.NextButton
-	bind:ref
-	class={cn(
+  class={cn(
 		buttonVariants({ variant }),
 		"size-(--cell-size) bg-transparent p-0 select-none disabled:opacity-50 rtl:rotate-180",
 		className
 	)}
-	{...restProps}
+  bind:ref
+  {...restProps}
 >
-	{#if children}
-		{@render children?.()}
-	{:else}
-		{@render Fallback()}
-	{/if}
+  {#if children}
+    {@render children?.()}
+  {:else}
+    {@render Fallback()}
+  {/if}
 </RangeCalendarPrimitive.NextButton>

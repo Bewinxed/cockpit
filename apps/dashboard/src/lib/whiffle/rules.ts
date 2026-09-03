@@ -1,5 +1,5 @@
-import type { Rule, RuleDraft, RuleRow } from '@whiffle/core';
-import { RULE_TEMPLATES } from '@whiffle/core';
+import type { Rule, RuleDraft, RuleRow } from "@whiffle/core";
+import { RULE_TEMPLATES } from "@whiffle/core";
 
 /**
  * The dashboard's side of rules. Fetch wrappers in the shape `fleet.ts`
@@ -11,8 +11,8 @@ import { RULE_TEMPLATES } from '@whiffle/core';
  * fires, and the form's refusals must be the hub's own words.
  */
 
-export { RULE_TEMPLATES };
 export type { Rule, RuleDraft, RuleRow };
+export { RULE_TEMPLATES };
 
 /** What `GET /api/rules` answers with. */
 export interface RulesPayload {
@@ -28,24 +28,26 @@ export interface RulesPayload {
  * worth writing: this is where it lands.
  */
 export interface RuleActivity {
-  ruleId: string;
-  instanceId: string;
-  status: 'armed' | 'pending';
-  fireCount: number;
-  totalFires: number;
-  lastFiredAt: number | null;
   ackedAt: number | null;
   ackNote: string | null;
+  fireCount: number;
+  harness: string | null;
+  instanceId: string;
+  lastFiredAt: number | null;
+  ruleId: string;
+  status: "armed" | "pending";
+  totalFires: number;
   /** The directory the session works in, for a reader who has to recognise it. */
   where: string;
-  harness: string | null;
 }
 
-export const loadRuleActivity = (id: string): Promise<{ activity: RuleActivity[] }> =>
+export const loadRuleActivity = (
+  id: string
+): Promise<{ activity: RuleActivity[] }> =>
   send<{ activity: RuleActivity[] }>(
     `/api/rules/${encodeURIComponent(id)}/activity`,
     {},
-    'load what this rule has caught'
+    "load what this rule has caught"
   );
 
 /** Elysia refuses with a bare string; JSON only when something else went wrong. */
@@ -53,8 +55,10 @@ async function said(response: Response): Promise<string> {
   const body = await response.text();
   try {
     const parsed: unknown = JSON.parse(body);
-    if (typeof parsed === 'string') return parsed;
-    if (parsed && typeof parsed === 'object' && 'message' in parsed) {
+    if (typeof parsed === "string") {
+      return parsed;
+    }
+    if (parsed && typeof parsed === "object" && "message" in parsed) {
       return String((parsed as { message: unknown }).message);
     }
   } catch {
@@ -63,53 +67,67 @@ async function said(response: Response): Promise<string> {
   return body || `the hub answered ${response.status}`;
 }
 
-async function send<T>(url: string, init: RequestInit, attempt: string): Promise<T> {
+async function send<T>(
+  url: string,
+  init: RequestInit,
+  attempt: string
+): Promise<T> {
   const response = await fetch(url, init);
-  if (!response.ok) throw new Error(`Could not ${attempt} — ${await said(response)}.`);
+  if (!response.ok) {
+    throw new Error(`Could not ${attempt} — ${await said(response)}.`);
+  }
   return (await response.json()) as T;
 }
 
 const json = (body: unknown): RequestInit => ({
-  headers: { 'Content-Type': 'application/json' },
+  headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),
 });
 
 export const loadRules = (): Promise<RulesPayload> =>
-  send<RulesPayload>('/api/rules', {}, 'load the rules');
+  send<RulesPayload>("/api/rules", {}, "load the rules");
 
 /** Create: the hub mints the id and answers with the whole rule. */
 export const createRule = (draft: RuleDraft): Promise<Rule> =>
-  send<Rule>('/api/rules', { method: 'POST', ...json(draft) }, `save ${draft.name || 'the rule'}`);
+  send<Rule>(
+    "/api/rules",
+    { method: "POST", ...json(draft) },
+    `save ${draft.name || "the rule"}`
+  );
 
 /** Edit: strictly an existing id — the hub 404s anything it never minted. */
 export const saveRule = (id: string, draft: RuleDraft): Promise<Rule> =>
   send<Rule>(
     `/api/rules/${encodeURIComponent(id)}`,
-    { method: 'PUT', ...json(draft) },
-    `save ${draft.name || 'the rule'}`
+    { method: "PUT", ...json(draft) },
+    `save ${draft.name || "the rule"}`
   );
 
 export const removeRule = async (id: string, name: string): Promise<void> => {
-  const response = await fetch(`/api/rules/${encodeURIComponent(id)}`, { method: 'DELETE' });
-  if (!response.ok) throw new Error(`Could not delete ${name} — ${await said(response)}.`);
+  const response = await fetch(`/api/rules/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw new Error(`Could not delete ${name} — ${await said(response)}.`);
+  }
 };
 
 /** A blank rule, on the defaults that make the common case one field of typing. */
 export const blankRule = (): RuleDraft => ({
-  name: '',
+  name: "",
   enabled: true,
-  trigger: 'pattern',
-  pattern: '',
-  matchKind: 'phrase',
+  trigger: "pattern",
+  pattern: "",
+  matchKind: "phrase",
   caseSensitive: false,
   wholeWord: false,
-  watch: 'text',
-  action: 'reply',
-  reply: '',
+  watch: "text",
+  action: "reply",
+  reply: "",
   prompt: null,
   // Waking an idle session is what makes a rule change what the session does;
   // the other two timings are for the cases where that is too late.
-  timing: 'turn',
+  timing: "turn",
   interrupt: false,
   requireAck: true,
   scope: {},
@@ -139,34 +157,39 @@ export const draftOf = (rule: Rule): RuleDraft => ({
  * operator clicks into place. Client-side templates (no migration, operator
  * opts in); the prompts are sent verbatim to a local qwen model.
  */
-export const WHIP_PRESETS: { name: string; trigger: 'every-turn'; action: 'llm'; prompt: string }[] = [
+export const WHIP_PRESETS: {
+  name: string;
+  trigger: "every-turn";
+  action: "llm";
+  prompt: string;
+}[] = [
   {
-    name: 'Done-claim without evidence',
-    trigger: 'every-turn',
-    action: 'llm',
+    name: "Done-claim without evidence",
+    trigger: "every-turn",
+    action: "llm",
     prompt:
-      'If the agent claims work is done, finished, complete, or passing without pasting the actual test output or build output that proves it, reject the claim. Tell it to run the tests and paste the full output before reporting done.',
+      "If the agent claims work is done, finished, complete, or passing without pasting the actual test output or build output that proves it, reject the claim. Tell it to run the tests and paste the full output before reporting done.",
   },
   {
-    name: 'Permission-seeking stall',
-    trigger: 'every-turn',
-    action: 'llm',
+    name: "Permission-seeking stall",
+    trigger: "every-turn",
+    action: "llm",
     prompt:
       'If the agent asks "would you like me to…", "shall I proceed", "should I continue", or any variation that hands the decision back instead of doing the work, tell it to stop asking and proceed. Finish the whole list, do not stop after each item.',
   },
   {
-    name: 'Placeholder left behind',
-    trigger: 'every-turn',
-    action: 'llm',
+    name: "Placeholder left behind",
+    trigger: "every-turn",
+    action: "llm",
     prompt:
       'If the agent left a placeholder, stub, TODO, "rest as an exercise", or any incomplete implementation where real code was asked for, reject it. Demand the complete working version — no ellipsis, no "implement similarly", no deferred work.',
   },
   {
-    name: 'Files touched outside the brief',
-    trigger: 'every-turn',
-    action: 'llm',
+    name: "Files touched outside the brief",
+    trigger: "every-turn",
+    action: "llm",
     prompt:
-      'If the agent touched, edited, or created files outside the set of owned files stated in its brief, tell it to revert those changes immediately and stay in its owned files. Scope drift is not initiative — it is desertion.',
+      "If the agent touched, edited, or created files outside the set of owned files stated in its brief, tell it to revert those changes immediately and stay in its owned files. Scope drift is not initiative — it is desertion.",
   },
 ];
 
@@ -176,15 +199,24 @@ export const message = (error: unknown): string =>
 
 /** "3 minutes ago", and "never" for a rule that has not caught anything yet. */
 export function since(at: number | null): string {
-  if (at === null) return 'never';
+  if (at === null) {
+    return "never";
+  }
   const seconds = Math.round((Date.now() - at) / 1000);
-  if (seconds < 60) return 'just now';
+  if (seconds < 60) {
+    return "just now";
+  }
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
   return `${Math.round(hours / 24)}d ago`;
 }
 
 /** `1 time` / `4 times`, because "4 time" in a settings list is a tell. */
-export const times = (count: number): string => `${count} time${count === 1 ? '' : 's'}`;
+export const times = (count: number): string =>
+  `${count} time${count === 1 ? "" : "s"}`;

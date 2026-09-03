@@ -3,11 +3,14 @@
  * runs, so a machine quietly a month behind is the normal failure — this is what
  * lets the hub say so instead of the user finding out through a protocol error.
  */
-import type { BuildInfo } from '@whiffle/core';
-import { resolve } from 'node:path';
+
+import { resolve } from "node:path";
+import type { BuildInfo } from "@whiffle/core";
 
 /** The checkout this daemon runs out of — up from `packages/agent/src`. */
-export const REPO_ROOT = resolve(Bun.fileURLToPath(new URL('../../..', import.meta.url)));
+export const REPO_ROOT = resolve(
+  Bun.fileURLToPath(new URL("../../..", import.meta.url))
+);
 
 /** When this process started, which is what "the build a machine is on" means. */
 const STARTED_AT = Date.now();
@@ -20,10 +23,10 @@ const git = async (args: string[]): Promise<string | undefined> => {
 
 const read = async (): Promise<BuildInfo> => {
   const manifest = (await Bun.file(
-    Bun.fileURLToPath(new URL('../package.json', import.meta.url))
+    Bun.fileURLToPath(new URL("../package.json", import.meta.url))
   ).json()) as { version: string };
-  const commit = await git(['rev-parse', '--short', 'HEAD']);
-  const status = commit ? await git(['status', '--porcelain']) : undefined;
+  const commit = await git(["rev-parse", "--short", "HEAD"]);
+  const status = commit ? await git(["status", "--porcelain"]) : undefined;
   return {
     version: manifest.version,
     ...(commit ? { commit, dirty: Boolean(status) } : {}),

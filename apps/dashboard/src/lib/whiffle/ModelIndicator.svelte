@@ -1,10 +1,15 @@
-<script module lang="ts">
+<script lang="ts" module>
   /**
    * The rail's five words. `failed` is deliberately not `blocked`: a branch that
    * died has stopped, it is not asking for you, and only the one asking for you
    * is allowed to move.
    */
-  export type IndicatorState = 'working' | 'idle' | 'blocked' | 'failed' | 'sleeping';
+  export type IndicatorState =
+    | "working"
+    | "idle"
+    | "blocked"
+    | "failed"
+    | "sleeping";
 </script>
 
 <script lang="ts">
@@ -31,8 +36,8 @@
    * Hue agrees with `ActivityDot`, because this is the same fact that component
    * reports: amber mid-turn, green at rest, red parked on a human.
    */
-  import ProviderLogo from '$lib/components/features/ProviderLogo.svelte';
-  import { providerOf } from './models.svelte';
+  import ProviderLogo from "$lib/components/features/ProviderLogo.svelte";
+  import { providerOf } from "./models.svelte";
 
   let {
     model = null,
@@ -47,11 +52,11 @@
   } = $props();
 
   const WORD: Record<IndicatorState, string> = {
-    working: 'Working',
-    idle: 'Idle',
-    blocked: 'Needs you',
-    failed: 'Failed',
-    sleeping: 'Sleeping',
+    working: "Working",
+    idle: "Idle",
+    blocked: "Needs you",
+    failed: "Failed",
+    sleeping: "Sleeping",
   };
 
   /*
@@ -60,23 +65,25 @@
    * has stopped, the other is waiting, and only waiting deserves the eye.
    */
   const TONE: Record<IndicatorState, string> = {
-    working: 'bg-warning animate-pulse motion-reduce:animate-none',
-    idle: 'bg-success',
-    blocked: 'bg-error',
-    failed: 'bg-error',
-    sleeping: 'bg-muted-foreground/60',
+    working: "bg-warning animate-pulse motion-reduce:animate-none",
+    idle: "bg-success",
+    blocked: "bg-error",
+    failed: "bg-error",
+    sleeping: "bg-muted-foreground/60",
   };
 
   /* `providerOf` finding nothing means nobody here has that lab's mark, and the
      dot stands on its own rather than badging an empty square. */
   const logo = $derived(model && providerOf(model) ? model : null);
-  const spoken = $derived([label, model, WORD[state]].filter(Boolean).join(' · '));
+  const spoken = $derived(
+    [label, model, WORD[state]].filter(Boolean).join(" · ")
+  );
 </script>
 
 <span
+  aria-label={spoken}
   class="relative flex size-4 shrink-0 items-center justify-center"
   role="img"
-  aria-label={spoken}
   title={spoken}
 >
   {#if logo}
@@ -84,8 +91,8 @@
          separates them however the row behind is painted. -->
     <span
       class="well size-4"
-      class:dimmed={state === 'sleeping'}
       style="--bite: radial-gradient(circle at 12.5px 12.5px, transparent 4.75px, #000 5.25px)"
+      class:dimmed={state === 'sleeping'}
     >
       <ProviderLogo model={logo} size={16} />
     </span>

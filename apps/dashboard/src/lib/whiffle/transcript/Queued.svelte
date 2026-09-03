@@ -12,15 +12,15 @@
    * the reader wants from a turn is when it was said, and this has not been
    * said yet — a time here would be a promise about the wrong moment.
    */
-  import type { QueuedMessage } from '@whiffle/core';
-  import Who from './Who.svelte';
-  import MessageBody from './MessageBody.svelte';
+  import type { QueuedMessage } from "@whiffle/core";
+  import MessageBody from "./MessageBody.svelte";
+  import Who from "./Who.svelte";
 
   let { queued }: { queued: QueuedMessage } = $props();
 </script>
 
 <section class="turn you queued">
-  <Who you name="You" note="queued" />
+  <Who name="You" note="queued" you />
   <MessageBody source={queued.text} />
   {#if queued.images}
     <!-- The payloads never crossed the wire — the queue is broadcast state —

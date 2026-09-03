@@ -1,7 +1,12 @@
 <script lang="ts">
   /** One session's state, in the one glance the fleet view is built around. */
-  import { IconMoonSleepBold } from '$lib/icons';
-  import { ACTIVITY_LABEL, SLEEPING_LABEL, UNKNOWN_LABEL, type Activity } from './activity';
+  import { IconMoonSleepBold } from "$lib/icons";
+  import {
+    ACTIVITY_LABEL,
+    type Activity,
+    SLEEPING_LABEL,
+    UNKNOWN_LABEL,
+  } from "./activity";
 
   interface Props {
     activity: Activity;
@@ -31,9 +36,9 @@
      the row itself; the dot never sees it.) */
   const tone = $derived(
     {
-      blocked: 'bg-warning',
-      working: 'bg-info animate-pulse motion-reduce:animate-none',
-      idle: 'bg-muted-foreground/40',
+      blocked: "bg-warning",
+      working: "bg-info animate-pulse motion-reduce:animate-none",
+      idle: "bg-muted-foreground/40",
     }[activity]
   );
 
@@ -43,23 +48,27 @@
 </script>
 
 <span
+  aria-label={label}
   class="relative inline-flex shrink-0 items-center justify-center {size === 2
     ? 'size-2'
     : 'size-1.5'}"
-  title={label}
-  aria-label={label}
   role="img"
+  title={label}
 >
   {#if stale}
     <!-- Hollow, not filled: distinguishable from every filled state by shape
          alone, not only by colour — the honest rendering of "the hub does
          not know", never flattened into idle's quiet fill. -->
-    <span class="absolute inset-0 rounded-full border border-muted-foreground/60"></span>
+    <span
+      class="absolute inset-0 rounded-full border border-muted-foreground/60"
+    ></span>
   {:else if sleeping}
     <!-- A glyph, not a tint: distinguishable from idle's plain dot by shape
          even with colour vision switched off, and named for what it means —
          resumable, not merely quiet. -->
-    <IconMoonSleepBold class="absolute inset-0 size-full text-muted-foreground/70" />
+    <IconMoonSleepBold
+      class="absolute inset-0 size-full text-muted-foreground/70"
+    />
   {:else}
     <!-- Blocked is the only state waiting on a human, so it is the loudest one. -->
     {#if activity === 'blocked'}

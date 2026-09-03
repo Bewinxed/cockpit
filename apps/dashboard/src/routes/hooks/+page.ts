@@ -1,5 +1,5 @@
-import type { HooksPayload } from '$lib/whiffle/hooks';
-import type { PageLoad } from './$types';
+import type { HooksPayload } from "$lib/whiffle/hooks";
+import type { PageLoad } from "./$types";
 
 /**
  * Hooks are the fleet's, so they are read through the proxy rather than the
@@ -8,15 +8,20 @@ import type { PageLoad } from './$types';
  * `/tools` make.
  */
 export const load: PageLoad = async ({ fetch }) => {
-  const payload = await fetch('/api/fleet/hooks')
+  const payload = await fetch("/api/fleet/hooks")
     .then(async (response) => {
-      if (!response.ok) throw new Error(`the hub answered ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`the hub answered ${response.status}`);
+      }
       return (await response.json()) as HooksPayload;
     })
     .catch((error: unknown) => error as Error);
 
   return {
     hooks: payload instanceof Error ? [] : (payload.hooks ?? []),
-    error: payload instanceof Error ? `Could not read the hooks — ${payload.message}.` : null,
+    error:
+      payload instanceof Error
+        ? `Could not read the hooks — ${payload.message}.`
+        : null,
   };
 };

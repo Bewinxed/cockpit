@@ -15,15 +15,15 @@
  */
 
 export interface ConfirmRequest {
-  /** The question, as a heading. Name the thing and its blast radius here. */
-  title: string;
   /** The consequence, in plain words — what is lost, whether it can be undone. */
   body?: string;
+  cancelLabel?: string;
   /** The confirm button's label. Say the verb ('Remove everywhere'), not 'OK'. */
   confirmLabel?: string;
-  cancelLabel?: string;
   /** Paints the confirm button as destructive. Defaults on for a delete-shaped verb. */
   destructive?: boolean;
+  /** The question, as a heading. Name the thing and its blast radius here. */
+  title: string;
 }
 
 interface Pending extends ConfirmRequest {

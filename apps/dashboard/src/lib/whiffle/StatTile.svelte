@@ -4,20 +4,20 @@
    * DESIGN.md signature move. Optionally carries an icon tile (top-left
    * of the well), a subtitle, and a semantic badge.
    */
-  import type { Snippet } from 'svelte';
-  import * as Card from '$lib/components/ui/card';
+  import type { Snippet } from "svelte";
+  import * as Card from "$lib/components/ui/card";
 
   interface Props {
-    label: string;
-    value: string | number;
-    unit?: string;
-    icon?: Snippet;
-    href?: string;
-    onclick?: () => void;
-    tone?: 'default' | 'attn' | 'warn' | 'good';
-    subtitle?: string;
     badge?: string;
-    badgeTone?: 'good' | 'warn' | 'bad';
+    badgeTone?: "good" | "warn" | "bad";
+    href?: string;
+    icon?: Snippet;
+    label: string;
+    onclick?: () => void;
+    subtitle?: string;
+    tone?: "default" | "attn" | "warn" | "good";
+    unit?: string;
+    value: string | number;
   }
 
   let {
@@ -27,7 +27,7 @@
     icon,
     href,
     onclick,
-    tone = 'default',
+    tone = "default",
     subtitle,
     badge,
     badgeTone,
@@ -39,17 +39,23 @@
     <Card.Root class="st-card">
       <div class="st-well">
         {#if icon}
-          <span class="st-icon st-tone-{tone}">
-            {@render icon()}
-          </span>
+          <span class="st-icon st-tone-{tone}"> {@render icon()} </span>
         {/if}
         <span class="st-label">{label}</span>
         <span class="st-value">{value}</span>
-        {#if unit}<span class="st-unit">{unit}</span>{/if}
+        {#if unit}
+          <span class="st-unit">{unit}</span>
+        {/if}
         {#if subtitle || badge}
           <span class="st-foot">
-            {#if subtitle}<span class="st-sub">{subtitle}</span>{/if}
-            {#if badge}<span class="st-badge st-badge-{badgeTone ?? 'good'}">{badge}</span>{/if}
+            {#if subtitle}
+              <span class="st-sub">{subtitle}</span>
+            {/if}
+            {#if badge}
+              <span class="st-badge st-badge-{badgeTone ?? 'good'}"
+                >{badge}</span
+              >
+            {/if}
           </span>
         {/if}
       </div>
@@ -59,17 +65,21 @@
   <Card.Root class="st-card">
     <div class="st-well">
       {#if icon}
-        <span class="st-icon st-tone-{tone}">
-          {@render icon()}
-        </span>
+        <span class="st-icon st-tone-{tone}"> {@render icon()} </span>
       {/if}
       <span class="st-label">{label}</span>
       <span class="st-value">{value}</span>
-      {#if unit}<span class="st-unit">{unit}</span>{/if}
+      {#if unit}
+        <span class="st-unit">{unit}</span>
+      {/if}
       {#if subtitle || badge}
         <span class="st-foot">
-          {#if subtitle}<span class="st-sub">{subtitle}</span>{/if}
-          {#if badge}<span class="st-badge st-badge-{badgeTone ?? 'good'}">{badge}</span>{/if}
+          {#if subtitle}
+            <span class="st-sub">{subtitle}</span>
+          {/if}
+          {#if badge}
+            <span class="st-badge st-badge-{badgeTone ?? 'good'}">{badge}</span>
+          {/if}
         </span>
       {/if}
     </div>

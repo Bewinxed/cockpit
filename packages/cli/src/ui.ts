@@ -1,4 +1,4 @@
-import { spawn } from 'bun';
+import { spawn } from "bun";
 
 /**
  * Serves the dashboard on this machine, whichever machine that is.
@@ -14,17 +14,17 @@ import { spawn } from 'bun';
  * the origin is this process, and this process is what knows where the hub is.
  */
 export interface UiOptions {
-  /** Where the browser connects. */
-  readonly port: number;
-  /** The hub this dashboard drives, as an http(s) origin. */
-  readonly hubUrl: string;
   /** The adapter-node build directory (`apps/dashboard/build`). */
   readonly buildDir: string;
+  /** The hub this dashboard drives, as an http(s) origin. */
+  readonly hubUrl: string;
+  /** Where the browser connects. */
+  readonly port: number;
 }
 
 /** Paths the hub owns; everything else is the dashboard's to render. */
 const isHubPath = (path: string): boolean =>
-  path.startsWith('/api/') || path === '/health' || path.startsWith('/ws');
+  path.startsWith("/api/") || path === "/health" || path.startsWith("/ws");
 
 interface Relay {
   /** The socket this process opened to the hub, once it is ready. */
@@ -33,7 +33,11 @@ interface Relay {
   queued: string[];
 }
 
-export async function serveUi({ port, hubUrl, buildDir }: UiOptions): Promise<() => void> {
+export async function serveUi({
+  port,
+  hubUrl,
+  buildDir,
+}: UiOptions): Promise<() => void> {
   const hub = new URL(hubUrl);
   // A free port for the renderer: it is never addressed from outside, so it
   // does not need to be predictable — only private to this pair of processes.
@@ -41,9 +45,9 @@ export async function serveUi({ port, hubUrl, buildDir }: UiOptions): Promise<()
 
   const renderer = spawn({
     cmd: [process.execPath, `${buildDir}/index.js`],
-    env: { ...process.env, PORT: String(renderPort), HOST: '127.0.0.1' },
-    stdout: 'inherit',
-    stderr: 'inherit',
+    env: { ...process.env, PORT: String(renderPort), HOST: "127.0.0.1" },
+    stdout: "inherit",
+    stderr: "inherit",
   });
 
   // The renderer answers before the first browser does, or the first page load
@@ -56,23 +60,27 @@ export async function serveUi({ port, hubUrl, buildDir }: UiOptions): Promise<()
       });
       break;
     } catch {
-      if (Date.now() > deadline) throw new Error('the dashboard renderer did not start');
+      if (Date.now() > deadline) {
+        throw new Error("the dashboard renderer did not start");
+      }
       await Bun.sleep(200);
     }
   }
 
   const server = Bun.serve<Relay>({
     port,
-    hostname: '0.0.0.0',
+    hostname: "0.0.0.0",
     idleTimeout: 0,
 
     async fetch(request, self) {
       const url = new URL(request.url);
 
       // The dashboard's one socket, relayed to the hub's `/ws/dashboard`.
-      if (url.pathname.startsWith('/ws')) {
-        if (self.upgrade(request, { data: { hub: null, queued: [] } })) return undefined;
-        return new Response('expected a websocket upgrade', { status: 426 });
+      if (url.pathname.startsWith("/ws")) {
+        if (self.upgrade(request, { data: { hub: null, queued: [] } })) {
+          return;
+        }
+        return new Response("expected a websocket upgrade", { status: 426 });
       }
 
       const target = isHubPath(url.pathname)
@@ -82,13 +90,13 @@ export async function serveUi({ port, hubUrl, buildDir }: UiOptions): Promise<()
       // A GET or HEAD has no body, and naming one — even a null one, even with
       // `duplex` — is rejected rather than ignored. Every read the dashboard
       // makes is a GET, so getting this wrong fails all of them at once.
-      const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
+      const hasBody = request.method !== "GET" && request.method !== "HEAD";
 
       // `Host` belongs to this hop. Forwarding it asks the hub to answer as
       // `localhost:3000`, which is this proxy's name for itself, not the hub's.
       const headers = new Headers(request.headers);
-      headers.delete('host');
-      headers.delete('connection');
+      headers.delete("host");
+      headers.delete("connection");
 
       try {
         const answer = await fetch(target, {
@@ -98,10 +106,10 @@ export async function serveUi({ port, hubUrl, buildDir }: UiOptions): Promise<()
             ? {
                 body: request.body,
                 // A streamed body needs this on Bun.
-                duplex: 'half',
+                duplex: "half",
               }
             : {}),
-          redirect: 'manual',
+          redirect: "manual",
         });
 
         // `fetch` has already decoded the body, so the upstream's
@@ -110,27 +118,34 @@ export async function serveUi({ port, hubUrl, buildDir }: UiOptions): Promise<()
         // ERR_CONTENT_DECODING_FAILED. The length it was sent with is wrong for
         // the same reason.
         const out = new Headers(answer.headers);
-        out.delete('content-encoding');
-        out.delete('content-length');
+        out.delete("content-encoding");
+        out.delete("content-length");
         return new Response(answer.body, {
           status: answer.status,
           statusText: answer.statusText,
           headers: out,
         });
       } catch (error) {
-        const where = isHubPath(url.pathname) ? `the hub at ${hub.origin}` : 'the dashboard';
-        return new Response(`Cannot reach ${where}: ${(error as Error).message}`, { status: 502 });
+        const where = isHubPath(url.pathname)
+          ? `the hub at ${hub.origin}`
+          : "the dashboard";
+        return new Response(
+          `Cannot reach ${where}: ${(error as Error).message}`,
+          { status: 502 }
+        );
       }
     },
 
     websocket: {
       open(browser) {
-        const wsOrigin = hub.origin.replace(/^http/, 'ws');
+        const wsOrigin = hub.origin.replace(/^http/, "ws");
         const upstream = new WebSocket(`${wsOrigin}/ws/dashboard`);
         browser.data.hub = upstream;
 
         upstream.onopen = () => {
-          for (const frame of browser.data.queued) upstream.send(frame);
+          for (const frame of browser.data.queued) {
+            upstream.send(frame);
+          }
           browser.data.queued = [];
         };
         upstream.onmessage = (event) => browser.send(String(event.data));
@@ -142,8 +157,11 @@ export async function serveUi({ port, hubUrl, buildDir }: UiOptions): Promise<()
       message(browser, message) {
         const upstream = browser.data.hub;
         const frame = String(message);
-        if (upstream?.readyState === WebSocket.OPEN) upstream.send(frame);
-        else browser.data.queued.push(frame);
+        if (upstream?.readyState === WebSocket.OPEN) {
+          upstream.send(frame);
+        } else {
+          browser.data.queued.push(frame);
+        }
       },
       close(browser) {
         browser.data.hub?.close();

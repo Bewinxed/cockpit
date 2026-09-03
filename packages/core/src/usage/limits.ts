@@ -1,7 +1,7 @@
-import { readFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-import type { ClaudeLimits, LimitWindow } from './types';
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import type { ClaudeLimits, LimitWindow } from "./types";
 
 /**
  * Live Claude rate-limit utilization (USAGE-SPEC.md §4.5). Reads the OAuth
@@ -11,7 +11,7 @@ import type { ClaudeLimits, LimitWindow } from './types';
  * as `{ error, windows: [] }` rather than exceptions.
  */
 
-const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
+const USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 const TIMEOUT_MS = 10_000;
 const CACHE_TTL_MS = 60_000;
 const NON_429_BACKOFF_MS = 2 * 60_000;
@@ -21,26 +21,30 @@ const BACKOFF_STEPS_MS = [5 * 60_000, 15 * 60_000, 60 * 60_000];
 interface OauthCreds {
   accessToken?: string;
   expiresAt?: number;
-  subscriptionType?: string;
   rateLimitTier?: string;
+  subscriptionType?: string;
 }
 
 interface LimitWindowRaw {
-  kind?: string;
   group?: string;
+  is_active?: boolean;
+  kind?: string;
   percent?: number;
-  severity?: string;
   resets_at?: string | null;
   scope?: { model?: { display_name?: string } } | null;
-  is_active?: boolean;
+  severity?: string;
 }
 
 interface UsageResponse {
-  limits?: LimitWindowRaw[];
   five_hour?: { utilization?: number; resets_at?: string } | null;
+  limits?: LimitWindowRaw[];
   seven_day?: { utilization?: number; resets_at?: string } | null;
   spend?: {
-    used?: { amount_minor?: number; exponent?: number; currency?: string } | null;
+    used?: {
+      amount_minor?: number;
+      exponent?: number;
+      currency?: string;
+    } | null;
     limit?: number | null;
   } | null;
 }
@@ -49,10 +53,16 @@ let cached: { at: number; value: ClaudeLimits } | null = null;
 /** The last successful reading, kept to serve (stale) through a later failure. */
 let lastGood: ClaudeLimits | null = null;
 /** Failure retention: the error result to return and how long it is valid for. */
-let lastFailure: { at: number; until: number; streak: number; value: ClaudeLimits } | null =
-  null;
+let lastFailure: {
+  at: number;
+  until: number;
+  streak: number;
+  value: ClaudeLimits;
+} | null = null;
 
-export async function fetchClaudeLimits(opts?: { configDir?: string }): Promise<ClaudeLimits> {
+export async function fetchClaudeLimits(opts?: {
+  configDir?: string;
+}): Promise<ClaudeLimits> {
   const now = Date.now();
 
   // A recent failure is still cooling down: return its cached error result
@@ -65,51 +75,51 @@ export async function fetchClaudeLimits(opts?: { configDir?: string }): Promise<
     return cached.value;
   }
 
-  const configDir = opts?.configDir ?? join(homedir(), '.claude');
-  const credsPath = join(configDir, '.credentials.json');
+  const configDir = opts?.configDir ?? join(homedir(), ".claude");
+  const credsPath = join(configDir, ".credentials.json");
 
   let raw: string;
   try {
-    raw = await readFile(credsPath, 'utf8');
+    raw = await readFile(credsPath, "utf8");
   } catch {
-    return errorResult('not signed in');
+    return errorResult("not signed in");
   }
 
   let oauth: OauthCreds | undefined;
   try {
     oauth = (JSON.parse(raw) as { claudeAiOauth?: OauthCreds }).claudeAiOauth;
   } catch {
-    return errorResult('not signed in');
+    return errorResult("not signed in");
   }
 
   const token = oauth?.accessToken;
   if (!token) {
-    return errorResult('not signed in');
+    return errorResult("not signed in");
   }
 
   if (oauth?.expiresAt !== undefined && oauth.expiresAt < Date.now()) {
-    return errorResult('token expired');
+    return errorResult("token expired");
   }
 
   const res = await fetch(USAGE_URL, {
     headers: {
       Authorization: `Bearer ${token}`,
-      'anthropic-beta': 'oauth-2025-04-20',
+      "anthropic-beta": "oauth-2025-04-20",
     },
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
 
   if (!res.ok) {
-    return failureResult(res.status, res.headers.get('retry-after'));
+    return failureResult(res.status, res.headers.get("retry-after"));
   }
 
   const body = (await res.json()) as UsageResponse;
 
   const windows: LimitWindow[] = (body.limits ?? []).map((w) => ({
-    kind: w.kind ?? '',
-    group: w.group ?? '',
+    kind: w.kind ?? "",
+    group: w.group ?? "",
     percent: w.percent ?? 0,
-    severity: w.severity ?? 'normal',
+    severity: w.severity ?? "normal",
     resetsAt: w.resets_at ?? null,
     scopeLabel: w.scope?.model?.display_name ?? null,
     isActive: w.is_active ?? false,
@@ -119,10 +129,10 @@ export async function fetchClaudeLimits(opts?: { configDir?: string }): Promise<
   if (windows.length === 0) {
     if (body.five_hour) {
       windows.push({
-        kind: 'session',
-        group: 'session',
+        kind: "session",
+        group: "session",
         percent: body.five_hour.utilization ?? 0,
-        severity: 'normal',
+        severity: "normal",
         resetsAt: body.five_hour.resets_at ?? null,
         scopeLabel: null,
         isActive: false,
@@ -130,10 +140,10 @@ export async function fetchClaudeLimits(opts?: { configDir?: string }): Promise<
     }
     if (body.seven_day) {
       windows.push({
-        kind: 'weekly_all',
-        group: 'weekly',
+        kind: "weekly_all",
+        group: "weekly",
         percent: body.seven_day.utilization ?? 0,
-        severity: 'normal',
+        severity: "normal",
         resetsAt: body.seven_day.resets_at ?? null,
         scopeLabel: null,
         isActive: false,
@@ -144,7 +154,7 @@ export async function fetchClaudeLimits(opts?: { configDir?: string }): Promise<
   const used = body.spend?.used;
   const spendUsed =
     used && used.amount_minor !== undefined && used.exponent !== undefined
-      ? used.amount_minor / Math.pow(10, used.exponent)
+      ? used.amount_minor / 10 ** used.exponent
       : null;
 
   const result: ClaudeLimits = {
@@ -181,17 +191,21 @@ function errorResult(error: string): ClaudeLimits {
  * escalates by streak (5m → 15m → 60m). Other failures cool down 2m. If a good
  * reading was ever fetched, that is returned stale rather than empty windows.
  */
-function failureResult(status: number, retryAfter: string | null): ClaudeLimits {
+function failureResult(
+  status: number,
+  retryAfter: string | null
+): ClaudeLimits {
   const now = Date.now();
   const streak = (lastFailure?.streak ?? 0) + 1;
 
   let until: number;
   if (status === 429) {
-    const seconds = retryAfter === null ? NaN : Number(retryAfter);
+    const seconds = retryAfter === null ? Number.NaN : Number(retryAfter);
     if (Number.isFinite(seconds) && seconds > 0) {
       until = now + seconds * 1000;
     } else {
-      const step = BACKOFF_STEPS_MS[Math.min(streak - 1, BACKOFF_STEPS_MS.length - 1)];
+      const step =
+        BACKOFF_STEPS_MS[Math.min(streak - 1, BACKOFF_STEPS_MS.length - 1)];
       until = now + step;
     }
   } else {

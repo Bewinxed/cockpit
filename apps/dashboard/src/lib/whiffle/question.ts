@@ -1,10 +1,18 @@
-import type { PermissionResult, UserAnswers, UserQuestion } from '@whiffle/core';
-import { ASK_USER_QUESTION, QUESTION_DISMISSED, answeredQuestionInput } from '@whiffle/core';
+import type {
+  PermissionResult,
+  UserAnswers,
+  UserQuestion,
+} from "@whiffle/core";
+import {
+  ASK_USER_QUESTION,
+  answeredQuestionInput,
+  QUESTION_DISMISSED,
+} from "@whiffle/core";
 
 const looksLikeQuestion = (value: unknown): value is UserQuestion =>
-  typeof value === 'object' &&
+  typeof value === "object" &&
   value !== null &&
-  typeof (value as UserQuestion).question === 'string' &&
+  typeof (value as UserQuestion).question === "string" &&
   Array.isArray((value as UserQuestion).options);
 
 /**
@@ -16,10 +24,16 @@ export function questionsOf(
   toolName: string,
   input: Record<string, unknown>
 ): UserQuestion[] | null {
-  if (toolName !== ASK_USER_QUESTION) return null;
+  if (toolName !== ASK_USER_QUESTION) {
+    return null;
+  }
   const { questions } = input as { questions?: unknown };
-  if (!Array.isArray(questions) || questions.length === 0) return null;
-  return questions.every(looksLikeQuestion) ? (questions as UserQuestion[]) : null;
+  if (!Array.isArray(questions) || questions.length === 0) {
+    return null;
+  }
+  return questions.every(looksLikeQuestion)
+    ? (questions as UserQuestion[])
+    : null;
 }
 
 /**
@@ -30,11 +44,14 @@ export function questionAnswer(
   input: Record<string, unknown>,
   answers: UserAnswers
 ): PermissionResult {
-  return { behavior: 'allow', updatedInput: answeredQuestionInput(input, answers) };
+  return {
+    behavior: "allow",
+    updatedInput: answeredQuestionInput(input, answers),
+  };
 }
 
 /** Walking away from a question, which is a denial — the CLI answers its own the same way. */
 export const questionDismissal: PermissionResult = {
-  behavior: 'deny',
+  behavior: "deny",
   message: QUESTION_DISMISSED,
 };

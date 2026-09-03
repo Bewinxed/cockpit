@@ -9,12 +9,17 @@ export interface CwdGroup<T> {
   rows: T[];
 }
 
-export function groupByCwd<T extends { cwd: string }>(rows: T[]): Array<T | CwdGroup<T>> {
+export function groupByCwd<T extends { cwd: string }>(
+  rows: T[]
+): Array<T | CwdGroup<T>> {
   const byCwd = new Map<string, T[]>();
   for (const row of rows) {
     const seen = byCwd.get(row.cwd);
-    if (seen) seen.push(row);
-    else byCwd.set(row.cwd, [row]);
+    if (seen) {
+      seen.push(row);
+    } else {
+      byCwd.set(row.cwd, [row]);
+    }
   }
 
   const emitted = new Set<string>();
@@ -25,7 +30,9 @@ export function groupByCwd<T extends { cwd: string }>(rows: T[]): Array<T | CwdG
       result.push(row);
       continue;
     }
-    if (emitted.has(row.cwd)) continue;
+    if (emitted.has(row.cwd)) {
+      continue;
+    }
     emitted.add(row.cwd);
     result.push({ cwd: row.cwd, rows: members });
   }
@@ -38,4 +45,5 @@ export function groupByCwd<T extends { cwd: string }>(rows: T[]): Array<T | CwdG
  */
 export const isCwdGroup = <T extends { cwd: string }>(
   entry: T | CwdGroup<T>
-): entry is CwdGroup<T> => 'rows' in entry && Array.isArray((entry as CwdGroup<T>).rows);
+): entry is CwdGroup<T> =>
+  "rows" in entry && Array.isArray((entry as CwdGroup<T>).rows);

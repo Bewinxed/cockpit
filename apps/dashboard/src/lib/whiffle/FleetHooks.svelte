@@ -1,18 +1,29 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
-  import { toast } from 'svelte-sonner';
-  import { hookSentence } from '@whiffle/core';
-  import { IconHook, IconPlus, IconTrash, IconWarningTriangle } from '$lib/icons';
-  import * as Alert from '$lib/components/ui/alert';
-  import { Button } from '$lib/components/ui/button';
-  import * as Card from '$lib/components/ui/card';
-  import { Skeleton } from '$lib/components/ui/skeleton';
-  import { Toggle } from '$lib/components/ui/toggle';
-  import * as Tooltip from '$lib/components/ui/tooltip';
-  import { confirm } from './confirm.svelte';
-  import type { Machine } from './client.svelte';
-  import { draftOf, message, removeHook, saveHook, type FleetHook } from './hooks';
-  import FleetStatusStrip from './FleetStatusStrip.svelte';
+  import { hookSentence } from "@whiffle/core";
+  import { toast } from "svelte-sonner";
+  import { goto } from "$app/navigation";
+  import * as Alert from "$lib/components/ui/alert";
+  import { Button } from "$lib/components/ui/button";
+  import * as Card from "$lib/components/ui/card";
+  import { Skeleton } from "$lib/components/ui/skeleton";
+  import { Toggle } from "$lib/components/ui/toggle";
+  import * as Tooltip from "$lib/components/ui/tooltip";
+  import {
+    IconHook,
+    IconPlus,
+    IconTrash,
+    IconWarningTriangle,
+  } from "$lib/icons";
+  import type { Machine } from "./client.svelte";
+  import { confirm } from "./confirm.svelte";
+  import FleetStatusStrip from "./FleetStatusStrip.svelte";
+  import {
+    draftOf,
+    type FleetHook,
+    message,
+    removeHook,
+    saveHook,
+  } from "./hooks";
 
   /**
    * The sixth fleet panel: what runs on a session's own lifecycle, and where
@@ -35,9 +46,12 @@
 
   let busy = $state<Record<string, boolean>>({});
 
-  const panelList = 'gap-0 overflow-hidden rounded-[var(--radius-panel)] border-0 bg-[var(--surface-raised)] p-0 shadow-[var(--shadow-lifted)] ring-1 ring-[var(--border-hairline)]';
-  const panelPad = 'gap-[var(--space-3)] rounded-[var(--radius-panel)] border-0 bg-[var(--surface-raised)] p-[var(--space-6)] shadow-[var(--shadow-lifted)] ring-1 ring-[var(--border-hairline)]';
-  const warnAlert = 'items-center rounded-[var(--radius-control)] border-[var(--warning-9)] bg-[var(--warning-3)] p-[var(--space-3)] [&>svg]:text-[var(--warning-11)]';
+  const panelList =
+    "gap-0 overflow-hidden rounded-[var(--radius-panel)] border-0 bg-[var(--surface-raised)] p-0 shadow-[var(--shadow-lifted)] ring-1 ring-[var(--border-hairline)]";
+  const panelPad =
+    "gap-[var(--space-3)] rounded-[var(--radius-panel)] border-0 bg-[var(--surface-raised)] p-[var(--space-6)] shadow-[var(--shadow-lifted)] ring-1 ring-[var(--border-hairline)]";
+  const warnAlert =
+    "items-center rounded-[var(--radius-control)] border-[var(--warning-9)] bg-[var(--warning-3)] p-[var(--space-3)] [&>svg]:text-[var(--warning-11)]";
 
   async function toggle(row: FleetHook, enabled: boolean) {
     busy[row.id] = true;
@@ -58,10 +72,12 @@
     const ok = await confirm({
       title: `Delete ${row.name}?`,
       body: `This removes ${row.name} from every machine it applies to. It can't be undone.`,
-      confirmLabel: 'Delete hook',
+      confirmLabel: "Delete hook",
       destructive: true,
     });
-    if (ok) await remove(row);
+    if (ok) {
+      await remove(row);
+    }
   }
 
   async function remove(row: FleetHook) {
@@ -82,10 +98,11 @@
 
 <div class="flex flex-wrap items-start justify-between gap-3">
   <p class="max-w-prose text-caption">
-    Scripts and calls that run on a session's own lifecycle events — before a tool call, when a
-    session starts, after a turn ends. Written to every machine it applies to and kept converged.
+    Scripts and calls that run on a session's own lifecycle events — before a
+    tool call, when a session starts, after a turn ends. Written to every
+    machine it applies to and kept converged.
   </p>
-  <Button size="sm" onclick={() => goto('/hooks/new')}>
+  <Button onclick={() => goto('/hooks/new')} size="sm">
     <IconPlus class="shrink-0" />
     New hook
   </Button>
@@ -94,15 +111,17 @@
 {#if error}
   <Alert.Root class={warnAlert}>
     <IconWarningTriangle />
-    <Alert.Description class="text-caption text-[var(--warning-11)]">{error}</Alert.Description>
+    <Alert.Description class="text-caption text-[var(--warning-11)]"
+      >{error}</Alert.Description
+    >
   </Alert.Root>
 {:else if hooks.length === 0}
   <Card.Root class={panelPad}>
     <p class="text-caption">
-      No hooks yet. Add one and every machine gets the script, registered against the event you
-      pick.
+      No hooks yet. Add one and every machine gets the script, registered
+      against the event you pick.
     </p>
-    <Button size="sm" class="self-start" onclick={() => goto('/hooks/new')}>
+    <Button class="self-start" onclick={() => goto('/hooks/new')} size="sm">
       <IconPlus class="shrink-0" />
       New hook
     </Button>
@@ -111,27 +130,38 @@
   <Card.Root class={panelList}>
     <ul class="flex flex-col">
       {#each hooks as row (row.id)}
-        <li class="group flex flex-col gap-[var(--space-2)] border-t border-[var(--border-hairline)] p-[var(--space-4)] first:border-t-0">
+        <li
+          class="group flex flex-col gap-[var(--space-2)] border-t border-[var(--border-hairline)] p-[var(--space-4)] first:border-t-0"
+        >
           <div class="flex items-start gap-[var(--space-3)]">
             <div class="flex min-w-0 flex-1 flex-col gap-0.5">
               <span class="flex flex-wrap items-baseline gap-x-2">
-                <a href="/hooks/{row.id}" class="truncate text-caption font-medium text-foreground hover:underline">
+                <a
+                  class="truncate text-caption font-medium text-foreground hover:underline"
+                  href="/hooks/{row.id}"
+                >
                   {row.name}
                 </a>
-                <span class="shrink-0 font-mono text-micro text-muted-foreground">{row.event}</span>
+                <span
+                  class="shrink-0 font-mono text-micro text-muted-foreground"
+                  >{row.event}</span
+                >
               </span>
-              <span class="truncate text-micro text-muted-foreground" title={hookSentence(row)}>
+              <span
+                class="truncate text-micro text-muted-foreground"
+                title={hookSentence(row)}
+              >
                 {hookSentence(row)}
               </span>
             </div>
             <Toggle
-              variant="outline"
-              size="sm"
               class="h-6 shrink-0 px-2 text-micro font-normal text-muted-foreground aria-pressed:font-medium aria-pressed:text-foreground"
-              pressed={row.enabled}
               disabled={busy[row.id] === true}
               onPressedChange={(next) => toggle(row, next)}
+              pressed={row.enabled}
+              size="sm"
               title="A disabled hook is taken off the machines, not left switched off"
+              variant="outline"
             >
               {row.enabled ? 'Enabled' : 'Disabled'}
             </Toggle>
@@ -139,7 +169,14 @@
               <Tooltip.Root>
                 <Tooltip.Trigger>
                   {#snippet child({ props })}
-                    <Button {...props} variant="ghost" size="icon-sm" class="text-muted-foreground" aria-label="Edit {row.name}" onclick={() => goto(`/hooks/${row.id}`)}>
+                    <Button
+                      {...props}
+                      aria-label="Edit {row.name}"
+                      class="text-muted-foreground"
+                      onclick={() => goto(`/hooks/${row.id}`)}
+                      size="icon-sm"
+                      variant="ghost"
+                    >
                       <IconHook />
                     </Button>
                   {/snippet}
@@ -149,7 +186,15 @@
               <Tooltip.Root>
                 <Tooltip.Trigger>
                   {#snippet child({ props })}
-                    <Button {...props} variant="ghost" size="icon-sm" class="text-muted-foreground hover:text-destructive" aria-label="Delete {row.name}" disabled={busy[row.id] === true} onclick={() => askRemove(row)}>
+                    <Button
+                      {...props}
+                      aria-label="Delete {row.name}"
+                      class="text-muted-foreground hover:text-destructive"
+                      disabled={busy[row.id] === true}
+                      onclick={() => askRemove(row)}
+                      size="icon-sm"
+                      variant="ghost"
+                    >
                       <IconTrash />
                     </Button>
                   {/snippet}
@@ -171,7 +216,12 @@
                  that was supposed to run and did not, and its reason was
                  reachable only by hovering the exact pixel with a mouse — never
                  by keyboard, never on touch, never on the page. -->
-            <FleetStatusStrip {machines} kind="hooks" name={row.id} what="hook" />
+            <FleetStatusStrip
+              kind="hooks"
+              {machines}
+              name={row.id}
+              what="hook"
+            />
           {/if}
         </li>
       {/each}

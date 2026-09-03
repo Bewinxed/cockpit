@@ -1,12 +1,23 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Whiffle — Component library (v5)</title>
-<link rel="preload" href="./fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="./fonts/geist.css">
-<link rel="stylesheet" href="./tokens.css">
-<style>
-/* =============================================================================
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+      name="viewport"
+    >
+    <title>Whiffle — Component library (v5)</title>
+    <link
+      as="font"
+      crossorigin
+      href="./fonts/geist-latin-wght-normal.woff2"
+      rel="preload"
+      type="font/woff2"
+    >
+    <link href="./fonts/geist.css" rel="stylesheet">
+    <link href="./tokens.css" rel="stylesheet">
+    <style>
+      /* =============================================================================
    WHIFFLE — PHASE 4 COMPONENT LIBRARY ("storybook")
    Every colour below resolves through a token. Nothing is typed.
    Three tiers: global (tokens.css) -> alias (tokens.css) -> component (this file).
@@ -18,701 +29,2857 @@
    shared component tier, so density changes size/space ONLY — never colour or
    structure.
    ========================================================================== */
-:root{
-  /* ---- component dimension ramp — COMFORTABLE (default) ------------------ */
-  --c-btn-h:44px;        /* primary / secondary button */
-  --c-btn-h-s:36px;      /* icon-only / small */
-  --c-btn-pad:16px;
-  --c-btn-gap:8px;
-  --c-btn-fs:14.5px;     /* --text-md */
-  --c-input-h:44px;
-  --c-input-fs:16px;     /* >=16px so iOS never zooms at any width */
-  --c-input-pad:12px;
-  --c-input-gap:10px;
-  --c-mark:26px;         /* item mark */
-  --c-mark-glyph:14px;
-  --c-pill-h:24px;
-  --c-pill-gap:6px;
-  --c-pill-fs:11.5px;    /* --text-sm */
-  --c-nav-h:40px;
-  --c-row-gap:6px;
-  --c-card-pad:14px;
-  --c-card-gap:10px;
-  --c-page:36px;         /* pagination button */
-  --c-sheet-w:300px;
-  --c-mod-w:460px;
-  --c-mod-gap:10px;
-  --c-modal-input-h:52px; /* modal fields — larger than the standard input */
-  --c-modal-btn-h:48px;   /* modal footer buttons */
-  --c-sw:18px;
-}
-/* ---- compact dimension ramp — the SAME component tier, size/space only ---- */
-.d-compact{
-  --c-btn-h:32px;
-  --c-btn-h-s:28px;
-  --c-btn-pad:10px;
-  --c-btn-gap:6px;
-  --c-btn-fs:13px;       /* --text-base */
-  --c-input-h:34px;
-  --c-input-fs:16px;     /* still 16px to keep iOS from zooming */
-  --c-input-pad:10px;
-  --c-input-gap:8px;
-  --c-mark:20px;
-  --c-mark-glyph:11px;
-  --c-pill-h:18px;
-  --c-pill-gap:4px;
-  --c-pill-fs:10.25px;   /* --text-xs */
-  --c-nav-h:30px;
-  --c-row-gap:4px;
-  --c-card-pad:12px;
-  --c-card-gap:8px;
-  --c-page:28px;
-  --c-modal-input-h:42px; /* modal fields — compact */
-  --c-modal-btn-h:38px;   /* modal footer buttons — compact */
-  --c-sw:15px;
-}
+      :root {
+        /* ---- component dimension ramp — COMFORTABLE (default) ------------------ */
+        --c-btn-h: 44px; /* primary / secondary button */
+        --c-btn-h-s: 36px; /* icon-only / small */
+        --c-btn-pad: 16px;
+        --c-btn-gap: 8px;
+        --c-btn-fs: 14.5px; /* --text-md */
+        --c-input-h: 44px;
+        --c-input-fs: 16px; /* >=16px so iOS never zooms at any width */
+        --c-input-pad: 12px;
+        --c-input-gap: 10px;
+        --c-mark: 26px; /* item mark */
+        --c-mark-glyph: 14px;
+        --c-pill-h: 24px;
+        --c-pill-gap: 6px;
+        --c-pill-fs: 11.5px; /* --text-sm */
+        --c-nav-h: 40px;
+        --c-row-gap: 6px;
+        --c-card-pad: 14px;
+        --c-card-gap: 10px;
+        --c-page: 36px; /* pagination button */
+        --c-sheet-w: 300px;
+        --c-mod-w: 460px;
+        --c-mod-gap: 10px;
+        --c-modal-input-h: 52px; /* modal fields — larger than the standard input */
+        --c-modal-btn-h: 48px; /* modal footer buttons */
+        --c-sw: 18px;
+      }
+      /* ---- compact dimension ramp — the SAME component tier, size/space only ---- */
+      .d-compact {
+        --c-btn-h: 32px;
+        --c-btn-h-s: 28px;
+        --c-btn-pad: 10px;
+        --c-btn-gap: 6px;
+        --c-btn-fs: 13px; /* --text-base */
+        --c-input-h: 34px;
+        --c-input-fs: 16px; /* still 16px to keep iOS from zooming */
+        --c-input-pad: 10px;
+        --c-input-gap: 8px;
+        --c-mark: 20px;
+        --c-mark-glyph: 11px;
+        --c-pill-h: 18px;
+        --c-pill-gap: 4px;
+        --c-pill-fs: 10.25px; /* --text-xs */
+        --c-nav-h: 30px;
+        --c-row-gap: 4px;
+        --c-card-pad: 12px;
+        --c-card-gap: 8px;
+        --c-page: 28px;
+        --c-modal-input-h: 42px; /* modal fields — compact */
+        --c-modal-btn-h: 38px; /* modal footer buttons — compact */
+        --c-sw: 15px;
+      }
 
-/* ===== component styling tier ==============================================
+      /* ===== component styling tier ==============================================
    Each component selector reads ALIAS tokens through the dimension tokens above.
    Colour and structure are identical across densities; only the ramp values
    change.                                                                     */
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:auto}
-body{
-  font-family:var(--font-body);
-  font-size:var(--text-md);
-  line-height:var(--leading-body);
-  color:var(--ink-strong);
-  background:var(--surface-field);
-  -webkit-font-smoothing:antialiased;
-}
-/* the gallery chrome — a sunken band + raised cards, the ledger discipline */
-.stage{max-width:1180px;margin:0 auto;padding:40px 24px 120px}
-.hdr{margin:0 0 34px}
-.hdr h1{font-size:var(--text-3xl);font-weight:var(--weight-strong);line-height:var(--leading-tight);letter-spacing:var(--track-display)}
-.hdr p{color:var(--ink-muted);font-size:var(--text-md);margin-top:6px;max-width:70ch}
-.www{display:inline-flex;align-items:center;gap:var(--c-pill-gap);margin-top:14px;padding:6px 12px;border:1px solid var(--border-control);border-radius:var(--radius-pill);color:var(--ink-body);font-size:var(--text-sm)}
-.www svg{width:13px;height:13px;color:var(--ink-muted)}
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: auto;
+      }
+      body {
+        font-family: var(--font-body);
+        font-size: var(--text-md);
+        line-height: var(--leading-body);
+        color: var(--ink-strong);
+        background: var(--surface-field);
+        -webkit-font-smoothing: antialiased;
+      }
+      /* the gallery chrome — a sunken band + raised cards, the ledger discipline */
+      .stage {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 40px 24px 120px;
+      }
+      .hdr {
+        margin: 0 0 34px;
+      }
+      .hdr h1 {
+        font-size: var(--text-3xl);
+        font-weight: var(--weight-strong);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--track-display);
+      }
+      .hdr p {
+        color: var(--ink-muted);
+        font-size: var(--text-md);
+        margin-top: 6px;
+        max-width: 70ch;
+      }
+      .www {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--c-pill-gap);
+        margin-top: 14px;
+        padding: 6px 12px;
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-pill);
+        color: var(--ink-body);
+        font-size: var(--text-sm);
+      }
+      .www svg {
+        width: 13px;
+        height: 13px;
+        color: var(--ink-muted);
+      }
 
-/* density toggle (screenshot affordance, not design) */
-.tools{position:fixed;right:14px;bottom:14px;left:14px;z-index:99;display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;
-  padding:6px;border:1px solid var(--border-control);background:var(--surface-raised);border-radius:var(--radius-control);box-shadow:var(--shadow-lifted)}
-.tools button{height:36px;padding:0 12px;border:1px solid var(--border-control);border-radius:var(--radius-control);background:var(--surface-raised);color:var(--ink-body);font-family:var(--font-body);font-size:var(--text-sm);cursor:pointer}
-.tools button.on{background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);color:var(--on-brand);border-color:transparent}
+      /* density toggle (screenshot affordance, not design) */
+      .tools {
+        position: fixed;
+        right: 14px;
+        bottom: 14px;
+        left: 14px;
+        z-index: 99;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        justify-content: flex-end;
+        padding: 6px;
+        border: 1px solid var(--border-control);
+        background: var(--surface-raised);
+        border-radius: var(--radius-control);
+        box-shadow: var(--shadow-lifted);
+      }
+      .tools button {
+        height: 36px;
+        padding: 0 12px;
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-control);
+        background: var(--surface-raised);
+        color: var(--ink-body);
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        cursor: pointer;
+      }
+      .tools button.on {
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        border-color: transparent;
+      }
 
-/* ---- section / component group ------------------------------------------ */
-.group{margin:0 0 44px}
-.group > h2{font-size:var(--text-xl);font-weight:var(--weight-strong);line-height:var(--leading-tight);letter-spacing:var(--track-display);margin-bottom:4px}
-.group > .desc{color:var(--ink-muted);font-size:var(--text-md);margin-bottom:16px;max-width:76ch}
-.row{display:flex;flex-wrap:wrap;gap:var(--c-card-gap);align-items:flex-start}
-.iter{display:flex;flex-wrap:wrap;gap:var(--c-card-gap);align-items:flex-start}
-.iter .iter{width:100%}
+      /* ---- section / component group ------------------------------------------ */
+      .group {
+        margin: 0 0 44px;
+      }
+      .group > h2 {
+        font-size: var(--text-xl);
+        font-weight: var(--weight-strong);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--track-display);
+        margin-bottom: 4px;
+      }
+      .group > .desc {
+        color: var(--ink-muted);
+        font-size: var(--text-md);
+        margin-bottom: 16px;
+        max-width: 76ch;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--c-card-gap);
+        align-items: flex-start;
+      }
+      .iter {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--c-card-gap);
+        align-items: flex-start;
+      }
+      .iter .iter {
+        width: 100%;
+      }
 
-/* ---- card / panel ---------------------------------------------------------
+      /* ---- card / panel ---------------------------------------------------------
    the white-raised-on-grey inset-well signature: raised card, sunken field,
    hairline, 7px radius inside 10px.                                            */
-.panel{background:var(--surface-raised);border-radius:var(--radius-panel);padding:var(--c-card-pad);box-shadow:var(--shadow-lifted);display:flex;flex-direction:column}
-.panel .well{background:var(--surface-field);border:1px solid var(--border-hairline);border-radius:var(--radius-well);padding:var(--c-card-pad);display:flex;flex-direction:column;gap:var(--c-card-gap);flex:1 1 auto;min-height:0;justify-content:center}
-.panel .well .k{color:var(--ink-label);font-size:var(--text-sm);font-weight:var(--weight-medium)}
-.panel .well .v{font-size:var(--text-3xl);font-weight:var(--weight-strong);line-height:var(--leading-numeric);color:var(--ink-strong)}
-.panel .well .u{color:var(--ink-muted);font-size:var(--text-sm)}
+      .panel {
+        background: var(--surface-raised);
+        border-radius: var(--radius-panel);
+        padding: var(--c-card-pad);
+        box-shadow: var(--shadow-lifted);
+        display: flex;
+        flex-direction: column;
+      }
+      .panel .well {
+        background: var(--surface-field);
+        border: 1px solid var(--border-hairline);
+        border-radius: var(--radius-well);
+        padding: var(--c-card-pad);
+        display: flex;
+        flex-direction: column;
+        gap: var(--c-card-gap);
+        flex: 1 1 auto;
+        min-height: 0;
+        justify-content: center;
+      }
+      .panel .well .k {
+        color: var(--ink-label);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+      }
+      .panel .well .v {
+        font-size: var(--text-3xl);
+        font-weight: var(--weight-strong);
+        line-height: var(--leading-numeric);
+        color: var(--ink-strong);
+      }
+      .panel .well .u {
+        color: var(--ink-muted);
+        font-size: var(--text-sm);
+      }
 
-/* ---- nav item + count pill ------------------------------------------------
+      /* ---- nav item + count pill ------------------------------------------------
    active = raised fill on the sunken rail; count pill = status-ink on tint.   */
-.rail{display:flex;flex-direction:column;gap:1px;background:var(--surface-sunken);border:1px solid var(--border-hairline);border-radius:var(--radius-control);padding:6px;width:220px}
-.nav-i{height:var(--c-nav-h);border-radius:var(--radius-control);display:flex;align-items:center;gap:10px;padding:0 10px;font-size:var(--text-md);color:var(--ink-body);font-weight:var(--weight-medium);text-decoration:none}
-.nav-i .ic{width:18px;text-align:center;color:var(--ink-muted);flex:0 0 auto}
-.nav-i .ic svg{width:16px;height:16px;display:block}
-.nav-i .lbl{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.nav-i .cnt{margin-left:auto;flex:0 0 auto;font-size:var(--text-sm);font-weight:var(--weight-strong);line-height:1;padding:3px 7px;border-radius:var(--radius-pill);background:var(--status-live-bg);color:var(--status-live-ink)}
-.nav-i .cnt.attn{background:var(--status-attn-bg);color:var(--status-attn-ink)}
-.nav-i.on{background:var(--surface-raised);color:var(--ink-strong);box-shadow:var(--shadow-tile);font-weight:var(--weight-strong)}
-.nav-i.on .ic{color:var(--ink-body)}
-@media (hover:hover) and (pointer:fine){
-  .nav-i:hover{background:var(--surface-hover)}
-  .nav-i.on:hover{background:var(--surface-raised)}
-  .nav-i:active{background:var(--surface-active)}
-}
-.nav-i:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:var(--radius-control)}
+      .rail {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        background: var(--surface-sunken);
+        border: 1px solid var(--border-hairline);
+        border-radius: var(--radius-control);
+        padding: 6px;
+        width: 220px;
+      }
+      .nav-i {
+        height: var(--c-nav-h);
+        border-radius: var(--radius-control);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 10px;
+        font-size: var(--text-md);
+        color: var(--ink-body);
+        font-weight: var(--weight-medium);
+        text-decoration: none;
+      }
+      .nav-i .ic {
+        width: 18px;
+        text-align: center;
+        color: var(--ink-muted);
+        flex: 0 0 auto;
+      }
+      .nav-i .ic svg {
+        width: 16px;
+        height: 16px;
+        display: block;
+      }
+      .nav-i .lbl {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .nav-i .cnt {
+        margin-left: auto;
+        flex: 0 0 auto;
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        line-height: 1;
+        padding: 3px 7px;
+        border-radius: var(--radius-pill);
+        background: var(--status-live-bg);
+        color: var(--status-live-ink);
+      }
+      .nav-i .cnt.attn {
+        background: var(--status-attn-bg);
+        color: var(--status-attn-ink);
+      }
+      .nav-i.on {
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        box-shadow: var(--shadow-tile);
+        font-weight: var(--weight-strong);
+      }
+      .nav-i.on .ic {
+        color: var(--ink-body);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .nav-i:hover {
+          background: var(--surface-hover);
+        }
+        .nav-i.on:hover {
+          background: var(--surface-raised);
+        }
+        .nav-i:active {
+          background: var(--surface-active);
+        }
+      }
+      .nav-i:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+        border-radius: var(--radius-control);
+      }
 
-/* ---- buttons ---------------------------------------------------------------
+      /* ---- buttons ---------------------------------------------------------------
    primary: graphite gradient + inset bottom edge (the never-flat action).
    secondary: ghost/outline. destructive: red outline; red filled only for the
    final-confirm variant. icon-only and icon+label share the same box.          */
-.btn{height:var(--c-btn-h);padding:0 var(--c-btn-pad);border:1px solid var(--border-control);border-radius:var(--radius-control);
-  display:inline-flex;align-items:center;justify-content:center;gap:var(--c-btn-gap);
-  font-family:var(--font-body);font-size:var(--c-btn-fs);font-weight:var(--weight-medium);
-  line-height:var(--leading-ui);letter-spacing:0;background:var(--surface-raised);color:var(--ink-strong);cursor:pointer;
-  white-space:nowrap;text-decoration:none}
-.btn svg{width:18px;height:18px;flex:0 0 auto}
-.btn.ic{width:var(--c-btn-h);padding:0}
-.btn.ic.sm{width:var(--c-btn-h-s);height:var(--c-btn-h-s)}
-.btn.ic.sm svg{width:16px;height:16px}
-.btn.pri{background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);color:var(--on-brand);border-color:transparent}
-.btn.des{border-color:var(--error-9);color:var(--error-11)}
-.btn.des.sol{background:var(--error-9);color:var(--mark-glyph);border-color:transparent;box-shadow:var(--shadow-action)}
-@media (hover:hover) and (pointer:fine){
-  .btn:hover{background-color:var(--surface-hover)}
-  .btn.pri:hover{filter:brightness(1.08)}
-  .btn:active{filter:brightness(0.94);box-shadow:var(--shadow-inset-sel)}
-  .btn.des:hover{background-color:var(--error-3)}
-}
-.btn:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:var(--radius-control)}
-.btn[disabled]{cursor:default;opacity:.45;box-shadow:none;background-image:none;border-color:var(--border-control);color:var(--ink-muted)}
+      .btn {
+        height: var(--c-btn-h);
+        padding: 0 var(--c-btn-pad);
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-control);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--c-btn-gap);
+        font-family: var(--font-body);
+        font-size: var(--c-btn-fs);
+        font-weight: var(--weight-medium);
+        line-height: var(--leading-ui);
+        letter-spacing: 0;
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        cursor: pointer;
+        white-space: nowrap;
+        text-decoration: none;
+      }
+      .btn svg {
+        width: 18px;
+        height: 18px;
+        flex: 0 0 auto;
+      }
+      .btn.ic {
+        width: var(--c-btn-h);
+        padding: 0;
+      }
+      .btn.ic.sm {
+        width: var(--c-btn-h-s);
+        height: var(--c-btn-h-s);
+      }
+      .btn.ic.sm svg {
+        width: 16px;
+        height: 16px;
+      }
+      .btn.pri {
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        border-color: transparent;
+      }
+      .btn.des {
+        border-color: var(--error-9);
+        color: var(--error-11);
+      }
+      .btn.des.sol {
+        background: var(--error-9);
+        color: var(--mark-glyph);
+        border-color: transparent;
+        box-shadow: var(--shadow-action);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .btn:hover {
+          background-color: var(--surface-hover);
+        }
+        .btn.pri:hover {
+          filter: brightness(1.08);
+        }
+        .btn:active {
+          filter: brightness(0.94);
+          box-shadow: var(--shadow-inset-sel);
+        }
+        .btn.des:hover {
+          background-color: var(--error-3);
+        }
+      }
+      .btn:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+        border-radius: var(--radius-control);
+      }
+      .btn[disabled] {
+        cursor: default;
+        opacity: 0.45;
+        box-shadow: none;
+        background-image: none;
+        border-color: var(--border-control);
+        color: var(--ink-muted);
+      }
 
-/* ---- status pill -----------------------------------------------------------
+      /* ---- status pill -----------------------------------------------------------
    Flexoki accent light-tint bg + darker ink, glyph-led. Idle carries no fill. */
-.pill{display:inline-flex;align-items:center;gap:var(--c-pill-gap);height:var(--c-pill-h);padding:0 10px;border-radius:var(--radius-pill);font-size:var(--c-pill-fs);font-weight:var(--weight-strong);white-space:nowrap}
-.pill svg{width:10px;height:10px;flex:0 0 auto;display:block}
-.pill.live{background:var(--status-live-bg);color:var(--status-live-ink)}
-.pill.attn{background:var(--status-attn-bg);color:var(--status-attn-ink)}
-.pill.done{background:var(--status-done-bg);color:var(--status-done-ink)}
-.pill.fail{background:var(--status-fail-bg);color:var(--status-fail-ink)}
-.pill.idle{background:var(--status-idle-bg);color:var(--status-idle-ink);padding:0;font-weight:var(--weight-medium)}
-.pill:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--c-pill-gap);
+        height: var(--c-pill-h);
+        padding: 0 10px;
+        border-radius: var(--radius-pill);
+        font-size: var(--c-pill-fs);
+        font-weight: var(--weight-strong);
+        white-space: nowrap;
+      }
+      .pill svg {
+        width: 10px;
+        height: 10px;
+        flex: 0 0 auto;
+        display: block;
+      }
+      .pill.live {
+        background: var(--status-live-bg);
+        color: var(--status-live-ink);
+      }
+      .pill.attn {
+        background: var(--status-attn-bg);
+        color: var(--status-attn-ink);
+      }
+      .pill.done {
+        background: var(--status-done-bg);
+        color: var(--status-done-ink);
+      }
+      .pill.fail {
+        background: var(--status-fail-bg);
+        color: var(--status-fail-ink);
+      }
+      .pill.idle {
+        background: var(--status-idle-bg);
+        color: var(--status-idle-ink);
+        padding: 0;
+        font-weight: var(--weight-medium);
+      }
+      .pill:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-/* ---- item mark -------------------------------------------------------------
+      /* ---- item mark -------------------------------------------------------------
    identity HUE (8 Flexoki accent hues) + harness GLYPH, keyed to identity.
    A saturated solid with a white glyph (top-light/bottom-shade read).           */
-.mark{width:var(--c-mark);height:var(--c-mark);border-radius:var(--radius-mark);flex:0 0 auto;
-  display:grid;place-items:center;background-image:var(--mark-overlay);background-color:var(--mark-1)}
-.mark svg{width:var(--c-mark-glyph);height:var(--c-mark-glyph);display:block;stroke:var(--mark-glyph);opacity:1;stroke-width:1.6}
-.mark.m2{background-color:var(--mark-2)}
-.mark.m3{background-color:var(--mark-3)}
-.mark.m4{background-color:var(--mark-4)}
-.mark.m5{background-color:var(--mark-5)}
-.mark.m6{background-color:var(--mark-6)}
-.mark.m7{background-color:var(--mark-7)}
-.mark.m8{background-color:var(--mark-8)}
-.mark-row{display:inline-flex;align-items:center;gap:var(--c-card-gap)}
-.mark-row .meta{display:flex;flex-direction:column;line-height:1.25}
-.mark-row .meta b{font-size:var(--text-base);font-weight:var(--weight-medium);color:var(--ink-strong)}
-.mark-row .meta span{font-size:var(--text-sm);color:var(--ink-muted)}
+      .mark {
+        width: var(--c-mark);
+        height: var(--c-mark);
+        border-radius: var(--radius-mark);
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        background-image: var(--mark-overlay);
+        background-color: var(--mark-1);
+      }
+      .mark svg {
+        width: var(--c-mark-glyph);
+        height: var(--c-mark-glyph);
+        display: block;
+        stroke: var(--mark-glyph);
+        opacity: 1;
+        stroke-width: 1.6;
+      }
+      .mark.m2 {
+        background-color: var(--mark-2);
+      }
+      .mark.m3 {
+        background-color: var(--mark-3);
+      }
+      .mark.m4 {
+        background-color: var(--mark-4);
+      }
+      .mark.m5 {
+        background-color: var(--mark-5);
+      }
+      .mark.m6 {
+        background-color: var(--mark-6);
+      }
+      .mark.m7 {
+        background-color: var(--mark-7);
+      }
+      .mark.m8 {
+        background-color: var(--mark-8);
+      }
+      .mark-row {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--c-card-gap);
+      }
+      .mark-row .meta {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.25;
+      }
+      .mark-row .meta b {
+        font-size: var(--text-base);
+        font-weight: var(--weight-medium);
+        color: var(--ink-strong);
+      }
+      .mark-row .meta span {
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+      }
 
-/* ---- input ----------------------------------------------------------------- */
-.field{display:flex;flex-direction:column;gap:6px}
-.field label{font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--ink-body)}
-.inp{display:flex;align-items:center;gap:var(--c-input-gap);height:var(--c-input-h);padding:0 var(--c-input-pad);
-  border:1px solid var(--border-control);border-radius:var(--radius-control);background:var(--surface-raised)}
-.inp input{flex:1 1 auto;min-width:0;border:0;outline:0;background:transparent;color:var(--ink-strong);font-family:var(--font-body);font-size:var(--c-input-fs);line-height:var(--leading-ui)}
-.inp input::placeholder{color:var(--ink-muted);opacity:1}
-.inp input:disabled{opacity:.45;cursor:default}
-.inp .lead{color:var(--ink-muted);flex:0 0 auto;display:grid;place-items:center}
-.inp .lead svg{width:16px;height:16px}
-.inp .eye{padding:0;border:0;background:none;color:var(--ink-muted);cursor:pointer;display:grid;place-items:center;width:28px;height:28px}
-.inp .eye svg{width:18px;height:18px}
-.inp:focus-within{outline:2px solid var(--focus-ring);outline-offset:2px}
-.inp input:focus-visible{outline:none}
-.inp input:focus-visible + .eye:focus-visible,.inp:focus-within .eye:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-.inp.has-err{border-color:var(--error-9)}
-.inp.has-err + .hint{color:var(--error-11)}
-.hint{font-size:var(--text-sm);color:var(--ink-muted)}
-.hint.ok{color:var(--success-11)}
-.hint.err{color:var(--error-11)}
+      /* ---- input ----------------------------------------------------------------- */
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .field label {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        color: var(--ink-body);
+      }
+      .inp {
+        display: flex;
+        align-items: center;
+        gap: var(--c-input-gap);
+        height: var(--c-input-h);
+        padding: 0 var(--c-input-pad);
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-control);
+        background: var(--surface-raised);
+      }
+      .inp input {
+        flex: 1 1 auto;
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--ink-strong);
+        font-family: var(--font-body);
+        font-size: var(--c-input-fs);
+        line-height: var(--leading-ui);
+      }
+      .inp input::placeholder {
+        color: var(--ink-muted);
+        opacity: 1;
+      }
+      .inp input:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .inp .lead {
+        color: var(--ink-muted);
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+      }
+      .inp .lead svg {
+        width: 16px;
+        height: 16px;
+      }
+      .inp .eye {
+        padding: 0;
+        border: 0;
+        background: none;
+        color: var(--ink-muted);
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+      }
+      .inp .eye svg {
+        width: 18px;
+        height: 18px;
+      }
+      .inp:focus-within {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      .inp input:focus-visible {
+        outline: none;
+      }
+      .inp input:focus-visible + .eye:focus-visible,
+      .inp:focus-within .eye:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      .inp.has-err {
+        border-color: var(--error-9);
+      }
+      .inp.has-err + .hint {
+        color: var(--error-11);
+      }
+      .hint {
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+      }
+      .hint.ok {
+        color: var(--success-11);
+      }
+      .hint.err {
+        color: var(--error-11);
+      }
 
-/* ---- filter select (with chevron) ------------------------------------------ */
-.sel{height:var(--c-btn-h);padding:0 var(--c-btn-pad);border:1px solid var(--border-control);border-radius:var(--radius-control);
-  display:inline-flex;align-items:center;gap:var(--c-btn-gap);min-width:180px;text-align:left;
-  background:var(--surface-raised);color:var(--ink-strong);font-family:var(--font-body);font-size:var(--c-btn-fs);font-weight:var(--weight-medium);line-height:var(--leading-ui);cursor:pointer}
-.sel svg{width:18px;height:18px;color:var(--ink-muted);margin-left:auto;flex:0 0 auto}
-@media (hover:hover) and (pointer:fine){.sel:hover{background-color:var(--surface-hover)}.sel:active{background-color:var(--surface-active)}}
-.sel:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-.sel .lbl{flex:1 1 auto;min-width:0;text-align:left;font-weight:var(--weight-body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      /* ---- filter select (with chevron) ------------------------------------------ */
+      .sel {
+        height: var(--c-btn-h);
+        padding: 0 var(--c-btn-pad);
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-control);
+        display: inline-flex;
+        align-items: center;
+        gap: var(--c-btn-gap);
+        min-width: 180px;
+        text-align: left;
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        font-family: var(--font-body);
+        font-size: var(--c-btn-fs);
+        font-weight: var(--weight-medium);
+        line-height: var(--leading-ui);
+        cursor: pointer;
+      }
+      .sel svg {
+        width: 18px;
+        height: 18px;
+        color: var(--ink-muted);
+        margin-left: auto;
+        flex: 0 0 auto;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .sel:hover {
+          background-color: var(--surface-hover);
+        }
+        .sel:active {
+          background-color: var(--surface-active);
+        }
+      }
+      .sel:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      .sel .lbl {
+        flex: 1 1 auto;
+        min-width: 0;
+        text-align: left;
+        font-weight: var(--weight-body);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
 
-/* ---- pagination: filled active page, bordered chevrons --------------------- */
-.pager{display:inline-flex;align-items:center;gap:4px}
-.page{min-width:var(--c-page);height:var(--c-page);padding:0 6px;border:1px solid transparent;border-radius:var(--radius-control);
-  display:inline-flex;align-items:center;justify-content:center;background:none;color:var(--ink-body);font-family:var(--font-body);font-size:var(--text-sm);font-weight:var(--weight-medium);line-height:1;cursor:pointer}
-.page svg{width:14px;height:14px}
-.page.b{border-color:var(--border-control);background:var(--surface-raised);color:var(--ink-muted)}
-.page.b svg{width:14px;height:14px}
-.page.on{background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);color:var(--on-brand);font-weight:var(--weight-strong)}
-.page.ellipsis{color:var(--ink-muted);cursor:default}
-@media (hover:hover) and (pointer:fine){.page:not(.on):not(.ellipsis):hover{background-color:var(--surface-hover)}.page:active{background-color:var(--surface-active)}}
-.page:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      /* ---- pagination: filled active page, bordered chevrons --------------------- */
+      .pager {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .page {
+        min-width: var(--c-page);
+        height: var(--c-page);
+        padding: 0 6px;
+        border: 1px solid transparent;
+        border-radius: var(--radius-control);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        color: var(--ink-body);
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        line-height: 1;
+        cursor: pointer;
+      }
+      .page svg {
+        width: 14px;
+        height: 14px;
+      }
+      .page.b {
+        border-color: var(--border-control);
+        background: var(--surface-raised);
+        color: var(--ink-muted);
+      }
+      .page.b svg {
+        width: 14px;
+        height: 14px;
+      }
+      .page.on {
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        font-weight: var(--weight-strong);
+      }
+      .page.ellipsis {
+        color: var(--ink-muted);
+        cursor: default;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .page:not(.on):not(.ellipsis):hover {
+          background-color: var(--surface-hover);
+        }
+        .page:active {
+          background-color: var(--surface-active);
+        }
+      }
+      .page:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-/* ---- sheet (mobile slide-over) ---------------------------------------------- */
-.sheet{width:min(var(--c-sheet-w),100%);max-width:100%;min-width:0;background:var(--surface-overlay);border-radius:var(--radius-panel);box-shadow:var(--shadow-drawer);
-  border:1px solid var(--border-hairline);overflow:hidden;display:flex;flex-direction:column}
-.sheet .sh{padding:calc(var(--c-card-pad) + 4px) var(--c-card-pad);border-bottom:1px solid var(--border-hairline);display:flex;align-items:center;gap:var(--c-card-gap)}
-.sheet .sh b{font-size:var(--text-md);font-weight:var(--weight-strong);line-height:var(--leading-ui)}
-.sheet .sh .x{margin-left:auto;width:32px;height:32px;border:1px solid var(--border-control);border-radius:var(--radius-control);background:var(--surface-raised);color:var(--ink-body);cursor:pointer;display:grid;place-items:center}
-.sheet .sh .x svg{width:16px;height:16px}
-.sheet .sb{padding:var(--c-card-pad);display:flex;flex-direction:column;gap:var(--c-card-gap)}
-.sheet .sb p{color:var(--ink-body);font-size:var(--text-md);line-height:var(--leading-body)}
+      /* ---- sheet (mobile slide-over) ---------------------------------------------- */
+      .sheet {
+        width: min(var(--c-sheet-w), 100%);
+        max-width: 100%;
+        min-width: 0;
+        background: var(--surface-overlay);
+        border-radius: var(--radius-panel);
+        box-shadow: var(--shadow-drawer);
+        border: 1px solid var(--border-hairline);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .sheet .sh {
+        padding: calc(var(--c-card-pad) + 4px) var(--c-card-pad);
+        border-bottom: 1px solid var(--border-hairline);
+        display: flex;
+        align-items: center;
+        gap: var(--c-card-gap);
+      }
+      .sheet .sh b {
+        font-size: var(--text-md);
+        font-weight: var(--weight-strong);
+        line-height: var(--leading-ui);
+      }
+      .sheet .sh .x {
+        margin-left: auto;
+        width: 32px;
+        height: 32px;
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-control);
+        background: var(--surface-raised);
+        color: var(--ink-body);
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+      }
+      .sheet .sh .x svg {
+        width: 16px;
+        height: 16px;
+      }
+      .sheet .sb {
+        padding: var(--c-card-pad);
+        display: flex;
+        flex-direction: column;
+        gap: var(--c-card-gap);
+      }
+      .sheet .sb p {
+        color: var(--ink-body);
+        font-size: var(--text-md);
+        line-height: var(--leading-body);
+      }
 
-/* ===== MODAL / DIALOG — THE PRIORITY COMPONENT =============================
+      /* ===== MODAL / DIALOG — THE PRIORITY COMPONENT =============================
    Centered card on a dimmed scrim. Top strip carries only the brand mark (left)
    and a bordered close (right); the title, subtitle, fields and callout live in
    an inset hairline-bordered inner card; the footer sits back on the base
    surface with right-aligned ghost Cancel + primary. Destructive-confirm keeps
    the same anatomy — danger reads in the callout and the red solid button.
    ~460px default.                                                              */
-.scrim{position:fixed;inset:0;background:var(--scrim);display:grid;place-items:center;padding:24px;z-index:50}
-.scrim.bare{position:static;inset:auto;background:var(--scrim);padding:32px;z-index:0;border-radius:var(--radius-panel);display:grid;place-items:center;width:100%;min-width:0}
-.modal{width:min(var(--c-mod-w),100%);max-width:100%;min-width:0;background:var(--surface-field);border:1px solid var(--surface-raised);border-radius:var(--radius-shell);box-shadow:var(--shadow-overlay);overflow:visible;display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-2)}
-.mod-hd{padding:var(--space-1) var(--space-2) var(--space-1) var(--space-4);display:flex;align-items:center;gap:var(--c-card-gap)}
-.mod-hd .brand{width:32px;height:32px;border-radius:var(--radius-control);background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);color:var(--on-brand);display:grid;place-items:center;flex:0 0 auto}
-.mod-hd .brand svg{width:16px;height:16px}
-.mod-hd .close{margin-left:auto;width:44px;height:44px;border:1px solid var(--border-hairline);border-radius:var(--radius-card);background:var(--surface-raised);color:var(--ink-muted);cursor:pointer;display:grid;place-items:center;flex:0 0 auto}
-@media (hover:hover) and (pointer:fine){.mod-hd .close:hover{background:var(--surface-hover);color:var(--ink-body)}}
-.mod-hd .close:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
-.mod-hd .close svg{width:16px;height:16px}
-.mod-bd{background:var(--surface-overlay);border:1px solid var(--border-hairline);border-radius:var(--radius-panel);padding:var(--space-5);display:flex;flex-direction:column;gap:var(--space-5)}
-.mod-bd .ttl{display:flex;flex-direction:column;gap:var(--space-1);min-width:0}
-.mod-bd .ttl h3{font-size:var(--text-3xl);font-weight:var(--weight-strong);line-height:var(--leading-tight);letter-spacing:var(--track-display);color:var(--ink-strong)}
-.mod-bd .ttl p{font-size:var(--text-lg);color:var(--ink-muted);line-height:var(--leading-body)}
-.mod-bd .field label{font-size:var(--text-lg);color:var(--ink-strong)}
-.mod-bd .sel,.mod-bd .inp{height:var(--c-modal-input-h);border-radius:var(--radius-modal)}
-.callout{display:flex;align-items:flex-start;gap:var(--c-card-gap);padding:var(--space-3);border:1px solid var(--warning-9);border-radius:var(--radius-control);background:var(--warning-3);color:var(--warning-11);font-size:var(--text-sm);line-height:var(--leading-body)}
-.callout .ico{flex:0 0 auto;display:grid;place-items:center;width:30px;height:30px;border-radius:var(--radius-control);background:var(--surface-raised);box-shadow:var(--shadow-lifted)}
-.callout .ico svg{width:17px;height:17px}
-.callout.danger{border-color:var(--error-9);background:var(--error-3);color:var(--error-11)}
-.mod-ft{display:flex;justify-content:flex-end;gap:var(--c-mod-gap);padding:var(--space-4);background:var(--surface-overlay);border:1px solid var(--border-hairline);border-radius:var(--radius-panel)}
-.mod-ft .btn{height:var(--c-modal-btn-h);padding:0 var(--space-6);border-radius:var(--radius-modal);font-size:var(--text-lg)}
+      .scrim {
+        position: fixed;
+        inset: 0;
+        background: var(--scrim);
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        z-index: 50;
+      }
+      .scrim.bare {
+        position: static;
+        inset: auto;
+        background: var(--scrim);
+        padding: 32px;
+        z-index: 0;
+        border-radius: var(--radius-panel);
+        display: grid;
+        place-items: center;
+        width: 100%;
+        min-width: 0;
+      }
+      .modal {
+        width: min(var(--c-mod-w), 100%);
+        max-width: 100%;
+        min-width: 0;
+        background: var(--surface-field);
+        border: 1px solid var(--surface-raised);
+        border-radius: var(--radius-shell);
+        box-shadow: var(--shadow-overlay);
+        overflow: visible;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        padding: var(--space-2);
+      }
+      .mod-hd {
+        padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
+        display: flex;
+        align-items: center;
+        gap: var(--c-card-gap);
+      }
+      .mod-hd .brand {
+        width: 32px;
+        height: 32px;
+        border-radius: var(--radius-control);
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+      }
+      .mod-hd .brand svg {
+        width: 16px;
+        height: 16px;
+      }
+      .mod-hd .close {
+        margin-left: auto;
+        width: 44px;
+        height: 44px;
+        border: 1px solid var(--border-hairline);
+        border-radius: var(--radius-card);
+        background: var(--surface-raised);
+        color: var(--ink-muted);
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .mod-hd .close:hover {
+          background: var(--surface-hover);
+          color: var(--ink-body);
+        }
+      }
+      .mod-hd .close:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      .mod-hd .close svg {
+        width: 16px;
+        height: 16px;
+      }
+      .mod-bd {
+        background: var(--surface-overlay);
+        border: 1px solid var(--border-hairline);
+        border-radius: var(--radius-panel);
+        padding: var(--space-5);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-5);
+      }
+      .mod-bd .ttl {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        min-width: 0;
+      }
+      .mod-bd .ttl h3 {
+        font-size: var(--text-3xl);
+        font-weight: var(--weight-strong);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--track-display);
+        color: var(--ink-strong);
+      }
+      .mod-bd .ttl p {
+        font-size: var(--text-lg);
+        color: var(--ink-muted);
+        line-height: var(--leading-body);
+      }
+      .mod-bd .field label {
+        font-size: var(--text-lg);
+        color: var(--ink-strong);
+      }
+      .mod-bd .sel,
+      .mod-bd .inp {
+        height: var(--c-modal-input-h);
+        border-radius: var(--radius-modal);
+      }
+      .callout {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--c-card-gap);
+        padding: var(--space-3);
+        border: 1px solid var(--warning-9);
+        border-radius: var(--radius-control);
+        background: var(--warning-3);
+        color: var(--warning-11);
+        font-size: var(--text-sm);
+        line-height: var(--leading-body);
+      }
+      .callout .ico {
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border-radius: var(--radius-control);
+        background: var(--surface-raised);
+        box-shadow: var(--shadow-lifted);
+      }
+      .callout .ico svg {
+        width: 17px;
+        height: 17px;
+      }
+      .callout.danger {
+        border-color: var(--error-9);
+        background: var(--error-3);
+        color: var(--error-11);
+      }
+      .mod-ft {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--c-mod-gap);
+        padding: var(--space-4);
+        background: var(--surface-overlay);
+        border: 1px solid var(--border-hairline);
+        border-radius: var(--radius-panel);
+      }
+      .mod-ft .btn {
+        height: var(--c-modal-btn-h);
+        padding: 0 var(--space-6);
+        border-radius: var(--radius-modal);
+        font-size: var(--text-lg);
+      }
 
-/* ---- interaction state modifiers (the eight states as verifiable cells) ----
+      /* ---- interaction state modifiers (the eight states as verifiable cells) ----
    These apply the SAME declarations as the real :hover/:focus-visible/:active
    selectors, so a static gallery can show and measure every state.            */
-.st-hover{background-color:var(--surface-hover)}
-.btn.pri.st-hover{filter:brightness(1.08)}
-.st-press{background-color:var(--surface-active);box-shadow:var(--shadow-inset-sel)}
-.btn.pri.st-press{filter:brightness(0.94);box-shadow:var(--shadow-inset-sel)}
-.st-focus{outline:2px solid var(--focus-ring);outline-offset:2px}
-.st-loading{opacity:.55;cursor:progress}
-/* loading must not dim a FILLED control into a low-contrast second disabled:
+      .st-hover {
+        background-color: var(--surface-hover);
+      }
+      .btn.pri.st-hover {
+        filter: brightness(1.08);
+      }
+      .st-press {
+        background-color: var(--surface-active);
+        box-shadow: var(--shadow-inset-sel);
+      }
+      .btn.pri.st-press {
+        filter: brightness(0.94);
+        box-shadow: var(--shadow-inset-sel);
+      }
+      .st-focus {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      .st-loading {
+        opacity: 0.55;
+        cursor: progress;
+      }
+      /* loading must not dim a FILLED control into a low-contrast second disabled:
    keep the fill/label opaque and let the spinner carry the state. Ghost and
    text-only states (nav, secondary/outline buttons, inputs, selects) keep the
    .55 dim, which reads as a pause without dropping their container contrast. */
-.btn.pri.st-loading,.btn.des.sol.st-loading,.page.on.st-loading{opacity:1}
-.pill.st-loading{opacity:1}
-.st-disabled{cursor:default;opacity:.45;box-shadow:none;background-image:none;border-color:var(--border-control);color:var(--ink-muted)}
-.st-error{border-color:var(--error-9);color:var(--error-11)}
-/* .btn.pri's border-color:transparent would otherwise beat this (equal
+      .btn.pri.st-loading,
+      .btn.des.sol.st-loading,
+      .page.on.st-loading {
+        opacity: 1;
+      }
+      .pill.st-loading {
+        opacity: 1;
+      }
+      .st-disabled {
+        cursor: default;
+        opacity: 0.45;
+        box-shadow: none;
+        background-image: none;
+        border-color: var(--border-control);
+        color: var(--ink-muted);
+      }
+      .st-error {
+        border-color: var(--error-9);
+        color: var(--error-11);
+      }
+      /* .btn.pri's border-color:transparent would otherwise beat this (equal
    specificity, later declaration wins), leaving the primary error state
    byte-identical to default. A red hairline keeps the graphite fill and the
    on-brand label while signalling failure. */
-.btn.pri.st-error{border-color:var(--error-9)}
-.pill.st-error{background:var(--status-fail-bg);color:var(--status-fail-ink)}
-.st-success{border-color:var(--success-9);color:var(--success-11)}
-.pill.st-success{background:var(--status-done-bg);color:var(--status-done-ink)}
+      .btn.pri.st-error {
+        border-color: var(--error-9);
+      }
+      .pill.st-error {
+        background: var(--status-fail-bg);
+        color: var(--status-fail-ink);
+      }
+      .st-success {
+        border-color: var(--success-9);
+        color: var(--success-11);
+      }
+      .pill.st-success {
+        background: var(--status-done-bg);
+        color: var(--status-done-ink);
+      }
 
-/* ---- state cell chrome ----------------------------------------------------- */
-.cell{display:flex;flex-direction:column;gap:8px;min-width:150px;max-width:100%}
-.cell .cap{font-size:var(--text-xs);color:var(--ink-muted);text-transform:uppercase;letter-spacing:var(--track-caps)}
-.cell .inner{display:flex;flex-wrap:wrap;align-items:center;min-height:64px;gap:4px}
-/* tappable stat-card tile: a real control around the raised panel */
-.tile{display:inline-block;border:0;padding:0;background:none;cursor:pointer;border-radius:var(--radius-panel);font:inherit}
-.tile .panel{width:200px;min-height:120px;transition:box-shadow var(--c-100) var(--e-toggle)}
-.tile .panel .well{min-height:96px;justify-content:center}
-.tile:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:var(--radius-panel)}
-@media (hover:hover) and (pointer:fine){.tile:hover .panel{filter:brightness(1.02)}.tile:active .panel{filter:brightness(0.98)}}
-.tile[disabled]{cursor:default}
-.d-compact .cell .inner{min-height:52px}
+      /* ---- state cell chrome ----------------------------------------------------- */
+      .cell {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 150px;
+        max-width: 100%;
+      }
+      .cell .cap {
+        font-size: var(--text-xs);
+        color: var(--ink-muted);
+        text-transform: uppercase;
+        letter-spacing: var(--track-caps);
+      }
+      .cell .inner {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        min-height: 64px;
+        gap: 4px;
+      }
+      /* tappable stat-card tile: a real control around the raised panel */
+      .tile {
+        display: inline-block;
+        border: 0;
+        padding: 0;
+        background: none;
+        cursor: pointer;
+        border-radius: var(--radius-panel);
+        font: inherit;
+      }
+      .tile .panel {
+        width: 200px;
+        min-height: 120px;
+        transition: box-shadow var(--c-100) var(--e-toggle);
+      }
+      .tile .panel .well {
+        min-height: 96px;
+        justify-content: center;
+      }
+      .tile:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+        border-radius: var(--radius-panel);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .tile:hover .panel {
+          filter: brightness(1.02);
+        }
+        .tile:active .panel {
+          filter: brightness(0.98);
+        }
+      }
+      .tile[disabled] {
+        cursor: default;
+      }
+      .d-compact .cell .inner {
+        min-height: 52px;
+      }
 
-/* ===== motion ==============================================================
+      /* ===== motion ==============================================================
    Durations map to 100/300/500ms ONLY. Easings are limited to the three
    canonical curves. ONLY transform and opacity animate. The reduced-motion
    block precedes the animations.                                                */
-:root{
-  --c-100:100ms;
-  --c-300:300ms;
-  --c-500:500ms;
-  --e-in: cubic-bezier(0.16, 1, 0.3, 1);
-  --e-out: cubic-bezier(0.7, 0, 0.84, 0);
-  --e-toggle: cubic-bezier(0.65, 0, 0.35, 1);
-}
-@media (prefers-reduced-motion: reduce){
-  *,*::before,*::after{transition-duration:1ms !important;animation-duration:1ms !important;animation-iteration-count:1 !important}
-}
-.scrim.enter{animation:mod-in var(--c-300) var(--e-in)}
-.scrim.enter .modal{animation:mod-pop var(--c-300) var(--e-in)}
-@keyframes mod-in{from{opacity:0}to{opacity:1}}
-@keyframes mod-pop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
-.spin{animation:spin var(--c-500) var(--e-toggle) infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
+      :root {
+        --c-100: 100ms;
+        --c-300: 300ms;
+        --c-500: 500ms;
+        --e-in: cubic-bezier(0.16, 1, 0.3, 1);
+        --e-out: cubic-bezier(0.7, 0, 0.84, 0);
+        --e-toggle: cubic-bezier(0.65, 0, 0.35, 1);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition-duration: 1ms !important;
+          animation-duration: 1ms !important;
+          animation-iteration-count: 1 !important;
+        }
+      }
+      .scrim.enter {
+        animation: mod-in var(--c-300) var(--e-in);
+      }
+      .scrim.enter .modal {
+        animation: mod-pop var(--c-300) var(--e-in);
+      }
+      @keyframes mod-in {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes mod-pop {
+        from {
+          opacity: 0;
+          transform: scale(0.96);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      .spin {
+        animation: spin var(--c-500) var(--e-toggle) infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
 
-/* ===== responsive: no horizontal scroll from 320px; nothing hidden at width = */
-@media (max-width:560px){
-  .stage{padding:24px 14px 120px}
-  .row{gap:10px}
-}
+      /* ===== responsive: no horizontal scroll from 320px; nothing hidden at width = */
+      @media (max-width: 560px) {
+        .stage {
+          padding: 24px 14px 120px;
+        }
+        .row {
+          gap: 10px;
+        }
+      }
 
-/* ===== touch targets: >=44px under pointer:coarse, at ANY width ============= */
-@media (pointer:coarse){
-  .nav-i{min-height:44px}
-  .btn{min-height:44px}
-  .btn.ic{min-width:44px}
-  .btn.ic.sm{min-width:44px;min-height:44px}
-  .inp{min-height:48px}
-  .inp .eye{min-width:44px;min-height:44px}
-  .sel{min-height:48px}
-  .page{min-width:44px;min-height:44px}
-  .sheet .sh .x{min-width:44px;min-height:44px}
-  .mod-hd .close{min-width:44px;min-height:44px}
-}
-</style></head><body class="stage">
-
-<div class="tools">
-  <button type="button" id="light" class="on">Light</button>
-  <button type="button" id="dark">Dark</button>
-  <button type="button" id="dcomfy" class="on">Comfortable</button>
-  <button type="button" id="dcomp">Compact</button>
-</div>
-
-<header class="hdr">
-  <h1>Component library</h1>
-  <p>Whiffle (wordmark "Whiffle") — the design-system building blocks, each shown in its eight
-  interaction states (default · hover · focus · active · disabled · loading · error · success),
-  at comfortable and compact density, in light and dark.</p>
-  <span class="www"><svg fill="currentColor" viewBox="0 0 24 24">{{solar:widget-5}}</svg>Token-gated · Solar duotone · Geist Variable</span>
-</header>
-
-<!-- ============================ NAV ITEM ================================= -->
-<section class="group">
-  <h2>Nav item</h2>
-  <p class="desc">Raised-fill active state on a sunken rail; count pill rides the live tint.
-  Every state below uses the same <code>&lt;a class="nav-i"&gt;</code> affordance.</p>
-  <nav class="rail" aria-label="Component nav demo">
-    <a class="nav-i on" href="#nav" aria-current="page"><span class="ic">{{solar:widget-5}}</span><span class="lbl">Fleet</span><span class="cnt">6</span></a>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:tuning-4}}</span><span class="lbl">Tools</span></a>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:checklist-minimalistic}}</span><span class="lbl">Rules</span><span class="cnt attn">14</span></a>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:chart-2}}</span><span class="lbl">Usage</span></a>
-  </nav>
-  <div class="iter" style="margin-top:10px">
-    <div class="cell"><span class="cap">default</span><div class="inner"><a class="nav-i" href="#nav"><span class="ic">{{solar:folder}}</span><span class="lbl">Projects</span></a></div></div>
-    <div class="cell"><span class="cap">hover</span><div class="inner"><a class="nav-i st-hover" href="#nav"><span class="ic">{{solar:folder}}</span><span class="lbl">Projects</span></a></div></div>
-    <div class="cell"><span class="cap">focus</span><div class="inner"><a class="nav-i st-focus" href="#nav"><span class="ic">{{solar:folder}}</span><span class="lbl">Projects</span></a></div></div>
-    <div class="cell"><span class="cap">active (selected)</span><div class="inner"><a class="nav-i on" href="#nav"><span class="ic">{{solar:folder}}</span><span class="lbl">Projects</span><span class="cnt">3</span></a></div></div>
-    <div class="cell"><span class="cap">active · press</span><div class="inner"><a class="nav-i on st-press" href="#nav"><span class="ic">{{solar:folder}}</span><span class="lbl">Projects</span><span class="cnt">3</span></a></div></div>
-    <div class="cell"><span class="cap">disabled</span><div class="inner"><a class="nav-i st-disabled" href="#nav" aria-disabled="true"><span class="ic">{{solar:folder}}</span><span class="lbl">Projects</span></a></div></div>
-    <div class="cell"><span class="cap">loading</span><div class="inner"><a class="nav-i st-loading" href="#nav"><span class="ic">{{solar:folder}}</span><span class="lbl">Projects</span></a></div></div>
-    <div class="cell"><span class="cap">error</span><div class="inner"><a class="nav-i" href="#nav"><span class="ic">{{solar:folder}}</span><span class="lbl">Projects</span><span class="cnt" style="background:var(--status-fail-bg);color:var(--status-fail-ink)">3</span></a></div></div>
-    <div class="cell"><span class="cap">success</span><div class="inner"><a class="nav-i" href="#nav"><span class="ic">{{solar:folder}}</span><span class="lbl">Projects</span><span class="cnt" style="background:var(--status-done-bg);color:var(--status-done-ink)">3</span></a></div></div>
-  </div>
-</section>
-
-<!-- ============================ BUTTONS =================================== -->
-<section class="group">
-  <h2>Buttons</h2>
-  <p class="desc">Primary (graphite gradient, never flat), secondary (ghost/outline), destructive
-  (red outline; red fill only for a final confirm), icon-only, and icon+label. Solar duotone glyphs.</p>
-
-  <div class="row" style="margin-bottom:18px"><h3 style="width:100%;font-size:var(--text-md);font-weight:var(--weight-strong)">Primary</h3>
-    <div class="cell"><span class="cap">default</span><div class="inner"><button class="btn pri" type="button">Start session</button></div></div>
-    <div class="cell"><span class="cap">hover</span><div class="inner"><button class="btn pri st-hover" type="button">Start session</button></div></div>
-    <div class="cell"><span class="cap">focus</span><div class="inner"><button class="btn pri st-focus" type="button">Start session</button></div></div>
-    <div class="cell"><span class="cap">active</span><div class="inner"><button class="btn pri st-press" type="button">Start session</button></div></div>
-    <div class="cell"><span class="cap">disabled</span><div class="inner"><button class="btn pri" type="button" disabled>Start session</button></div></div>
-    <div class="cell"><span class="cap">loading</span><div class="inner"><button class="btn pri st-loading" type="button"><svg class="spin" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">{{solar:restart}}</svg>Starting…</button></div></div>
-    <div class="cell"><span class="cap">error</span><div class="inner"><button class="btn pri st-error" type="button">Failed</button></div></div>
-    <div class="cell"><span class="cap">success</span><div class="inner"><button class="btn pri st-success" type="button">Connected</button></div></div>
-  </div>
-
-  <div class="row" style="margin-bottom:18px"><h3 style="width:100%;font-size:var(--text-md);font-weight:var(--weight-strong)">Secondary (ghost / outline)</h3>
-    <div class="cell"><span class="cap">default</span><div class="inner"><button class="btn" type="button">View usage</button></div></div>
-    <div class="cell"><span class="cap">hover</span><div class="inner"><button class="btn st-hover" type="button">View usage</button></div></div>
-    <div class="cell"><span class="cap">focus</span><div class="inner"><button class="btn st-focus" type="button">View usage</button></div></div>
-    <div class="cell"><span class="cap">active</span><div class="inner"><button class="btn st-press" type="button">View usage</button></div></div>
-    <div class="cell"><span class="cap">disabled</span><div class="inner"><button class="btn" type="button" disabled>View usage</button></div></div>
-    <div class="cell"><span class="cap">loading</span><div class="inner"><button class="btn st-loading" type="button"><svg class="spin" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">{{solar:restart}}</svg>Saving…</button></div></div>
-    <div class="cell"><span class="cap">error</span><div class="inner"><button class="btn st-error" type="button">Sync failed</button></div></div>
-    <div class="cell"><span class="cap">success</span><div class="inner"><button class="btn st-success" type="button">Saved</button></div></div>
-  </div>
-
-  <div class="row" style="margin-bottom:18px"><h3 style="width:100%;font-size:var(--text-md);font-weight:var(--weight-strong)">Destructive</h3>
-    <div class="cell"><span class="cap">outline</span><div class="inner"><button class="btn des" type="button">Revoke</button></div></div>
-    <div class="cell"><span class="cap">outline hover</span><div class="inner"><button class="btn des st-hover" type="button">Revoke</button></div></div>
-    <div class="cell"><span class="cap">outline focus</span><div class="inner"><button class="btn des st-focus" type="button">Revoke</button></div></div>
-    <div class="cell"><span class="cap">confirm (filled)</span><div class="inner"><button class="btn des sol" type="button">Delete forever</button></div></div>
-    <div class="cell"><span class="cap">confirm focus</span><div class="inner"><button class="btn des sol st-focus" type="button">Delete forever</button></div></div>
-  </div>
-
-  <div class="row"><h3 style="width:100%;font-size:var(--text-md);font-weight:var(--weight-strong)">Icon-only</h3>
-    <div class="cell"><span class="cap">default</span><div class="inner"><button class="btn ic" type="button" aria-label="Export"><svg fill="currentColor" viewBox="0 0 24 24">{{solar:export}}</svg></button></div></div>
-    <div class="cell"><span class="cap">hover</span><div class="inner"><button class="btn ic st-hover" type="button" aria-label="Export"><svg fill="currentColor" viewBox="0 0 24 24">{{solar:export}}</svg></button></div></div>
-    <div class="cell"><span class="cap">focus</span><div class="inner"><button class="btn ic st-focus" type="button" aria-label="Export"><svg fill="currentColor" viewBox="0 0 24 24">{{solar:export}}</svg></button></div></div>
-    <div class="cell"><span class="cap">active</span><div class="inner"><button class="btn ic st-press" type="button" aria-label="Export"><svg fill="currentColor" viewBox="0 0 24 24">{{solar:export}}</svg></button></div></div>
-    <div class="cell"><span class="cap">disabled</span><div class="inner"><button class="btn ic" type="button" disabled aria-label="Export"><svg fill="currentColor" viewBox="0 0 24 24">{{solar:export}}</svg></button></div></div>
-    <div class="cell"><span class="cap">loading</span><div class="inner"><button class="btn ic st-loading" type="button" aria-label="Export"><svg class="spin" fill="currentColor" viewBox="0 0 24 24">{{solar:restart}}</svg></button></div></div>
-    <div class="cell"><span class="cap">error</span><div class="inner"><button class="btn ic st-error" type="button" aria-label="Export"><svg fill="currentColor" viewBox="0 0 24 24">{{solar:export}}</svg></button></div></div>
-    <div class="cell"><span class="cap">success</span><div class="inner"><button class="btn ic st-success" type="button" aria-label="Export"><svg fill="currentColor" viewBox="0 0 24 24">{{solar:export}}</svg></button></div></div>
-  </div>
-</section>
-
-<!-- ============================ CARD / PANEL ============================= -->
-<section class="group">
-  <h2>Card / panel</h2>
-  <p class="desc">White-raised surface on a grey field, with a sunken well inside (the signature
-  move): raised card, field-colour interior, hairline, 7px radius inside 10px.</p>
-  <div class="row">
-    <div class="panel" style="width:240px;min-height:180px">
-      <div class="well">
-        <span class="k">Sessions today</span>
-        <span class="v">6</span>
-        <span class="u">across 2 of 3 machines</span>
-      </div>
+      /* ===== touch targets: >=44px under pointer:coarse, at ANY width ============= */
+      @media (pointer: coarse) {
+        .nav-i {
+          min-height: 44px;
+        }
+        .btn {
+          min-height: 44px;
+        }
+        .btn.ic {
+          min-width: 44px;
+        }
+        .btn.ic.sm {
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .inp {
+          min-height: 48px;
+        }
+        .inp .eye {
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .sel {
+          min-height: 48px;
+        }
+        .page {
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .sheet .sh .x {
+          min-width: 44px;
+          min-height: 44px;
+        }
+        .mod-hd .close {
+          min-width: 44px;
+          min-height: 44px;
+        }
+      }
+    </style>
+  </head>
+  <body class="stage">
+    <div class="tools">
+      <button class="on" id="light" type="button">Light</button>
+      <button id="dark" type="button">Dark</button>
+      <button class="on" id="dcomfy" type="button">Comfortable</button>
+      <button id="dcomp" type="button">Compact</button>
     </div>
-    <div class="panel" style="width:240px;min-height:180px">
-      <div class="well">
-        <span class="k">Needs you</span>
-        <span class="v" style="color:var(--status-attn-ink)">3</span>
-        <span class="u">waiting on an operator decision</span>
-      </div>
-    </div>
-    <div class="panel" style="width:240px;min-height:180px">
-      <div class="well">
-        <span class="k">Spend today</span>
-        <span class="v">$18.40</span>
-        <span class="u">of a $50.00 fleet budget</span>
-      </div>
-    </div>
-  </div>
-  <h3 style="font-size:var(--text-md);font-weight:var(--weight-strong);margin:24px 0 8px">Stat card tile — eight interaction states</h3>
-  <div class="row">
-    <div class="cell"><span class="cap">default</span><div class="inner"><button type="button" class="tile"><div class="panel"><div class="well"><span class="k">Sessions</span><span class="v">6</span></div></div></button></div></div>
-    <div class="cell"><span class="cap">hover</span><div class="inner"><button type="button" class="tile st-hover"><div class="panel"><div class="well"><span class="k">Sessions</span><span class="v">6</span></div></div></button></div></div>
-    <div class="cell"><span class="cap">focus</span><div class="inner"><button type="button" class="tile st-focus"><div class="panel"><div class="well"><span class="k">Sessions</span><span class="v">6</span></div></div></button></div></div>
-    <div class="cell"><span class="cap">active</span><div class="inner"><button type="button" class="tile st-press"><div class="panel"><div class="well"><span class="k">Sessions</span><span class="v">6</span></div></div></button></div></div>
-    <div class="cell"><span class="cap">disabled</span><div class="inner"><button type="button" class="tile st-disabled" disabled><div class="panel"><div class="well"><span class="k">Sessions</span><span class="v">6</span></div></div></button></div></div>
-    <div class="cell"><span class="cap">loading</span><div class="inner"><button type="button" class="tile st-loading"><div class="panel"><div class="well"><span class="k">Sessions</span><span class="v" style="color:var(--ink-muted)">—</span></div></div></button></div></div>
-    <div class="cell"><span class="cap">error</span><div class="inner"><button type="button" class="tile"><div class="panel"><div class="well"><span class="k">Sessions</span><span class="v" style="color:var(--status-fail-ink)">0</span></div></div></button></div></div>
-    <div class="cell"><span class="cap">success</span><div class="inner"><button type="button" class="tile"><div class="panel"><div class="well"><span class="k">Sessions</span><span class="v" style="color:var(--status-done-ink)">6</span></div></div></button></div></div>
-  </div>
-</section>
 
-<!-- ============================ STATUS PILL ============================== -->
-<section class="group">
-  <h2>Status pill</h2>
-  <p class="desc">Flexoki accent light-tint + darker ink, glyph-led. Idle carries no fill at all
-  (absence of a chip is the idle state). Error=red, success=green, warning=yellow, info=blue.</p>
-  <div class="row">
-    <div class="cell"><span class="cap">default</span><div class="inner" style="gap:6px">
-      <span class="pill live"><svg fill="currentColor" viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.1"/></svg>working</span>
-      <span class="pill attn"><svg fill="none" stroke="currentColor" viewBox="0 0 12 12"><path d="M6 9.4V2.6M3 5.6 6 2.6l3 3"/></svg>needs you</span>
-      <span class="pill done"><svg fill="none" stroke="currentColor" viewBox="0 0 12 12"><path d="M2.4 6.3 4.9 8.8l4.7-5.6"/></svg>done</span>
-      <span class="pill fail"><svg fill="none" stroke="currentColor" viewBox="0 0 12 12"><path d="M3.2 3.2l5.6 5.6M8.8 3.2l-5.6 5.6"/></svg>error</span>
-      <span class="pill idle"><svg fill="none" stroke="currentColor" viewBox="0 0 12 12"><path d="M4.4 3v6M7.6 3v6"/></svg>idle</span>
-    </div></div>
-    <div class="cell"><span class="cap">hover</span><div class="inner"><span class="pill live st-hover"><svg fill="currentColor" viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.1"/></svg>working</span></div></div>
-    <div class="cell"><span class="cap">focus</span><div class="inner"><span class="pill live st-focus"><svg fill="currentColor" viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.1"/></svg>working</span></div></div>
-    <div class="cell"><span class="cap">active</span><div class="inner"><span class="pill live st-press"><svg fill="currentColor" viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.1"/></svg>working</span></div></div>
-    <div class="cell"><span class="cap">disabled</span><div class="inner"><span class="pill live st-disabled"><svg fill="currentColor" viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.1"/></svg>paused</span></div></div>
-    <div class="cell"><span class="cap">loading</span><div class="inner"><span class="pill live st-loading"><svg fill="currentColor" viewBox="0 0 12 12"><circle cx="6" cy="6" r="3.1"/></svg>syncing</span></div></div>
-    <div class="cell"><span class="cap">error</span><div class="inner"><span class="pill st-error"><svg fill="none" stroke="currentColor" viewBox="0 0 12 12"><path d="M3.2 3.2l5.6 5.6M8.8 3.2l-5.6 5.6"/></svg>failed</span></div></div>
-    <div class="cell"><span class="cap">success</span><div class="inner"><span class="pill st-success"><svg fill="none" stroke="currentColor" viewBox="0 0 12 12"><path d="M2.4 6.3 4.9 8.8l4.7-5.6"/></svg>deployed</span></div></div>
-  </div>
-</section>
+    <header class="hdr">
+      <h1>Component library</h1>
+      <p>
+        Whiffle (wordmark "Whiffle") — the design-system building blocks, each
+        shown in its eight interaction states (default · hover · focus · active
+        · disabled · loading · error · success), at comfortable and compact
+        density, in light and dark.
+      </p>
+      <span class="www"
+        ><svg fill="currentColor" viewBox="0 0 24 24">{{solar:widget-5}}</svg
+        >Token-gated · Solar duotone · Geist Variable</span
+      >
+    </header>
 
-<!-- ============================ ITEM MARK ================================ -->
-<section class="group">
-  <h2>Item mark</h2>
-  <p class="desc">Per-item identity HUE (8 Flexoki accent hues) + harness GLYPH, keyed to the
-  identity. A saturated solid with a white glyph — the same top-light / bottom-shade read as the button at a twelfth of the size.</p>
-  <div class="row">
-    <div class="cell"><span class="cap">hue 1 · claude</span><div class="inner"><span class="mark-row"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span><span class="meta"><b>wire delegate</b><span>claude · nixbox</span></span></span></div></div>
-    <div class="cell"><span class="cap">hue 2 · opencode</span><div class="inner"><span class="mark-row"><span class="mark m2"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg></span><span class="meta"><b>table spike</b><span>opencode · nixbox</span></span></span></div></div>
-    <div class="cell"><span class="cap">hue 3 · pi</span><div class="inner"><span class="mark-row"><span class="mark m3"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span><span class="meta"><b>landing copy</b><span>pi · mba-m3</span></span></span></div></div>
-    <div class="cell"><span class="cap">hue 4</span><div class="inner"><span class="mark m4" style="width:var(--c-mark);height:var(--c-mark)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg></span></div></div>
-    <div class="cell"><span class="cap">hue 5</span><div class="inner"><span class="mark m5" style="width:var(--c-mark);height:var(--c-mark)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span></div></div>
-    <div class="cell"><span class="cap">hue 6</span><div class="inner"><span class="mark m6" style="width:var(--c-mark);height:var(--c-mark)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg></span></div></div>
-    <div class="cell"><span class="cap">hue 7</span><div class="inner"><span class="mark m7" style="width:var(--c-mark);height:var(--c-mark)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span></div></div>
-    <div class="cell"><span class="cap">hue 8</span><div class="inner"><span class="mark m8" style="width:var(--c-mark);height:var(--c-mark)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5h14M9 7.5v9M15 7.5v6.5a2.5 2.5 0 0 0 4 0"/></svg></span></div></div>
-  </div>
-</section>
-
-<!-- ============================ INPUT ==================================== -->
-<section class="group">
-  <h2>Input</h2>
-  <p class="desc">Text field — computes ≥16px font at every width so iOS never zooms on focus.
-  Leading icon, labeled, with an error and a success hint state.</p>
-  <div class="row">
-    <div class="field" style="width:280px">
-      <label for="inp1">Session name</label>
-      <div class="inp"><span class="lead"><svg fill="currentColor" viewBox="0 0 24 24">{{solar:document-text}}</svg></span><input id="inp1" type="text" placeholder="e.g. wire delegate row outcomes" value="landing copy pass"></div>
-      <span class="hint ok"><svg fill="currentColor" viewBox="0 0 12 12" style="width:10px;height:10px"><path d="M2.4 6.3 4.9 8.8l4.7-5.6" fill="none" stroke="currentColor" stroke-width="1.7"/></svg> Name is available</span>
-    </div>
-    <div class="cell"><span class="cap">hover</span><div class="inner"><div class="inp st-hover"><input type="text" value="hover state"></div></div></div>
-    <div class="cell"><span class="cap">focus</span><div class="inner"><div class="inp st-focus"><input type="text" value="focus state"></div></div></div>
-    <div class="cell"><span class="cap">active</span><div class="inner"><div class="inp st-press"><input type="text" value="active state"></div></div></div>
-    <div class="cell"><span class="cap">disabled</span><div class="inner"><div class="inp"><input type="text" value="disabled state" disabled></div></div></div>
-    <div class="cell"><span class="cap">loading</span><div class="inner"><div class="inp st-loading"><svg class="spin" fill="currentColor" viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--ink-muted)">{{solar:restart}}</svg><input type="text" value="loading state"></div></div></div>
-    <div class="cell"><span class="cap">error</span><div class="inner"><div class="inp has-err"><input type="text" value="sk-live"></div></div></div>
-    <div class="cell"><span class="cap">success</span><div class="inner"><div class="inp st-success"><input type="text" value="validated"></div></div></div>
-  </div>
-  <div class="field" style="width:280px;margin-top:10px">
-    <label for="inp3">API key</label>
-    <div class="inp has-err"><span class="lead"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="5"/><path d="M11.7 11.3 21 2"/><path d="M16 7l2.5 2.5"/><path d="M18.5 5l2 2"/></svg></span><input id="inp3" type="password" value="sk-live-xxxxxxxxxxx"></div>
-    <span class="hint err">That key looks live — use a sandbox key.</span>
-  </div>
-</section>
-
-<!-- ============================ FILTER SELECT ============================ -->
-<section class="group">
-  <h2>Filter select</h2>
-  <p class="desc">A control with a trailing chevron on the raised surface.</p>
-  <div class="row">
-    <div class="cell"><span class="cap">default</span><div class="inner"><button class="sel" type="button"><span class="lbl">All machines</span><svg fill="currentColor" viewBox="0 0 24 24">{{solar:alt-arrow-down}}</svg></button></div></div>
-    <div class="cell"><span class="cap">hover</span><div class="inner"><button class="sel st-hover" type="button"><span class="lbl">All states</span><svg fill="currentColor" viewBox="0 0 24 24">{{solar:alt-arrow-down}}</svg></button></div></div>
-    <div class="cell"><span class="cap">focus</span><div class="inner"><button class="sel st-focus" type="button"><span class="lbl">Last active</span><svg fill="currentColor" viewBox="0 0 24 24">{{solar:alt-arrow-down}}</svg></button></div></div>
-    <div class="cell"><span class="cap">active</span><div class="inner"><button class="sel st-press" type="button"><span class="lbl">All machines</span><svg fill="currentColor" viewBox="0 0 24 24">{{solar:alt-arrow-down}}</svg></button></div></div>
-    <div class="cell"><span class="cap">disabled</span><div class="inner"><button class="sel st-disabled" type="button" disabled><span class="lbl">All machines</span><svg fill="currentColor" viewBox="0 0 24 24">{{solar:alt-arrow-down}}</svg></button></div></div>
-    <div class="cell"><span class="cap">loading</span><div class="inner"><button class="sel st-loading" type="button"><svg class="spin" fill="currentColor" viewBox="0 0 24 24" style="width:15px;height:15px;margin-right:auto">{{solar:restart}}</svg><span class="lbl">Loading…</span><svg fill="currentColor" viewBox="0 0 24 24">{{solar:alt-arrow-down}}</svg></button></div></div>
-    <div class="cell"><span class="cap">error</span><div class="inner"><button class="sel st-error" type="button"><span class="lbl">Unreachable</span><svg fill="currentColor" viewBox="0 0 24 24">{{solar:alt-arrow-down}}</svg></button></div></div>
-    <div class="cell"><span class="cap">success</span><div class="inner"><button class="sel st-success" type="button"><span class="lbl">Connected · nixbox</span><svg fill="currentColor" viewBox="0 0 24 24">{{solar:alt-arrow-down}}</svg></button></div></div>
-  </div>
-</section>
-
-<!-- ============================ PAGINATION =============================== -->
-<section class="group">
-  <h2>Pagination</h2>
-  <p class="desc">Filled active page (gradient), bordered chevrons, gap-fill ellipsis.</p>
-  <div class="row">
-    <div class="cell"><span class="cap">default</span><div class="inner"><div class="pager">
-      <button class="page b" type="button" aria-label="Previous"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-      <button class="page on" type="button">1</button>
-      <button class="page" type="button">2</button>
-      <button class="page ellipsis" type="button" tabindex="-1">…</button>
-      <button class="page" type="button">12</button>
-      <button class="page b" type="button" aria-label="Next"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-    </div></div></div>
-    <div class="cell"><span class="cap">hover</span><div class="inner"><div class="pager">
-      <button class="page b" type="button" aria-label="Previous"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-      <button class="page on" type="button">1</button>
-      <button class="page st-hover" type="button">2</button>
-      <button class="page ellipsis" type="button" tabindex="-1">…</button>
-      <button class="page" type="button">12</button>
-      <button class="page b st-hover" type="button" aria-label="Next"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-    </div></div></div>
-    <div class="cell"><span class="cap">focus</span><div class="inner"><div class="pager">
-      <button class="page b" type="button" aria-label="Previous"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-      <button class="page on" type="button">1</button>
-      <button class="page st-focus" type="button">2</button>
-    </div></div></div>
-    <div class="cell"><span class="cap">active · press</span><div class="inner"><div class="pager">
-      <button class="page b st-press" type="button" aria-label="Previous"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-      <button class="page on" type="button">1</button>
-      <button class="page st-press" type="button">2</button>
-    </div></div></div>
-    <div class="cell"><span class="cap">disabled</span><div class="inner"><div class="pager">
-      <button class="page b st-disabled" type="button" disabled aria-label="Previous"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-      <button class="page on" type="button">1</button>
-      <button class="page b st-disabled" type="button" disabled aria-label="Next"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-    </div></div></div>
-    <div class="cell"><span class="cap">loading</span><div class="inner"><div class="pager">
-      <button class="page b" type="button" aria-label="Previous"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-      <button class="page on st-loading" type="button"><svg class="spin" fill="currentColor" viewBox="0 0 24 24" style="width:14px;height:14px">{{solar:restart}}</svg></button>
-      <button class="page" type="button">2</button>
-    </div></div></div>
-    <div class="cell"><span class="cap">error</span><div class="inner"><div class="pager">
-      <button class="page b" type="button" aria-label="Previous"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-      <button class="page st-error" type="button">1</button>
-      <button class="page st-error" type="button">2</button>
-      <button class="page b" type="button" aria-label="Next"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-    </div></div></div>
-    <div class="cell"><span class="cap">success</span><div class="inner"><div class="pager">
-      <button class="page b" type="button" aria-label="Previous"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-      <button class="page st-success" type="button">1</button>
-      <button class="page on" type="button">2</button>
-      <button class="page b" type="button" aria-label="Next"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
-    </div></div></div>
-  </div>
-</section>
-
-<!-- ============================ SHEET =================================== -->
-<section class="group">
-  <h2>Sheet (mobile slide-over)</h2>
-  <p class="desc">A panel that slides over on narrow screens; header with close, then content.</p>
-  <div class="row">
-    <div class="sheet">
-      <div class="sh"><b>Session filters</b><button type="button" class="x" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
-      <div class="sb">
-        <p>Refine what this board shows. Changes apply to the fleet list below.</p>
-        <button class="sel" type="button" style="width:100%"><span class="lbl">All states</span><svg fill="currentColor" viewBox="0 0 24 24">{{solar:alt-arrow-down}}</svg></button>
-        <button class="btn pri" type="button">Apply</button>
-      </div>
-    </div>
-  </div>
-  <h3 style="font-size:var(--text-md);font-weight:var(--weight-strong);margin:26px 0 8px">Sheet close — eight interaction states</h3>
-  <div class="row">
-    <div class="cell"><span class="cap">default</span><div class="inner"><button type="button" class="x" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></div>
-    <div class="cell"><span class="cap">hover</span><div class="inner"><button type="button" class="x st-hover" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></div>
-    <div class="cell"><span class="cap">focus</span><div class="inner"><button type="button" class="x st-focus" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></div>
-    <div class="cell"><span class="cap">active · press</span><div class="inner"><button type="button" class="x st-press" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></div>
-    <div class="cell"><span class="cap">disabled</span><div class="inner"><button type="button" class="x st-disabled" disabled aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></div>
-    <div class="cell"><span class="cap">loading</span><div class="inner"><button type="button" class="x st-loading" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></div>
-    <div class="cell"><span class="cap">error</span><div class="inner"><button type="button" class="x st-error" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></div>
-    <div class="cell"><span class="cap">success</span><div class="inner"><button type="button" class="x st-success" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></div>
-  </div>
-</section>
-
-<!-- ============================ MODAL ==================================== -->
-<section class="group">
-  <h2>Modal / dialog</h2>
-  <p class="desc">Centered card on a dimmed scrim: a bare top strip (brand mark left, bordered
-  close right), then an inset bordered card carrying the title + subtitle, labeled select +
-  password-with-eye and warning callout, then a footer on the base surface with right-aligned
-  ghost Cancel + primary. The destructive confirm shares the anatomy; danger reads in the callout
-  and the red solid button. ~460px default.</p>
-
-  <div class="scrim bare" aria-hidden="true">
-    <div class="modal enter" role="dialog" aria-modal="true" aria-labelledby="m1t">
-      <div class="mod-hd">
-        <span class="brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></span>
-        <button type="button" class="close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
-      <div class="mod-bd">
-        <div class="ttl"><h3 id="m1t">Connect a machine</h3><p>Add a new host to the fleet over tailnet.</p></div>
-        <div class="field">
-          <label for="msel">Machine role</label>
-          <button class="sel" style="width:100%" type="button"><span class="lbl">Worker — runs agents on demand</span><svg fill="currentColor" viewBox="0 0 24 24">{{solar:alt-arrow-down}}</svg></button>
+    <!-- ============================ NAV ITEM ================================= -->
+    <section class="group">
+      <h2>Nav item</h2>
+      <p class="desc">
+        Raised-fill active state on a sunken rail; count pill rides the live
+        tint. Every state below uses the same
+        <code>&lt;a class="nav-i"&gt;</code> affordance.
+      </p>
+      <nav aria-label="Component nav demo" class="rail">
+        <a aria-current="page" class="nav-i on" href="#nav"
+          ><span class="ic">{{solar:widget-5}}</span
+          ><span class="lbl">Fleet</span><span class="cnt">6</span></a
+        >
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:tuning-4}}</span
+          ><span class="lbl">Tools</span></a
+        >
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:checklist-minimalistic}}</span
+          ><span class="lbl">Rules</span><span class="cnt attn">14</span></a
+        >
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:chart-2}}</span
+          ><span class="lbl">Usage</span></a
+        >
+      </nav>
+      <div class="iter" style="margin-top:10px">
+        <div class="cell">
+          <span class="cap">default</span>
+          <div class="inner">
+            <a class="nav-i" href="#nav"
+              ><span class="ic">{{solar:folder}}</span
+              ><span class="lbl">Projects</span></a
+            >
+          </div>
         </div>
-        <div class="field">
-          <label for="mtok">Access token</label>
-          <div class="inp"><input id="mtok" type="password" value="whiffle_a1b2c3d4" aria-label="Access token"><button type="button" class="eye" aria-label="Show token"><svg fill="currentColor" viewBox="0 0 24 24">{{solar:eye}}</svg></button></div>
-          <span class="hint">Rotates every 30 days.</span>
+        <div class="cell">
+          <span class="cap">hover</span>
+          <div class="inner">
+            <a class="nav-i st-hover" href="#nav"
+              ><span class="ic">{{solar:folder}}</span
+              ><span class="lbl">Projects</span></a
+            >
+          </div>
         </div>
-        <div class="callout"><span class="ico"><svg fill="currentColor" viewBox="0 0 24 24">{{solar:danger-triangle}}</svg></span><span>This machine will be reachable from every host already on the fleet.</span></div>
+        <div class="cell">
+          <span class="cap">focus</span>
+          <div class="inner">
+            <a class="nav-i st-focus" href="#nav"
+              ><span class="ic">{{solar:folder}}</span
+              ><span class="lbl">Projects</span></a
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">active (selected)</span>
+          <div class="inner">
+            <a class="nav-i on" href="#nav"
+              ><span class="ic">{{solar:folder}}</span
+              ><span class="lbl">Projects</span><span class="cnt">3</span></a
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">active · press</span>
+          <div class="inner">
+            <a class="nav-i on st-press" href="#nav"
+              ><span class="ic">{{solar:folder}}</span
+              ><span class="lbl">Projects</span><span class="cnt">3</span></a
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">disabled</span>
+          <div class="inner">
+            <a aria-disabled="true" class="nav-i st-disabled" href="#nav"
+              ><span class="ic">{{solar:folder}}</span
+              ><span class="lbl">Projects</span></a
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">loading</span>
+          <div class="inner">
+            <a class="nav-i st-loading" href="#nav"
+              ><span class="ic">{{solar:folder}}</span
+              ><span class="lbl">Projects</span></a
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">error</span>
+          <div class="inner">
+            <a class="nav-i" href="#nav"
+              ><span class="ic">{{solar:folder}}</span
+              ><span class="lbl">Projects</span
+              ><span
+                class="cnt"
+                style="background:var(--status-fail-bg);color:var(--status-fail-ink)"
+                >3</span
+              ></a
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">success</span>
+          <div class="inner">
+            <a class="nav-i" href="#nav"
+              ><span class="ic">{{solar:folder}}</span
+              ><span class="lbl">Projects</span
+              ><span
+                class="cnt"
+                style="background:var(--status-done-bg);color:var(--status-done-ink)"
+                >3</span
+              ></a
+            >
+          </div>
+        </div>
       </div>
-      <div class="mod-ft">
-        <button class="btn" type="button">Cancel</button>
-        <button class="btn pri" type="button">Add machine</button>
-      </div>
-    </div>
-  </div>
+    </section>
 
-  <h3 style="font-size:var(--text-md);font-weight:var(--weight-strong);margin:26px 0 8px">Destructive confirm</h3>
-  <div class="scrim bare" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="m2t" style="max-width:440px">
-      <div class="mod-hd">
-        <span class="brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></span>
-        <button type="button" class="close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
-      <div class="mod-bd">
-        <div class="ttl"><h3 id="m2t">Delete this session?</h3><p>Its transcript and permissions are removed from the fleet.</p></div>
-        <div class="callout danger"><span class="ico"><svg fill="currentColor" viewBox="0 0 24 24">{{solar:danger-triangle}}</svg></span><span>This cannot be undone. The subagent branch and any quick-replies are gone.</span></div>
-      </div>
-      <div class="mod-ft">
-        <button class="btn" type="button">Cancel</button>
-        <button class="btn des sol" type="button">Delete session</button>
-      </div>
-    </div>
-  </div>
-</section>
+    <!-- ============================ BUTTONS =================================== -->
+    <section class="group">
+      <h2>Buttons</h2>
+      <p class="desc">
+        Primary (graphite gradient, never flat), secondary (ghost/outline),
+        destructive (red outline; red fill only for a final confirm), icon-only,
+        and icon+label. Solar duotone glyphs.
+      </p>
 
-<script>
-/* Screenshot affordances only — toggle the scheme and density. */
-(function () {
-  var root = document.documentElement;
-  function setScheme(b, dark){ root.classList.toggle('dark', dark); ['light','dark'].forEach(function(id){ var e=document.getElementById(id); if(e) e.classList.toggle('on', (id==='dark')===dark); }); }
-  function setDensity(comp){ root.classList.toggle('d-compact', comp); ['dcomfy','dcomp'].forEach(function(id){ var e=document.getElementById(id); if(e) e.classList.toggle('on', (id==='dcomp')===comp); }); }
-  var flipDark = function(){ setScheme(null, !root.classList.contains('dark')); };
-  var flipComp = function(){ setDensity(!root.classList.contains('d-compact')); };
-  document.getElementById('light').addEventListener('click', function(){ setScheme(null, false); });
-  document.getElementById('dark').addEventListener('click', function(){ setScheme(null, true); });
-  document.getElementById('dcomfy').addEventListener('click', function(){ setDensity(false); });
-  document.getElementById('dcomp').addEventListener('click', function(){ setDensity(true); });
-  /* the render.mjs flag adds .dark to <html>; the density defaults to comfy */
-})();
-</script>
-</body></html>
+      <div class="row" style="margin-bottom:18px">
+        <h3
+          style="width:100%;font-size:var(--text-md);font-weight:var(--weight-strong)"
+        >
+          Primary
+        </h3>
+        <div class="cell">
+          <span class="cap">default</span>
+          <div class="inner">
+            <button class="btn pri" type="button">Start session</button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">hover</span>
+          <div class="inner">
+            <button class="btn pri st-hover" type="button">
+              Start session
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">focus</span>
+          <div class="inner">
+            <button class="btn pri st-focus" type="button">
+              Start session
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">active</span>
+          <div class="inner">
+            <button class="btn pri st-press" type="button">
+              Start session
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">disabled</span>
+          <div class="inner">
+            <button class="btn pri" disabled type="button">
+              Start session
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">loading</span>
+          <div class="inner">
+            <button class="btn pri st-loading" type="button">
+              <svg
+                aria-hidden="true"
+                class="spin"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                {{solar:restart}}
+              </svg
+              >Starting…
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">error</span>
+          <div class="inner">
+            <button class="btn pri st-error" type="button">Failed</button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">success</span>
+          <div class="inner">
+            <button class="btn pri st-success" type="button">Connected</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-bottom:18px">
+        <h3
+          style="width:100%;font-size:var(--text-md);font-weight:var(--weight-strong)"
+        >
+          Secondary (ghost / outline)
+        </h3>
+        <div class="cell">
+          <span class="cap">default</span>
+          <div class="inner">
+            <button class="btn" type="button">View usage</button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">hover</span>
+          <div class="inner">
+            <button class="btn st-hover" type="button">View usage</button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">focus</span>
+          <div class="inner">
+            <button class="btn st-focus" type="button">View usage</button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">active</span>
+          <div class="inner">
+            <button class="btn st-press" type="button">View usage</button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">disabled</span>
+          <div class="inner">
+            <button class="btn" disabled type="button">View usage</button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">loading</span>
+          <div class="inner">
+            <button class="btn st-loading" type="button">
+              <svg
+                aria-hidden="true"
+                class="spin"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                {{solar:restart}}
+              </svg
+              >Saving…
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">error</span>
+          <div class="inner">
+            <button class="btn st-error" type="button">Sync failed</button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">success</span>
+          <div class="inner">
+            <button class="btn st-success" type="button">Saved</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-bottom:18px">
+        <h3
+          style="width:100%;font-size:var(--text-md);font-weight:var(--weight-strong)"
+        >
+          Destructive
+        </h3>
+        <div class="cell">
+          <span class="cap">outline</span>
+          <div class="inner">
+            <button class="btn des" type="button">Revoke</button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">outline hover</span>
+          <div class="inner">
+            <button class="btn des st-hover" type="button">Revoke</button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">outline focus</span>
+          <div class="inner">
+            <button class="btn des st-focus" type="button">Revoke</button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">confirm (filled)</span>
+          <div class="inner">
+            <button class="btn des sol" type="button">Delete forever</button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">confirm focus</span>
+          <div class="inner">
+            <button class="btn des sol st-focus" type="button">
+              Delete forever
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <h3
+          style="width:100%;font-size:var(--text-md);font-weight:var(--weight-strong)"
+        >
+          Icon-only
+        </h3>
+        <div class="cell">
+          <span class="cap">default</span>
+          <div class="inner">
+            <button aria-label="Export" class="btn ic" type="button">
+              <svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:export}}
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">hover</span>
+          <div class="inner">
+            <button aria-label="Export" class="btn ic st-hover" type="button">
+              <svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:export}}
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">focus</span>
+          <div class="inner">
+            <button aria-label="Export" class="btn ic st-focus" type="button">
+              <svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:export}}
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">active</span>
+          <div class="inner">
+            <button aria-label="Export" class="btn ic st-press" type="button">
+              <svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:export}}
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">disabled</span>
+          <div class="inner">
+            <button aria-label="Export" class="btn ic" disabled type="button">
+              <svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:export}}
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">loading</span>
+          <div class="inner">
+            <button aria-label="Export" class="btn ic st-loading" type="button">
+              <svg class="spin" fill="currentColor" viewBox="0 0 24 24">
+                {{solar:restart}}
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">error</span>
+          <div class="inner">
+            <button aria-label="Export" class="btn ic st-error" type="button">
+              <svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:export}}
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">success</span>
+          <div class="inner">
+            <button aria-label="Export" class="btn ic st-success" type="button">
+              <svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:export}}
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ CARD / PANEL ============================= -->
+    <section class="group">
+      <h2>Card / panel</h2>
+      <p class="desc">
+        White-raised surface on a grey field, with a sunken well inside (the
+        signature move): raised card, field-colour interior, hairline, 7px
+        radius inside 10px.
+      </p>
+      <div class="row">
+        <div class="panel" style="width:240px;min-height:180px">
+          <div class="well">
+            <span class="k">Sessions today</span>
+            <span class="v">6</span>
+            <span class="u">across 2 of 3 machines</span>
+          </div>
+        </div>
+        <div class="panel" style="width:240px;min-height:180px">
+          <div class="well">
+            <span class="k">Needs you</span>
+            <span class="v" style="color:var(--status-attn-ink)">3</span>
+            <span class="u">waiting on an operator decision</span>
+          </div>
+        </div>
+        <div class="panel" style="width:240px;min-height:180px">
+          <div class="well">
+            <span class="k">Spend today</span>
+            <span class="v">$18.40</span>
+            <span class="u">of a $50.00 fleet budget</span>
+          </div>
+        </div>
+      </div>
+      <h3
+        style="font-size:var(--text-md);font-weight:var(--weight-strong);margin:24px 0 8px"
+      >
+        Stat card tile — eight interaction states
+      </h3>
+      <div class="row">
+        <div class="cell">
+          <span class="cap">default</span>
+          <div class="inner">
+            <button class="tile" type="button">
+              <div class="panel">
+                <div class="well">
+                  <span class="k">Sessions</span><span class="v">6</span>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">hover</span>
+          <div class="inner">
+            <button class="tile st-hover" type="button">
+              <div class="panel">
+                <div class="well">
+                  <span class="k">Sessions</span><span class="v">6</span>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">focus</span>
+          <div class="inner">
+            <button class="tile st-focus" type="button">
+              <div class="panel">
+                <div class="well">
+                  <span class="k">Sessions</span><span class="v">6</span>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">active</span>
+          <div class="inner">
+            <button class="tile st-press" type="button">
+              <div class="panel">
+                <div class="well">
+                  <span class="k">Sessions</span><span class="v">6</span>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">disabled</span>
+          <div class="inner">
+            <button class="tile st-disabled" disabled type="button">
+              <div class="panel">
+                <div class="well">
+                  <span class="k">Sessions</span><span class="v">6</span>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">loading</span>
+          <div class="inner">
+            <button class="tile st-loading" type="button">
+              <div class="panel">
+                <div class="well">
+                  <span class="k">Sessions</span
+                  ><span class="v" style="color:var(--ink-muted)">—</span>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">error</span>
+          <div class="inner">
+            <button class="tile" type="button">
+              <div class="panel">
+                <div class="well">
+                  <span class="k">Sessions</span
+                  ><span class="v" style="color:var(--status-fail-ink)">0</span>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">success</span>
+          <div class="inner">
+            <button class="tile" type="button">
+              <div class="panel">
+                <div class="well">
+                  <span class="k">Sessions</span
+                  ><span class="v" style="color:var(--status-done-ink)">6</span>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ STATUS PILL ============================== -->
+    <section class="group">
+      <h2>Status pill</h2>
+      <p class="desc">
+        Flexoki accent light-tint + darker ink, glyph-led. Idle carries no fill
+        at all (absence of a chip is the idle state). Error=red, success=green,
+        warning=yellow, info=blue.
+      </p>
+      <div class="row">
+        <div class="cell">
+          <span class="cap">default</span>
+          <div class="inner" style="gap:6px">
+            <span class="pill live"
+              ><svg fill="currentColor" viewBox="0 0 12 12">
+                <circle cx="6" cy="6" r="3.1" />
+              </svg
+              >working</span
+            >
+            <span class="pill attn"
+              ><svg fill="none" stroke="currentColor" viewBox="0 0 12 12">
+                <path d="M6 9.4V2.6M3 5.6 6 2.6l3 3" />
+              </svg
+              >needs you</span
+            >
+            <span class="pill done"
+              ><svg fill="none" stroke="currentColor" viewBox="0 0 12 12">
+                <path d="M2.4 6.3 4.9 8.8l4.7-5.6" />
+              </svg
+              >done</span
+            >
+            <span class="pill fail"
+              ><svg fill="none" stroke="currentColor" viewBox="0 0 12 12">
+                <path d="M3.2 3.2l5.6 5.6M8.8 3.2l-5.6 5.6" />
+              </svg
+              >error</span
+            >
+            <span class="pill idle"
+              ><svg fill="none" stroke="currentColor" viewBox="0 0 12 12">
+                <path d="M4.4 3v6M7.6 3v6" />
+              </svg
+              >idle</span
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">hover</span>
+          <div class="inner">
+            <span class="pill live st-hover"
+              ><svg fill="currentColor" viewBox="0 0 12 12">
+                <circle cx="6" cy="6" r="3.1" />
+              </svg
+              >working</span
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">focus</span>
+          <div class="inner">
+            <span class="pill live st-focus"
+              ><svg fill="currentColor" viewBox="0 0 12 12">
+                <circle cx="6" cy="6" r="3.1" />
+              </svg
+              >working</span
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">active</span>
+          <div class="inner">
+            <span class="pill live st-press"
+              ><svg fill="currentColor" viewBox="0 0 12 12">
+                <circle cx="6" cy="6" r="3.1" />
+              </svg
+              >working</span
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">disabled</span>
+          <div class="inner">
+            <span class="pill live st-disabled"
+              ><svg fill="currentColor" viewBox="0 0 12 12">
+                <circle cx="6" cy="6" r="3.1" />
+              </svg
+              >paused</span
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">loading</span>
+          <div class="inner">
+            <span class="pill live st-loading"
+              ><svg fill="currentColor" viewBox="0 0 12 12">
+                <circle cx="6" cy="6" r="3.1" />
+              </svg
+              >syncing</span
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">error</span>
+          <div class="inner">
+            <span class="pill st-error"
+              ><svg fill="none" stroke="currentColor" viewBox="0 0 12 12">
+                <path d="M3.2 3.2l5.6 5.6M8.8 3.2l-5.6 5.6" />
+              </svg
+              >failed</span
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">success</span>
+          <div class="inner">
+            <span class="pill st-success"
+              ><svg fill="none" stroke="currentColor" viewBox="0 0 12 12">
+                <path d="M2.4 6.3 4.9 8.8l4.7-5.6" />
+              </svg
+              >deployed</span
+            >
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ ITEM MARK ================================ -->
+    <section class="group">
+      <h2>Item mark</h2>
+      <p class="desc">
+        Per-item identity HUE (8 Flexoki accent hues) + harness GLYPH, keyed to
+        the identity. A saturated solid with a white glyph — the same top-light
+        / bottom-shade read as the button at a twelfth of the size.
+      </p>
+      <div class="row">
+        <div class="cell">
+          <span class="cap">hue 1 · claude</span>
+          <div class="inner">
+            <span class="mark-row"
+              ><span class="mark"
+                ><svg
+                  fill="none"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+                </svg></span
+              ><span class="meta"
+                ><b>wire delegate</b><span>claude · nixbox</span></span
+              ></span
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">hue 2 · opencode</span>
+          <div class="inner">
+            <span class="mark-row"
+              ><span class="mark m2"
+                ><svg
+                  fill="none"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M9 8l-4 4 4 4M15 8l4 4-4 4" />
+                </svg></span
+              ><span class="meta"
+                ><b>table spike</b><span>opencode · nixbox</span></span
+              ></span
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">hue 3 · pi</span>
+          <div class="inner">
+            <span class="mark-row"
+              ><span class="mark m3"
+                ><svg
+                  fill="none"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+                </svg></span
+              ><span class="meta"
+                ><b>landing copy</b><span>pi · mba-m3</span></span
+              ></span
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">hue 4</span>
+          <div class="inner">
+            <span
+              class="mark m4"
+              style="width:var(--c-mark);height:var(--c-mark)"
+              ><svg
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                viewBox="0 0 24 24"
+              >
+                <path d="M9 8l-4 4 4 4M15 8l4 4-4 4" />
+              </svg></span
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">hue 5</span>
+          <div class="inner">
+            <span
+              class="mark m5"
+              style="width:var(--c-mark);height:var(--c-mark)"
+              ><svg
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                viewBox="0 0 24 24"
+              >
+                <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+              </svg></span
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">hue 6</span>
+          <div class="inner">
+            <span
+              class="mark m6"
+              style="width:var(--c-mark);height:var(--c-mark)"
+              ><svg
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                viewBox="0 0 24 24"
+              >
+                <path d="M9 8l-4 4 4 4M15 8l4 4-4 4" />
+              </svg></span
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">hue 7</span>
+          <div class="inner">
+            <span
+              class="mark m7"
+              style="width:var(--c-mark);height:var(--c-mark)"
+              ><svg
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                viewBox="0 0 24 24"
+              >
+                <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+              </svg></span
+            >
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">hue 8</span>
+          <div class="inner">
+            <span
+              class="mark m8"
+              style="width:var(--c-mark);height:var(--c-mark)"
+              ><svg
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                viewBox="0 0 24 24"
+              >
+                <path d="M5 7.5h14M9 7.5v9M15 7.5v6.5a2.5 2.5 0 0 0 4 0" />
+              </svg></span
+            >
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ INPUT ==================================== -->
+    <section class="group">
+      <h2>Input</h2>
+      <p class="desc">
+        Text field — computes ≥16px font at every width so iOS never zooms on
+        focus. Leading icon, labeled, with an error and a success hint state.
+      </p>
+      <div class="row">
+        <div class="field" style="width:280px">
+          <label for="inp1">Session name</label>
+          <div class="inp">
+            <span class="lead"
+              ><svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:document-text}}
+              </svg></span
+            ><input
+              id="inp1"
+              placeholder="e.g. wire delegate row outcomes"
+              type="text"
+              value="landing copy pass"
+            >
+          </div>
+          <span class="hint ok"
+            ><svg
+              fill="currentColor"
+              style="width:10px;height:10px"
+              viewBox="0 0 12 12"
+            >
+              <path
+                d="M2.4 6.3 4.9 8.8l4.7-5.6"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+              />
+            </svg>
+            Name is available</span
+          >
+        </div>
+        <div class="cell">
+          <span class="cap">hover</span>
+          <div class="inner">
+            <div class="inp st-hover">
+              <input type="text" value="hover state">
+            </div>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">focus</span>
+          <div class="inner">
+            <div class="inp st-focus">
+              <input type="text" value="focus state">
+            </div>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">active</span>
+          <div class="inner">
+            <div class="inp st-press">
+              <input type="text" value="active state">
+            </div>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">disabled</span>
+          <div class="inner">
+            <div class="inp">
+              <input disabled type="text" value="disabled state">
+            </div>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">loading</span>
+          <div class="inner">
+            <div class="inp st-loading">
+              <svg
+                class="spin"
+                fill="currentColor"
+                style="width:16px;height:16px;color:var(--ink-muted)"
+                viewBox="0 0 24 24"
+              >
+                {{solar:restart}}
+              </svg><input type="text" value="loading state">
+            </div>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">error</span>
+          <div class="inner">
+            <div class="inp has-err"><input type="text" value="sk-live"></div>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">success</span>
+          <div class="inner">
+            <div class="inp st-success">
+              <input type="text" value="validated">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="field" style="width:280px;margin-top:10px">
+        <label for="inp3">API key</label>
+        <div class="inp has-err">
+          <span class="lead"
+            ><svg
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+            >
+              <circle cx="8" cy="15" r="5" />
+              <path d="M11.7 11.3 21 2" />
+              <path d="M16 7l2.5 2.5" />
+              <path d="M18.5 5l2 2" />
+            </svg></span
+          ><input id="inp3" type="password" value="sk-live-xxxxxxxxxxx">
+        </div>
+        <span class="hint err">That key looks live — use a sandbox key.</span>
+      </div>
+    </section>
+
+    <!-- ============================ FILTER SELECT ============================ -->
+    <section class="group">
+      <h2>Filter select</h2>
+      <p class="desc">
+        A control with a trailing chevron on the raised surface.
+      </p>
+      <div class="row">
+        <div class="cell">
+          <span class="cap">default</span>
+          <div class="inner">
+            <button class="sel" type="button">
+              <span class="lbl">All machines</span
+              ><svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:alt-arrow-down}}
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">hover</span>
+          <div class="inner">
+            <button class="sel st-hover" type="button">
+              <span class="lbl">All states</span
+              ><svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:alt-arrow-down}}
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">focus</span>
+          <div class="inner">
+            <button class="sel st-focus" type="button">
+              <span class="lbl">Last active</span
+              ><svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:alt-arrow-down}}
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">active</span>
+          <div class="inner">
+            <button class="sel st-press" type="button">
+              <span class="lbl">All machines</span
+              ><svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:alt-arrow-down}}
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">disabled</span>
+          <div class="inner">
+            <button class="sel st-disabled" disabled type="button">
+              <span class="lbl">All machines</span
+              ><svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:alt-arrow-down}}
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">loading</span>
+          <div class="inner">
+            <button class="sel st-loading" type="button">
+              <svg
+                class="spin"
+                fill="currentColor"
+                style="width:15px;height:15px;margin-right:auto"
+                viewBox="0 0 24 24"
+              >
+                {{solar:restart}}
+              </svg><span class="lbl">Loading…</span
+              ><svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:alt-arrow-down}}
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">error</span>
+          <div class="inner">
+            <button class="sel st-error" type="button">
+              <span class="lbl">Unreachable</span
+              ><svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:alt-arrow-down}}
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">success</span>
+          <div class="inner">
+            <button class="sel st-success" type="button">
+              <span class="lbl">Connected · nixbox</span
+              ><svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:alt-arrow-down}}
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ PAGINATION =============================== -->
+    <section class="group">
+      <h2>Pagination</h2>
+      <p class="desc">
+        Filled active page (gradient), bordered chevrons, gap-fill ellipsis.
+      </p>
+      <div class="row">
+        <div class="cell">
+          <span class="cap">default</span>
+          <div class="inner">
+            <div class="pager">
+              <button aria-label="Previous" class="page b" type="button">
+                <svg fill="currentColor" viewBox="0 0 24 24">
+                  <path
+                    d="M15 18l-6-6 6-6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  />
+                </svg>
+              </button>
+              <button class="page on" type="button">1</button>
+              <button class="page" type="button">2</button>
+              <button class="page ellipsis" tabindex="-1" type="button">
+                …
+              </button>
+              <button class="page" type="button">12</button>
+              <button aria-label="Next" class="page b" type="button">
+                <svg fill="currentColor" viewBox="0 0 24 24">
+                  <path
+                    d="M9 18l6-6-6-6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">hover</span>
+          <div class="inner">
+            <div class="pager">
+              <button aria-label="Previous" class="page b" type="button">
+                <svg fill="currentColor" viewBox="0 0 24 24">
+                  <path
+                    d="M15 18l-6-6 6-6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  />
+                </svg>
+              </button>
+              <button class="page on" type="button">1</button>
+              <button class="page st-hover" type="button">2</button>
+              <button class="page ellipsis" tabindex="-1" type="button">
+                …
+              </button>
+              <button class="page" type="button">12</button>
+              <button aria-label="Next" class="page b st-hover" type="button">
+                <svg fill="currentColor" viewBox="0 0 24 24">
+                  <path
+                    d="M9 18l6-6-6-6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">focus</span>
+          <div class="inner">
+            <div class="pager">
+              <button aria-label="Previous" class="page b" type="button">
+                <svg fill="currentColor" viewBox="0 0 24 24">
+                  <path
+                    d="M15 18l-6-6 6-6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  />
+                </svg>
+              </button>
+              <button class="page on" type="button">1</button>
+              <button class="page st-focus" type="button">2</button>
+            </div>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">active · press</span>
+          <div class="inner">
+            <div class="pager">
+              <button
+                aria-label="Previous"
+                class="page b st-press"
+                type="button"
+              >
+                <svg fill="currentColor" viewBox="0 0 24 24">
+                  <path
+                    d="M15 18l-6-6 6-6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  />
+                </svg>
+              </button>
+              <button class="page on" type="button">1</button>
+              <button class="page st-press" type="button">2</button>
+            </div>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">disabled</span>
+          <div class="inner">
+            <div class="pager">
+              <button
+                aria-label="Previous"
+                class="page b st-disabled"
+                disabled
+                type="button"
+              >
+                <svg fill="currentColor" viewBox="0 0 24 24">
+                  <path
+                    d="M15 18l-6-6 6-6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  />
+                </svg>
+              </button>
+              <button class="page on" type="button">1</button>
+              <button
+                aria-label="Next"
+                class="page b st-disabled"
+                disabled
+                type="button"
+              >
+                <svg fill="currentColor" viewBox="0 0 24 24">
+                  <path
+                    d="M9 18l6-6-6-6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">loading</span>
+          <div class="inner">
+            <div class="pager">
+              <button aria-label="Previous" class="page b" type="button">
+                <svg fill="currentColor" viewBox="0 0 24 24">
+                  <path
+                    d="M15 18l-6-6 6-6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  />
+                </svg>
+              </button>
+              <button class="page on st-loading" type="button">
+                <svg
+                  class="spin"
+                  fill="currentColor"
+                  style="width:14px;height:14px"
+                  viewBox="0 0 24 24"
+                >
+                  {{solar:restart}}
+                </svg>
+              </button>
+              <button class="page" type="button">2</button>
+            </div>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">error</span>
+          <div class="inner">
+            <div class="pager">
+              <button aria-label="Previous" class="page b" type="button">
+                <svg fill="currentColor" viewBox="0 0 24 24">
+                  <path
+                    d="M15 18l-6-6 6-6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  />
+                </svg>
+              </button>
+              <button class="page st-error" type="button">1</button>
+              <button class="page st-error" type="button">2</button>
+              <button aria-label="Next" class="page b" type="button">
+                <svg fill="currentColor" viewBox="0 0 24 24">
+                  <path
+                    d="M9 18l6-6-6-6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">success</span>
+          <div class="inner">
+            <div class="pager">
+              <button aria-label="Previous" class="page b" type="button">
+                <svg fill="currentColor" viewBox="0 0 24 24">
+                  <path
+                    d="M15 18l-6-6 6-6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  />
+                </svg>
+              </button>
+              <button class="page st-success" type="button">1</button>
+              <button class="page on" type="button">2</button>
+              <button aria-label="Next" class="page b" type="button">
+                <svg fill="currentColor" viewBox="0 0 24 24">
+                  <path
+                    d="M9 18l6-6-6-6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ SHEET =================================== -->
+    <section class="group">
+      <h2>Sheet (mobile slide-over)</h2>
+      <p class="desc">
+        A panel that slides over on narrow screens; header with close, then
+        content.
+      </p>
+      <div class="row">
+        <div class="sheet">
+          <div class="sh">
+            <b>Session filters</b
+            ><button aria-label="Close" class="x" type="button">
+              <svg
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="1.8"
+                viewBox="0 0 24 24"
+              >
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+          <div class="sb">
+            <p>
+              Refine what this board shows. Changes apply to the fleet list
+              below.
+            </p>
+            <button class="sel" style="width:100%" type="button">
+              <span class="lbl">All states</span
+              ><svg fill="currentColor" viewBox="0 0 24 24">
+                {{solar:alt-arrow-down}}
+              </svg>
+            </button>
+            <button class="btn pri" type="button">Apply</button>
+          </div>
+        </div>
+      </div>
+      <h3
+        style="font-size:var(--text-md);font-weight:var(--weight-strong);margin:26px 0 8px"
+      >
+        Sheet close — eight interaction states
+      </h3>
+      <div class="row">
+        <div class="cell">
+          <span class="cap">default</span>
+          <div class="inner">
+            <button aria-label="Close" class="x" type="button">
+              <svg
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="1.8"
+                viewBox="0 0 24 24"
+              >
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">hover</span>
+          <div class="inner">
+            <button aria-label="Close" class="x st-hover" type="button">
+              <svg
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="1.8"
+                viewBox="0 0 24 24"
+              >
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">focus</span>
+          <div class="inner">
+            <button aria-label="Close" class="x st-focus" type="button">
+              <svg
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="1.8"
+                viewBox="0 0 24 24"
+              >
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">active · press</span>
+          <div class="inner">
+            <button aria-label="Close" class="x st-press" type="button">
+              <svg
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="1.8"
+                viewBox="0 0 24 24"
+              >
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">disabled</span>
+          <div class="inner">
+            <button
+              aria-label="Close"
+              class="x st-disabled"
+              disabled
+              type="button"
+            >
+              <svg
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="1.8"
+                viewBox="0 0 24 24"
+              >
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">loading</span>
+          <div class="inner">
+            <button aria-label="Close" class="x st-loading" type="button">
+              <svg
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="1.8"
+                viewBox="0 0 24 24"
+              >
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">error</span>
+          <div class="inner">
+            <button aria-label="Close" class="x st-error" type="button">
+              <svg
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="1.8"
+                viewBox="0 0 24 24"
+              >
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="cell">
+          <span class="cap">success</span>
+          <div class="inner">
+            <button aria-label="Close" class="x st-success" type="button">
+              <svg
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="1.8"
+                viewBox="0 0 24 24"
+              >
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================ MODAL ==================================== -->
+    <section class="group">
+      <h2>Modal / dialog</h2>
+      <p class="desc">
+        Centered card on a dimmed scrim: a bare top strip (brand mark left,
+        bordered close right), then an inset bordered card carrying the title +
+        subtitle, labeled select + password-with-eye and warning callout, then a
+        footer on the base surface with right-aligned ghost Cancel + primary.
+        The destructive confirm shares the anatomy; danger reads in the callout
+        and the red solid button. ~460px default.
+      </p>
+
+      <div aria-hidden="true" class="scrim bare">
+        <div
+          aria-labelledby="m1t"
+          aria-modal="true"
+          class="modal enter"
+          role="dialog"
+        >
+          <div class="mod-hd">
+            <span class="brand"
+              ><svg
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="1.6"
+                viewBox="0 0 24 24"
+              >
+                <path d="M4 4h16v16H4z" />
+                <path d="M4 4h8v16H4z" fill="currentColor" />
+              </svg></span
+            >
+            <button aria-label="Close" class="close" type="button">
+              <svg
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="1.8"
+                viewBox="0 0 24 24"
+              >
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+          <div class="mod-bd">
+            <div class="ttl">
+              <h3 id="m1t">Connect a machine</h3>
+              <p>Add a new host to the fleet over tailnet.</p>
+            </div>
+            <div class="field">
+              <label for="msel">Machine role</label>
+              <button class="sel" style="width:100%" type="button">
+                <span class="lbl">Worker — runs agents on demand</span
+                ><svg fill="currentColor" viewBox="0 0 24 24">
+                  {{solar:alt-arrow-down}}
+                </svg>
+              </button>
+            </div>
+            <div class="field">
+              <label for="mtok">Access token</label>
+              <div class="inp">
+                <input
+                  aria-label="Access token"
+                  id="mtok"
+                  type="password"
+                  value="whiffle_a1b2c3d4"
+                ><button aria-label="Show token" class="eye" type="button">
+                  <svg fill="currentColor" viewBox="0 0 24 24">
+                    {{solar:eye}}
+                  </svg>
+                </button>
+              </div>
+              <span class="hint">Rotates every 30 days.</span>
+            </div>
+            <div class="callout">
+              <span class="ico"
+                ><svg fill="currentColor" viewBox="0 0 24 24">
+                  {{solar:danger-triangle}}
+                </svg></span
+              ><span
+                >This machine will be reachable from every host already on the
+                fleet.</span
+              >
+            </div>
+          </div>
+          <div class="mod-ft">
+            <button class="btn" type="button">Cancel</button>
+            <button class="btn pri" type="button">Add machine</button>
+          </div>
+        </div>
+      </div>
+
+      <h3
+        style="font-size:var(--text-md);font-weight:var(--weight-strong);margin:26px 0 8px"
+      >
+        Destructive confirm
+      </h3>
+      <div aria-hidden="true" class="scrim bare">
+        <div
+          aria-labelledby="m2t"
+          aria-modal="true"
+          class="modal"
+          role="dialog"
+          style="max-width:440px"
+        >
+          <div class="mod-hd">
+            <span class="brand"
+              ><svg
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="1.6"
+                viewBox="0 0 24 24"
+              >
+                <path d="M4 4h16v16H4z" />
+                <path d="M4 4h8v16H4z" fill="currentColor" />
+              </svg></span
+            >
+            <button aria-label="Close" class="close" type="button">
+              <svg
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-width="1.8"
+                viewBox="0 0 24 24"
+              >
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+          <div class="mod-bd">
+            <div class="ttl">
+              <h3 id="m2t">Delete this session?</h3>
+              <p>Its transcript and permissions are removed from the fleet.</p>
+            </div>
+            <div class="callout danger">
+              <span class="ico"
+                ><svg fill="currentColor" viewBox="0 0 24 24">
+                  {{solar:danger-triangle}}
+                </svg></span
+              ><span
+                >This cannot be undone. The subagent branch and any
+                quick-replies are gone.</span
+              >
+            </div>
+          </div>
+          <div class="mod-ft">
+            <button class="btn" type="button">Cancel</button>
+            <button class="btn des sol" type="button">Delete session</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script>
+      "use strict";
+      /* Screenshot affordances only — toggle the scheme and density. */
+      (() => {
+        var root = document.documentElement;
+        function setScheme(b, dark) {
+          root.classList.toggle("dark", dark);
+          ["light", "dark"].forEach((id) => {
+            var e = document.getElementById(id);
+            if (e) {
+              e.classList.toggle("on", (id === "dark") === dark);
+            }
+          });
+        }
+        function setDensity(comp) {
+          root.classList.toggle("d-compact", comp);
+          ["dcomfy", "dcomp"].forEach((id) => {
+            var e = document.getElementById(id);
+            if (e) {
+              e.classList.toggle("on", (id === "dcomp") === comp);
+            }
+          });
+        }
+        var flipDark = () => {
+          setScheme(null, !root.classList.contains("dark"));
+        };
+        var flipComp = () => {
+          setDensity(!root.classList.contains("d-compact"));
+        };
+        document.getElementById("light").addEventListener("click", () => {
+          setScheme(null, false);
+        });
+        document.getElementById("dark").addEventListener("click", () => {
+          setScheme(null, true);
+        });
+        document.getElementById("dcomfy").addEventListener("click", () => {
+          setDensity(false);
+        });
+        document.getElementById("dcomp").addEventListener("click", () => {
+          setDensity(true);
+        });
+        /* the render.mjs flag adds .dark to <html>; the density defaults to comfy */
+      })();
+    </script>
+  </body>
+</html>

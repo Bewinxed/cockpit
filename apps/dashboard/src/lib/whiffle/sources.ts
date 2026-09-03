@@ -9,12 +9,12 @@
  * answer with nothing to cite cites nothing, because a guessed citation is
  * worse than a missing one.
  */
-import type { JsonValue, Message } from './types';
+import type { JsonValue, Message } from "./types";
 
 export interface SourceRef {
-  url: string;
-  title: string | null;
   host: string;
+  title: string | null;
+  url: string;
 }
 
 /** Past this the strip is a bibliography, and the answer above it is not. */
@@ -32,9 +32,11 @@ const EXA_TOOL = /^web_(search|fetch)_exa$/i;
 const FIRECRAWL_TOOL = /^firecrawl_(search|scrape|map|crawl)$/i;
 
 function webTool(toolName: string | undefined): string | null {
-  const raw = toolName ?? '';
+  const raw = toolName ?? "";
   const leaf = MCP_NAME.exec(raw)?.[2] ?? raw;
-  return EXA_TOOL.test(leaf) || FIRECRAWL_TOOL.test(leaf) ? leaf.toLowerCase() : null;
+  return EXA_TOOL.test(leaf) || FIRECRAWL_TOOL.test(leaf)
+    ? leaf.toLowerCase()
+    : null;
 }
 
 /** The site's icon at chip scale, the one the transcript's tool rows already use. */
@@ -42,12 +44,15 @@ export function faviconFor(host: string): string {
   return `https://www.google.com/s2/favicons?domain=${host}&sz=32`;
 }
 
-const textOf = (value: JsonValue | undefined): string => (typeof value === 'string' ? value : '');
+const textOf = (value: JsonValue | undefined): string =>
+  typeof value === "string" ? value : "";
 
 const inputUrl = (input: JsonValue | undefined): string | undefined => {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) return undefined;
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return undefined;
+  }
   const url = input.url;
-  return typeof url === 'string' ? url : undefined;
+  return typeof url === "string" ? url : undefined;
 };
 
 /** A source, or nothing when the text that looked like a URL is not one. */
@@ -58,17 +63,21 @@ function ref(url: string, title: string | null): SourceRef | null {
   } catch {
     return null;
   }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
-  parsed.hash = '';
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return null;
+  }
+  parsed.hash = "";
   return {
-    url: parsed.toString().replace(/\/$/, ''),
+    url: parsed.toString().replace(/\/$/, ""),
     title: title?.trim() || null,
-    host: parsed.hostname.replace(/^www\./, ''),
+    host: parsed.hostname.replace(/^www\./, ""),
   };
 }
 
 function add(found: SourceRef[], source: SourceRef | null): void {
-  if (source) found.push(source);
+  if (source) {
+    found.push(source);
+  }
 }
 
 const EXA_TITLE = /^Title:\s*(.+)$/;
@@ -78,7 +87,7 @@ const EXA_URL = /^URL:\s*(\S+)$/;
 function exaSearchSources(result: string): SourceRef[] {
   const found: SourceRef[] = [];
   let title: string | null = null;
-  for (const line of result.split('\n')) {
+  for (const line of result.split("\n")) {
     const trimmed = line.trim();
     const named = EXA_TITLE.exec(trimmed);
     if (named) {
@@ -101,8 +110,8 @@ const MARKDOWN_LINK = /^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/;
 /** `N. <title>` and `Title: <title>` are the two ways a result names itself. */
 const titleLine = (line: string): string | null =>
   line
-    .replace(/^\d+[.)]\s*/, '')
-    .replace(/^Title:\s*/i, '')
+    .replace(/^\d+[.)]\s*/, "")
+    .replace(/^Title:\s*/i, "")
     .trim() || null;
 
 /**
@@ -113,9 +122,11 @@ const titleLine = (line: string): string | null =>
 function listedSources(result: string): SourceRef[] {
   const found: SourceRef[] = [];
   let title: string | null = null;
-  for (const line of result.split('\n')) {
+  for (const line of result.split("\n")) {
     const trimmed = line.trim();
-    if (!trimmed) continue;
+    if (!trimmed) {
+      continue;
+    }
     const link = MARKDOWN_LINK.exec(trimmed);
     if (link) {
       add(found, ref(link[2], link[1]));
@@ -135,25 +146,35 @@ function listedSources(result: string): SourceRef[] {
 
 /** A fetched page prints its own `# heading` first when it has one. */
 function headingTitle(result: string): string | null {
-  const first = result.split('\n', 1)[0]?.trim() ?? '';
-  return first.startsWith('# ') ? first.slice(2).trim() || null : null;
+  const first = result.split("\n", 1)[0]?.trim() ?? "";
+  return first.startsWith("# ") ? first.slice(2).trim() || null : null;
 }
 
 function sourcesOfCall(message: Message): SourceRef[] {
-  if (message.type !== 'tool.use' && message.type !== 'tool.result') return [];
+  if (message.type !== "tool.use" && message.type !== "tool.result") {
+    return [];
+  }
   const leaf = webTool(message.metadata?.toolName);
-  if (!leaf) return [];
+  if (!leaf) {
+    return [];
+  }
   // A call that failed read nothing, whatever its input named.
-  if (message.metadata?.toolStatus === 'error') return [];
+  if (message.metadata?.toolStatus === "error") {
+    return [];
+  }
 
   const result = textOf(message.metadata?.toolResult);
   const url = inputUrl(message.metadata?.toolInput);
-  if (leaf === 'web_search_exa') {
+  if (leaf === "web_search_exa") {
     const found = exaSearchSources(result);
-    if (found.length > 0) return found;
-  } else if (leaf === 'firecrawl_search') {
+    if (found.length > 0) {
+      return found;
+    }
+  } else if (leaf === "firecrawl_search") {
     const found = listedSources(result);
-    if (found.length > 0) return found;
+    if (found.length > 0) {
+      return found;
+    }
   } else if (url) {
     // A fetch and a scrape are handed their URL — the body is the page, not a
     // list of pages, so nothing is mined out of it but the heading.
@@ -169,22 +190,35 @@ function sourcesOfCall(message: Message): SourceRef[] {
 
 /** The previous turn: another answer, or anything a human or a peer said. */
 const endsTurn = (message: Message): boolean =>
-  message.type === 'assistant' || message.type === 'user' || message.type.startsWith('user.');
+  message.type === "assistant" ||
+  message.type === "user" ||
+  message.type.startsWith("user.");
 
-export function sourcesForMessage(messages: Message[], index: number): SourceRef[] {
-  if (messages[index]?.type !== 'assistant') return [];
+export function sourcesForMessage(
+  messages: Message[],
+  index: number
+): SourceRef[] {
+  if (messages[index]?.type !== "assistant") {
+    return [];
+  }
 
   let start = index;
-  while (start > 0 && !endsTurn(messages[start - 1])) start -= 1;
+  while (start > 0 && !endsTurn(messages[start - 1])) {
+    start -= 1;
+  }
 
   const seen = new Set<string>();
   const sources: SourceRef[] = [];
   for (let i = start; i < index; i += 1) {
     for (const source of sourcesOfCall(messages[i])) {
-      if (seen.has(source.url)) continue;
+      if (seen.has(source.url)) {
+        continue;
+      }
       seen.add(source.url);
       sources.push(source);
-      if (sources.length === MAX_SOURCES) return sources;
+      if (sources.length === MAX_SOURCES) {
+        return sources;
+      }
     }
   }
   return sources;

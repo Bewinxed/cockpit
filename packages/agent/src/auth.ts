@@ -1,9 +1,13 @@
-import { query, type AccountInfo, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { AuthState } from '@whiffle/core';
-import { homedir, platform } from 'node:os';
+import { homedir, platform } from "node:os";
+import {
+  type AccountInfo,
+  query,
+  type SDKUserMessage,
+} from "@anthropic-ai/claude-agent-sdk";
+import type { AuthState } from "@whiffle/core";
 
 /** The keychain item Claude Code keeps its OAuth credentials in on macOS. */
-const KEYCHAIN_SERVICE = 'Claude Code-credentials';
+const KEYCHAIN_SERVICE = "Claude Code-credentials";
 
 /** `errSecInteractionNotAllowed`: the item is there, this session may not read it. */
 const SEC_INTERACTION_NOT_ALLOWED = 36;
@@ -36,9 +40,13 @@ const idle: AsyncIterable<SDKUserMessage> = {
  * it; a stale token still reads as authenticated until it is used.
  */
 const credentialed = (account: AccountInfo): boolean => {
-  if (account.apiProvider && account.apiProvider !== 'firstParty') return true;
+  if (account.apiProvider && account.apiProvider !== "firstParty") {
+    return true;
+  }
   const token = account.tokenSource;
-  return Boolean(account.email ?? account.apiKeySource ?? (token && token !== 'none'));
+  return Boolean(
+    account.email ?? account.apiKeySource ?? (token && token !== "none")
+  );
 };
 
 /**
@@ -46,10 +54,13 @@ const credentialed = (account: AccountInfo): boolean => {
  * Exit 36 is the whole signal — a missing item exits 44 instead.
  */
 const keychainRefused = async (): Promise<boolean> => {
-  if (platform() !== 'darwin') return false;
-  const secret = await Bun.$`security find-generic-password -s ${KEYCHAIN_SERVICE} -w`
-    .quiet()
-    .nothrow();
+  if (platform() !== "darwin") {
+    return false;
+  }
+  const secret =
+    await Bun.$`security find-generic-password -s ${KEYCHAIN_SERVICE} -w`
+      .quiet()
+      .nothrow();
   return secret.exitCode === SEC_INTERACTION_NOT_ALLOWED;
 };
 
@@ -71,7 +82,9 @@ export const probeAuth = async (): Promise<AuthState> => {
   ]).catch(() => undefined);
   handle.close();
 
-  if (account && credentialed(account)) return 'authenticated';
+  if (account && credentialed(account)) {
+    return "authenticated";
+  }
 
   // Absence of evidence is not evidence of absence.
   //
@@ -85,7 +98,7 @@ export const probeAuth = async (): Promise<AuthState> => {
   // credentials are there and this process cannot reach them. Everything else
   // gets the benefit of the doubt, because a session that genuinely cannot
   // answer will say so itself, in the turn, where it is unambiguous.
-  return (await keychainRefused()) ? 'unreadable-credentials' : 'authenticated';
+  return (await keychainRefused()) ? "unreadable-credentials" : "authenticated";
 };
 
 /**
@@ -103,21 +116,26 @@ export const probeAuth = async (): Promise<AuthState> => {
  * travels anywhere but into this one call.
  */
 export const unlockKeychain = async (password: string): Promise<AuthState> => {
-  if (platform() !== 'darwin') {
-    throw new Error('Only macOS keeps its credentials in a keychain that locks.');
+  if (platform() !== "darwin") {
+    throw new Error(
+      "Only macOS keeps its credentials in a keychain that locks."
+    );
   }
-  if (!password) throw new Error('The keychain password is required.');
+  if (!password) {
+    throw new Error("The keychain password is required.");
+  }
 
   const keychain = `${homedir()}/Library/Keychains/login.keychain-db`;
-  const unlocked = await Bun.$`security unlock-keychain -p ${password} ${keychain}`
-    .quiet()
-    .nothrow();
+  const unlocked =
+    await Bun.$`security unlock-keychain -p ${password} ${keychain}`
+      .quiet()
+      .nothrow();
   if (unlocked.exitCode !== 0) {
     // The tool's own words, minus anything that might echo the password back.
     const said = unlocked.stderr.toString().trim();
     throw new Error(
-      said.includes('password')
-        ? 'That password did not unlock the keychain.'
+      said.includes("password")
+        ? "That password did not unlock the keychain."
         : `The keychain refused to unlock: ${said || `exit ${unlocked.exitCode}`}`
     );
   }

@@ -9,7 +9,7 @@
  */
 
 /** The platforms a daemon reports itself as — `platform()` from `node:os`. */
-export type ToolPlatform = 'linux' | 'darwin' | 'win32';
+export type ToolPlatform = "linux" | "darwin" | "win32";
 
 /**
  * One way to put a tool on a machine. Methods are tried in catalog order; the
@@ -18,19 +18,24 @@ export type ToolPlatform = 'linux' | 'darwin' | 'win32';
  * is harder to reason about than one honest failure.
  */
 export interface ToolInstallMethod {
-  /** Names the method in status and errors: 'curl script', 'npm', 'winget'. */
-  label: string;
-  platforms: ToolPlatform[];
-  /**
-   * A binary that must already be on the machine for this method to be
-   * eligible — 'npm', 'brew', 'winget'. Absent means always eligible.
-   */
-  needs?: string;
   /**
    * The install command, run through the Bun shell. Exactly one of `command`
    * and `native` is set.
    */
   command?: string;
+  /** Names the method in status and errors: 'curl script', 'npm', 'winget'. */
+  label: string;
+  /**
+   * The name of a routine the agent implements in code, for the installs a
+   * portable shell one-liner cannot express (resolving the right Node tarball
+   * for an arch, say). The escape hatch that keeps `command` honest.
+   */
+  native?: string;
+  /**
+   * A binary that must already be on the machine for this method to be
+   * eligible — 'npm', 'brew', 'winget'. Absent means always eligible.
+   */
+  needs?: string;
   /**
    * The command when the policy pins a version — `{version}` becomes the pin.
    * Kept apart from `command` because "latest" is not a version most
@@ -38,12 +43,7 @@ export interface ToolInstallMethod {
    * at all when they should take the newest.
    */
   pinnedCommand?: string;
-  /**
-   * The name of a routine the agent implements in code, for the installs a
-   * portable shell one-liner cannot express (resolving the right Node tarball
-   * for an arch, say). The escape hatch that keeps `command` honest.
-   */
-  native?: string;
+  platforms: ToolPlatform[];
 }
 
 /** A catalog tool another tool needs first, with the version floor it needs. */
@@ -54,12 +54,27 @@ export interface ToolRequirement {
 }
 
 export interface ToolSpec {
-  id: string;
-  /** What the dashboard calls it. */
-  name: string;
-  homepage: string;
   /** The executable whose presence means installed. */
   bin: string;
+  /**
+   * True for tools that exist only to satisfy a `requires` — they stay out of
+   * the policy list until something needs them, and the dashboard shows them
+   * only where they explain another tool's state.
+   */
+  dependencyOnly?: boolean;
+  homepage: string;
+  id: string;
+  /** Ordered by preference. Empty for a platform = unsupported there. */
+  install: ToolInstallMethod[];
+  /** What the dashboard calls it. */
+  name: string;
+  /**
+   * Catalog tools that must be present first. A missing requirement installs
+   * automatically (depth 1 — requirements do not have requirements); one that
+   * is present but below `min` does not: silently replacing a machine's Node
+   * is ruder than telling the user exactly what is too old.
+   */
+  requires?: ToolRequirement[];
   /** Probe for the version; the first `x.y.z` in its output is the answer. */
   versionCommand: string;
   /**
@@ -69,49 +84,39 @@ export interface ToolSpec {
    * running.
    */
   wellKnownPaths?: string[];
-  /**
-   * Catalog tools that must be present first. A missing requirement installs
-   * automatically (depth 1 — requirements do not have requirements); one that
-   * is present but below `min` does not: silently replacing a machine's Node
-   * is ruder than telling the user exactly what is too old.
-   */
-  requires?: ToolRequirement[];
-  /** Ordered by preference. Empty for a platform = unsupported there. */
-  install: ToolInstallMethod[];
-  /**
-   * True for tools that exist only to satisfy a `requires` — they stay out of
-   * the policy list until something needs them, and the dashboard shows them
-   * only where they explain another tool's state.
-   */
-  dependencyOnly?: boolean;
 }
 
 /** What a probe or an install attempt found. The unit every surface renders. */
-export type ToolState = 'installed' | 'missing' | 'installing' | 'failed' | 'unsupported';
+export type ToolState =
+  | "installed"
+  | "missing"
+  | "installing"
+  | "failed"
+  | "unsupported";
 
 export interface ToolStatus {
-  id: string;
-  state: ToolState;
-  /** Set when `installed`. */
-  version?: string;
+  /** When this was learnt, ms epoch. */
+  at: number;
   /**
    * `failed`: the tail of the installer's stderr. `unsupported`: what is
    * missing, named exactly — 'needs npm (Node 20+)' beats a grey chip.
    */
   detail?: string;
+  id: string;
   /** The {@link ToolInstallMethod.label} that installed it or failed trying. */
   method?: string;
-  /** When this was learnt, ms epoch. */
-  at: number;
+  state: ToolState;
+  /** Set when `installed`. */
+  version?: string;
 }
 
 /** The hub's per-tool policy row: what the fleet is supposed to have. */
 export interface ToolPolicy {
   id: string;
-  /** Required tools install automatically wherever a register finds them missing. */
-  required: boolean;
   /** Exact version to install; null rides `{version}` as `latest`. */
   pinnedVersion: string | null;
+  /** Required tools install automatically wherever a register finds them missing. */
+  required: boolean;
 }
 
 /**
@@ -121,22 +126,23 @@ export interface ToolPolicy {
  */
 export const TOOL_CATALOG: ToolSpec[] = [
   {
-    id: 'opencode',
-    name: 'opencode',
-    homepage: 'https://opencode.ai',
-    bin: 'opencode',
-    versionCommand: 'opencode --version',
-    wellKnownPaths: ['~/.opencode/bin/opencode'],
+    id: "opencode",
+    name: "opencode",
+    homepage: "https://opencode.ai",
+    bin: "opencode",
+    versionCommand: "opencode --version",
+    wellKnownPaths: ["~/.opencode/bin/opencode"],
     install: [
       // Verified against the docs and the install script's source, 2026-08-06
       // (v1.18.14, repo anomalyco/opencode). The script hardcodes
       // ~/.opencode/bin — the documented OPENCODE_INSTALL_DIR is ignored
       // (anomalyco/opencode#7675) — and adds it to the user's shell rc PATH.
       {
-        label: 'curl script',
-        platforms: ['linux', 'darwin'],
-        command: 'curl -fsSL https://opencode.ai/install | bash',
-        pinnedCommand: 'curl -fsSL https://opencode.ai/install | bash -s -- --version {version}',
+        label: "curl script",
+        platforms: ["linux", "darwin"],
+        command: "curl -fsSL https://opencode.ai/install | bash",
+        pinnedCommand:
+          "curl -fsSL https://opencode.ai/install | bash -s -- --version {version}",
       },
       // Windows, by likelihood of already being there: scoop's main bucket
       // carries opencode officially; winget ships with Windows 11 but the
@@ -144,39 +150,39 @@ export const TOOL_CATALOG: ToolSpec[] = [
       // needs Node. The curl script under Git Bash is x64-only — not worth
       // depending on when three real package managers cover the platform.
       {
-        label: 'scoop',
-        platforms: ['win32'],
-        needs: 'scoop',
-        command: 'scoop install opencode',
-        pinnedCommand: 'scoop install opencode@{version}',
+        label: "scoop",
+        platforms: ["win32"],
+        needs: "scoop",
+        command: "scoop install opencode",
+        pinnedCommand: "scoop install opencode@{version}",
       },
       {
-        label: 'winget',
-        platforms: ['win32'],
-        needs: 'winget',
+        label: "winget",
+        platforms: ["win32"],
+        needs: "winget",
         command:
-          'winget install -e --id SST.opencode --silent --accept-package-agreements --accept-source-agreements',
+          "winget install -e --id SST.opencode --silent --accept-package-agreements --accept-source-agreements",
         pinnedCommand:
-          'winget install -e --id SST.opencode --version {version} --silent --accept-package-agreements --accept-source-agreements',
+          "winget install -e --id SST.opencode --version {version} --silent --accept-package-agreements --accept-source-agreements",
       },
       {
-        label: 'npm',
-        platforms: ['linux', 'darwin', 'win32'],
-        needs: 'npm',
-        command: 'npm install -g opencode-ai@latest',
-        pinnedCommand: 'npm install -g opencode-ai@{version}',
+        label: "npm",
+        platforms: ["linux", "darwin", "win32"],
+        needs: "npm",
+        command: "npm install -g opencode-ai@latest",
+        pinnedCommand: "npm install -g opencode-ai@{version}",
       },
     ],
   },
   {
-    id: 'antigravity',
-    name: 'Antigravity CLI',
-    homepage: 'https://antigravity.google',
-    bin: 'agy',
-    versionCommand: 'agy --version',
+    id: "antigravity",
+    name: "Antigravity CLI",
+    homepage: "https://antigravity.google",
+    bin: "agy",
+    versionCommand: "agy --version",
     // The official scripts: ~/.local/bin on linux/darwin, LocalAppData on
     // Windows. A static Go binary — no runtime to require.
-    wellKnownPaths: ['~/.local/bin/agy', '~/AppData/Local/agy/bin/agy.exe'],
+    wellKnownPaths: ["~/.local/bin/agy", "~/AppData/Local/agy/bin/agy.exe"],
     install: [
       // Verified 2026-08-06 (v1.1.10). The installer script takes no version
       // argument — the binary self-updates (AGY_CLI_DISABLE_AUTO_UPDATE=true
@@ -185,48 +191,57 @@ export const TOOL_CATALOG: ToolSpec[] = [
       // keyring, once per machine (`agy` prints an URL + code over SSH);
       // Google says API keys are not supported (antigravity-cli#78).
       {
-        label: 'curl script',
-        platforms: ['linux', 'darwin'],
-        command: 'curl -fsSL https://antigravity.google/cli/install.sh | bash',
+        label: "curl script",
+        platforms: ["linux", "darwin"],
+        command: "curl -fsSL https://antigravity.google/cli/install.sh | bash",
       },
       {
-        label: 'winget',
-        platforms: ['win32'],
-        needs: 'winget',
+        label: "winget",
+        platforms: ["win32"],
+        needs: "winget",
         command:
-          'winget install -e --id Google.AntigravityCLI --silent --accept-package-agreements --accept-source-agreements',
+          "winget install -e --id Google.AntigravityCLI --silent --accept-package-agreements --accept-source-agreements",
         pinnedCommand:
-          'winget install -e --id Google.AntigravityCLI --version {version} --silent --accept-package-agreements --accept-source-agreements',
+          "winget install -e --id Google.AntigravityCLI --version {version} --silent --accept-package-agreements --accept-source-agreements",
       },
       {
-        label: 'powershell script',
-        platforms: ['win32'],
-        needs: 'powershell',
+        label: "powershell script",
+        platforms: ["win32"],
+        needs: "powershell",
         command:
           'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://antigravity.google/cli/install.ps1 | iex"',
       },
     ],
   },
   {
-    id: 'node',
-    name: 'Node.js',
-    homepage: 'https://nodejs.org',
-    bin: 'node',
-    versionCommand: 'node --version',
+    id: "node",
+    name: "Node.js",
+    homepage: "https://nodejs.org",
+    bin: "node",
+    versionCommand: "node --version",
     dependencyOnly: true,
     install: [
-      { label: 'brew', platforms: ['darwin', 'linux'], needs: 'brew', command: 'brew install node' },
       {
-        label: 'winget',
-        platforms: ['win32'],
-        needs: 'winget',
+        label: "brew",
+        platforms: ["darwin", "linux"],
+        needs: "brew",
+        command: "brew install node",
+      },
+      {
+        label: "winget",
+        platforms: ["win32"],
+        needs: "winget",
         command:
-          'winget install --id OpenJS.NodeJS.LTS -e --silent --accept-package-agreements --accept-source-agreements',
+          "winget install --id OpenJS.NodeJS.LTS -e --silent --accept-package-agreements --accept-source-agreements",
       },
       // No brew and no sudo is the common Linux daemon: resolve the latest
       // LTS tarball for this arch and unpack it into ~/.local — code, because
       // no portable one-liner reads nodejs.org/dist/index.json honestly.
-      { label: 'official tarball', platforms: ['linux'], native: 'node-tarball' },
+      {
+        label: "official tarball",
+        platforms: ["linux"],
+        native: "node-tarball",
+      },
     ],
   },
 ];

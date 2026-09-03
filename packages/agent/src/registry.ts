@@ -17,9 +17,9 @@
  * and what is available; acting on the difference is the operator's, through
  * `whiffle update` or the fleet control that calls it.
  */
-import type { UpdateReport } from '@whiffle/core';
-import { WHIFFLE_ENV, readEnv } from '@whiffle/core';
-import { restartStack, run } from './update';
+import type { UpdateReport } from "@whiffle/core";
+import { readEnv, WHIFFLE_ENV } from "@whiffle/core";
+import { restartStack, run } from "./update";
 
 /**
  * What a user installs. One package, so a fleet has one version to compare.
@@ -29,11 +29,12 @@ import { restartStack, run } from './update';
  * only holds as a safety property while the name stays ours on npm: never
  * point this at a generic word we do not own, and never let the publish lapse.
  */
-export const PACKAGE_NAME = 'whiffle';
+export const PACKAGE_NAME = "whiffle";
 
 /** The registry, overridable for a private mirror or an air-gapped fleet. */
 export const registryUrl = (): string =>
-  readEnv(WHIFFLE_ENV.registry)?.replace(/\/$/, '') || 'https://registry.npmjs.org';
+  readEnv(WHIFFLE_ENV.registry)?.replace(/\/$/, "") ||
+  "https://registry.npmjs.org";
 
 /** Long enough for a slow mirror, short enough not to wedge a poll. */
 const REGISTRY_TIMEOUT_MS = 10_000;
@@ -41,12 +42,12 @@ const REGISTRY_TIMEOUT_MS = 10_000;
 const INSTALL_TIMEOUT_MS = 300_000;
 
 export interface VersionCheck {
+  /** Whether the two differ — never a guess: `null` latest means unknown. */
+  behind: boolean;
   /** What this machine is running. */
   installed: string;
   /** What the registry offers, or `null` when it could not be reached. */
   latest: string | null;
-  /** Whether the two differ — never a guess: `null` latest means unknown. */
-  behind: boolean;
   /** Why `latest` is null, when it is. */
   reason?: string;
 }
@@ -60,7 +61,7 @@ export interface VersionCheck {
 export const isNewer = (candidate: string, current: string): boolean => {
   const parts = (value: string): number[] =>
     value
-      .replace(/^v/, '')
+      .replace(/^v/, "")
       .split(/[.\-+]/)
       .map((piece) => (/^\d+$/.test(piece) ? Number(piece) : Number.NaN));
   const a = parts(candidate);
@@ -71,30 +72,44 @@ export const isNewer = (candidate: string, current: string): boolean => {
     if (Number.isNaN(left) || Number.isNaN(right)) {
       // A prerelease segment against a release: fewer segments is the release,
       // and a release is newer than the prerelease that led to it.
-      if (Number.isNaN(left) && !Number.isNaN(right)) return false;
-      if (!Number.isNaN(left) && Number.isNaN(right)) return true;
+      if (Number.isNaN(left) && !Number.isNaN(right)) {
+        return false;
+      }
+      if (!Number.isNaN(left) && Number.isNaN(right)) {
+        return true;
+      }
       continue;
     }
-    if (left !== right) return left > right;
+    if (left !== right) {
+      return left > right;
+    }
   }
   return false;
 };
 
 /** What the registry says the newest published version is. */
-export const latestVersion = async (): Promise<{ version: string | null; reason?: string }> => {
+export const latestVersion = async (): Promise<{
+  version: string | null;
+  reason?: string;
+}> => {
   const url = `${registryUrl()}/${PACKAGE_NAME}/latest`;
   try {
     const response = await fetch(url, {
       signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS),
-      headers: { accept: 'application/json' },
+      headers: { accept: "application/json" },
     });
-    if (!response.ok) return { version: null, reason: `${url} answered ${response.status}` };
+    if (!response.ok) {
+      return { version: null, reason: `${url} answered ${response.status}` };
+    }
     const body = (await response.json()) as { version?: unknown };
-    return typeof body.version === 'string'
+    return typeof body.version === "string"
       ? { version: body.version }
       : { version: null, reason: `${url} returned no version` };
   } catch (error) {
-    return { version: null, reason: error instanceof Error ? error.message : String(error) };
+    return {
+      version: null,
+      reason: error instanceof Error ? error.message : String(error),
+    };
   }
 };
 
@@ -104,9 +119,18 @@ export const latestVersion = async (): Promise<{ version: string | null; reason?
  * a fleet view that cannot tell those apart is the thing that let a stuck
  * deployment sit unnoticed for a day.
  */
-export const checkVersion = async (installed: string): Promise<VersionCheck> => {
+export const checkVersion = async (
+  installed: string
+): Promise<VersionCheck> => {
   const { version, reason } = await latestVersion();
-  if (!version) return { installed, latest: null, behind: false, ...(reason ? { reason } : {}) };
+  if (!version) {
+    return {
+      installed,
+      latest: null,
+      behind: false,
+      ...(reason ? { reason } : {}),
+    };
+  }
   return { installed, latest: version, behind: isNewer(version, installed) };
 };
 
@@ -133,18 +157,23 @@ export const registryUpdate = async ({
   force?: boolean;
   busy?: number;
 }): Promise<UpdateReport> => {
-  const target = to ?? 'latest';
+  const target = to ?? "latest";
   const spec = `${PACKAGE_NAME}@${target}`;
 
-  const install = await run([process.execPath, 'add', '-g', spec], INSTALL_TIMEOUT_MS);
+  const install = await run(
+    [process.execPath, "add", "-g", spec],
+    INSTALL_TIMEOUT_MS
+  );
   if (!install.ok) {
-    throw new Error(`installing ${spec} failed: ${install.said || `exit ${install.code}`}`);
+    throw new Error(
+      `installing ${spec} failed: ${install.said || `exit ${install.code}`}`
+    );
   }
 
   const after = await latestVersion();
   const report: UpdateReport = {
     from: installed,
-    to: target === 'latest' ? (after.version ?? target) : target,
+    to: target === "latest" ? (after.version ?? target) : target,
     pulled: `installed ${spec}`,
     installed: true,
     // Nothing is built on the machine any more: the release built it once.
@@ -152,6 +181,6 @@ export const registryUpdate = async ({
     restarted: [],
   };
   return restartStack(report, { restartAgent, force, busy }, [
-    'the dashboard ships built, so nothing was compiled here',
+    "the dashboard ships built, so nothing was compiled here",
   ]);
 };

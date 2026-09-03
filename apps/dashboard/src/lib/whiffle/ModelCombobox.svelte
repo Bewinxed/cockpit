@@ -5,12 +5,12 @@
    * today, so the list is a suggestion rather than the set: anything typed goes
    * through verbatim, which is the only way a legacy id is reachable at all.
    */
-  import { tick } from 'svelte';
-  import { IconRefresh, IconUnfold } from '$lib/icons';
-  import ProviderLogo from '$lib/components/features/ProviderLogo.svelte';
-  import * as Command from '$lib/components/ui/command';
-  import * as Popover from '$lib/components/ui/popover';
-  import { Button, type ButtonSize } from '$lib/components/ui/button';
+  import { tick } from "svelte";
+  import ProviderLogo from "$lib/components/features/ProviderLogo.svelte";
+  import { Button, type ButtonSize } from "$lib/components/ui/button";
+  import * as Command from "$lib/components/ui/command";
+  import * as Popover from "$lib/components/ui/popover";
+  import { IconRefresh, IconUnfold } from "$lib/icons";
   import {
     covers,
     ensureModels,
@@ -19,14 +19,14 @@
     models,
     refreshModels,
     rememberModel,
-  } from './models.svelte';
+  } from "./models.svelte";
 
   let {
     value,
     onchoose,
     showDefault = false,
-    size = 'sm',
-    class: className = '',
+    size = "sm",
+    class: className = "",
   }: {
     /** The model in force, as the id it is known by. `''` is the SDK's own choice. */
     value: string;
@@ -39,7 +39,7 @@
   } = $props();
 
   let open = $state(false);
-  let typed = $state('');
+  let typed = $state("");
   let triggerRef = $state<HTMLButtonElement | null>(null);
 
   /**
@@ -47,7 +47,7 @@
    * is a session that has not reported one yet, and naming a model would be
    * inventing its settings. The next `system.init` fills it in.
    */
-  const unreported = $derived(!value && !showDefault);
+  const unreported = $derived(!(value || showDefault));
 
   const trimmed = $derived(typed.trim());
   /** A typed id nothing on the list already covers — the whole point of the field. */
@@ -61,32 +61,40 @@
   const note = $derived(
     models.error ??
       (models.loading
-        ? 'Asking a running session what it offers…'
+        ? "Asking a running session what it offers…"
         : models.offered.length === 0
-          ? 'No list yet — refresh it through a running session, or type an id.'
+          ? "No list yet — refresh it through a running session, or type an id."
           : null)
   );
 
   function opened(next: boolean) {
-    if (next) ensureModels();
-    else typed = '';
+    if (next) {
+      ensureModels();
+    } else {
+      typed = "";
+    }
   }
 
   /** Keyboard users carry on through the form instead of losing focus to the body. */
   function closeAndFocusTrigger() {
     open = false;
-    typed = '';
+    typed = "";
     void tick().then(() => triggerRef?.focus());
   }
 
   /** Already running it — an init names the wire id, its row is keyed by the alias. */
   const isCurrent = (model: string) =>
-    model === value || models.offered.some((row) => row.value === model && covers(row, value));
+    model === value ||
+    models.offered.some((row) => row.value === model && covers(row, value));
 
   async function choose(model: string, remember = false) {
     closeAndFocusTrigger();
-    if (remember) rememberModel(model);
-    if (!isCurrent(model)) await onchoose(model);
+    if (remember) {
+      rememberModel(model);
+    }
+    if (!isCurrent(model)) {
+      await onchoose(model);
+    }
   }
 
   // The picker says for itself why a refresh failed; it is about the list, not
@@ -101,20 +109,20 @@
   const refresh = () => void refreshModels().catch(() => {});
 </script>
 
-<Popover.Root bind:open onOpenChange={opened}>
+<Popover.Root onOpenChange={opened} bind:open>
   <Popover.Trigger bind:ref={triggerRef}>
     {#snippet child({ props })}
       <Button
         {...props}
-        variant="outline"
-        {size}
-        role="combobox"
         aria-expanded={open}
         aria-label={unreported ? 'Model, not reported yet' : 'Model'}
+        class="justify-between gap-2 {className}"
+        role="combobox"
+        {size}
         title={unreported
           ? "Read from this session's next turn — it has not said which model answers"
           : value || 'The model Claude Code picks for itself'}
-        class="justify-between gap-2 {className}"
+        variant="outline"
       >
         <span class="truncate">{unreported ? '—' : modelLabel(value)}</span>
         <!-- 14px: the inline-with-text icon size the session bar settled on,
@@ -124,13 +132,20 @@
     {/snippet}
   </Popover.Trigger>
 
-  <Popover.Content class="w-80 p-0" align="start">
+  <Popover.Content align="start" class="w-80 p-0">
     <Command.Root>
-      <Command.Input bind:value={typed} placeholder="Search, or type a model id…" />
+      <Command.Input
+        placeholder="Search, or type a model id…"
+        bind:value={typed}
+      />
       <Command.List>
         {#if custom}
           <Command.Group heading="Custom">
-            <Command.Item forceMount value={trimmed} onSelect={() => void choose(trimmed, true)}>
+            <Command.Item
+              forceMount
+              onSelect={() => void choose(trimmed, true)}
+              value={trimmed}
+            >
               <ProviderLogo model={trimmed} />
               <span class="flex flex-col">
                 <span>Use <span class="font-mono">{trimmed}</span></span>
@@ -150,10 +165,10 @@
           <Command.Group heading="Recently used">
             {#each models.recent as id (id)}
               <Command.Item
-                value={id}
-                title={id}
                 data-checked={id === value}
                 onSelect={() => void choose(id)}
+                title={id}
+                value={id}
               >
                 <ProviderLogo model={id} />
                 <span class="truncate font-mono text-xs">{id}</span>
@@ -165,10 +180,10 @@
         <Command.Group heading="Models">
           {#if showDefault}
             <Command.Item
-              value="default-model"
-              keywords={['default']}
               data-checked={value === MODEL_DEFAULT}
+              keywords={['default']}
               onSelect={() => void choose(MODEL_DEFAULT)}
+              value="default-model"
             >
               <span class="flex flex-col">
                 <span>Default</span>
@@ -180,16 +195,18 @@
           {/if}
           {#each models.offered as row (row.value)}
             <Command.Item
-              value={row.value}
-              keywords={[row.displayName]}
-              title={row.value}
               data-checked={covers(row, value)}
+              keywords={[row.displayName]}
               onSelect={() => void choose(row.value)}
+              title={row.value}
+              value={row.value}
             >
               <ProviderLogo model={row.value} />
               <span class="flex flex-col">
                 <span>{row.displayName}</span>
-                <span class="text-xs text-muted-foreground">{row.description}</span>
+                <span class="text-xs text-muted-foreground"
+                  >{row.description}</span
+                >
               </span>
             </Command.Item>
           {/each}
@@ -198,13 +215,13 @@
         <Command.Separator />
         <Command.Group>
           <Command.Item
-            forceMount
-            value="refresh-models"
             disabled={!models.askable || models.loading}
+            forceMount
+            onSelect={refresh}
             title={models.askable
               ? 'Ask a running session what Claude Code offers today'
               : 'A session has to be running to ask what models it offers.'}
-            onSelect={refresh}
+            value="refresh-models"
           >
             <IconRefresh />
             Refresh models

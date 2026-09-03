@@ -135,18 +135,18 @@ export const CONTEXT_MENU_CLICK_DELAY = 10;
 
 /** CSS variable names for branch colors - use with var() in styles */
 export const BRANCH_COLOR_VARS = [
-  '--color-info',
-  '--color-success',
-  '--color-primary',
-  '--color-warning',
+  "--color-info",
+  "--color-success",
+  "--color-primary",
+  "--color-warning",
 ] as const;
 
 /** Branch colors as inline-style values, so a branch reads in either theme. */
 export const BRANCH_COLORS_FALLBACK = [
-  'var(--color-info)',
-  'var(--color-success)',
-  'var(--color-primary)',
-  'var(--color-warning)',
+  "var(--color-info)",
+  "var(--color-success)",
+  "var(--color-primary)",
+  "var(--color-warning)",
 ] as const;
 
 // ============================================================
@@ -156,17 +156,23 @@ export const BRANCH_COLORS_FALLBACK = [
 /**
  * Get the appropriate layout config based on zoom mode
  */
-export function getLayoutConfig(zoomMode: 'compact' | 'expanded'): LayoutConfig {
-  return zoomMode === 'expanded' ? EXPANDED_CONFIG : COMPACT_CONFIG;
+export function getLayoutConfig(
+  zoomMode: "compact" | "expanded"
+): LayoutConfig {
+  return zoomMode === "expanded" ? EXPANDED_CONFIG : COMPACT_CONFIG;
 }
 
 /**
  * Determine zoom level category from numeric zoom value
  */
-export function getZoomLevel(zoom: number): 'overview' | 'summary' | 'detail' {
-  if (zoom < ZOOM_THRESHOLD_OVERVIEW) return 'overview';
-  if (zoom < ZOOM_THRESHOLD_SUMMARY) return 'summary';
-  return 'detail';
+export function getZoomLevel(zoom: number): "overview" | "summary" | "detail" {
+  if (zoom < ZOOM_THRESHOLD_OVERVIEW) {
+    return "overview";
+  }
+  if (zoom < ZOOM_THRESHOLD_SUMMARY) {
+    return "summary";
+  }
+  return "detail";
 }
 
 /**
@@ -176,7 +182,7 @@ export function estimateContentHeight(
   content: string | undefined,
   config: LayoutConfig
 ): number {
-  if (!content || typeof content !== 'string') {
+  if (!content || typeof content !== "string") {
     return config.nodeHeightMin;
   }
 
@@ -191,5 +197,8 @@ export function estimateContentHeight(
   const estimatedHeight = NODE_BASE_HEIGHT + contentHeight;
 
   // Clamp between min and max
-  return Math.max(config.nodeHeightMin, Math.min(config.nodeHeightMax, estimatedHeight));
+  return Math.max(
+    config.nodeHeightMin,
+    Math.min(config.nodeHeightMax, estimatedHeight)
+  );
 }

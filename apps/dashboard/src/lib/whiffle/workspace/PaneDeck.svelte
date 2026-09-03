@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createDeck } from "./deck.svelte";
   /**
    * The phone's groups, as a vertical stack of cards.
    *
@@ -16,9 +17,8 @@
    * in the same frame as the lift, and both the transition and the first
    * few drag frames went with it.
    */
-  import PaneLeaf from './PaneLeaf.svelte';
-  import { workspace } from './workspace.svelte';
-  import { createDeck } from './deck.svelte';
+  import PaneLeaf from "./PaneLeaf.svelte";
+  import { workspace } from "./workspace.svelte";
 
   const deck = createDeck(
     () => workspace.leaves,
@@ -38,10 +38,10 @@
     {@const focused = delta === 0}
     <div
       class="card"
-      class:card-hidden={Math.abs(delta) > 1}
-      inert={!focused}
-      data-leaf={leaf.id}
       data-delta={delta}
+      data-leaf={leaf.id}
+      inert={!focused}
+      class:card-hidden={Math.abs(delta) > 1}
     >
       <div class="lift">
         <div class="clip">
@@ -54,9 +54,12 @@
   <!-- Graphite, never the accent: a page control is position, and the one
        loud colour in this product means a session is asking for something. -->
   {#if workspace.leaves.length > 1}
-    <div class="dots" aria-hidden="true">
+    <div aria-hidden="true" class="dots">
       {#each workspace.leaves as leaf (leaf.id)}
-        <span class="dot" class:dot-on={leaf.id === workspace.focusedLeafId}></span>
+        <span
+          class="dot"
+          class:dot-on={leaf.id === workspace.focusedLeafId}
+        ></span>
       {/each}
     </div>
   {/if}
@@ -107,13 +110,13 @@
     will-change: transform;
   }
   /* Parked by delta. The 12px is `GAP` in deck.svelte.ts; keep them equal. */
-  .card[data-delta='-1'] {
+  .card[data-delta="-1"] {
     transform: translate3d(0, calc(-100% - 12px), 0);
   }
-  .card[data-delta='0'] {
+  .card[data-delta="0"] {
     transform: translate3d(0, 0, 0);
   }
-  .card[data-delta='1'] {
+  .card[data-delta="1"] {
     transform: translate3d(0, calc(100% + 12px), 0);
   }
   .lift {
@@ -130,7 +133,7 @@
       border-radius var(--c-300) var(--e-toggle);
   }
   .lift::before {
-    content: '';
+    content: "";
     position: absolute;
     inset: 0;
     border-radius: var(--radius-modal);

@@ -3,15 +3,19 @@
  * Uses manual code paste flow (standard for 3rd party OAuth)
  */
 
-import { randomBytes } from 'crypto';
-import * as readline from 'readline';
+import { randomBytes } from "crypto";
+import * as readline from "readline";
 import {
-  generateCodeVerifier,
-  generateCodeChallenge,
+  deleteCredentials,
+  isAuthenticated,
+  saveCredentials,
+} from "./credentials";
+import {
   buildAuthorizationUrl,
   exchangeCodeForTokens,
-} from './oauth';
-import { saveCredentials, deleteCredentials, isAuthenticated } from './credentials';
+  generateCodeChallenge,
+  generateCodeVerifier,
+} from "./oauth";
 
 /**
  * Login options
@@ -27,8 +31,8 @@ export interface LoginOptions {
  * Login result
  */
 export interface LoginResult {
-  success: boolean;
   message: string;
+  success: boolean;
 }
 
 /**
@@ -41,7 +45,7 @@ async function promptForCode(): Promise<string> {
   });
 
   return new Promise((resolve) => {
-    rl.question('Paste the authorization code here: ', (answer) => {
+    rl.question("Paste the authorization code here: ", (answer) => {
       rl.close();
       resolve(answer.trim());
     });
@@ -58,32 +62,32 @@ export async function login(options: LoginOptions = {}): Promise<LoginResult> {
   if (await isAuthenticated()) {
     return {
       success: true,
-      message: 'Already authenticated. Call logout() to sign out first.',
+      message: "Already authenticated. Call logout() to sign out first.",
     };
   }
 
   // Generate PKCE parameters
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = generateCodeChallenge(codeVerifier);
-  const state = randomBytes(32).toString('base64url');
+  const state = randomBytes(32).toString("base64url");
 
   if (verbose) {
-    console.log('Generated PKCE verifier and challenge');
+    console.log("Generated PKCE verifier and challenge");
   }
 
   // Build authorization URL
   const authUrl = buildAuthorizationUrl(codeChallenge, state);
 
-  console.log('\n1. Open this URL in your browser:\n');
+  console.log("\n1. Open this URL in your browser:\n");
   console.log(`   ${authUrl}\n`);
-  console.log('2. Sign in and authorize the application');
-  console.log('3. Copy the code shown on the page\n');
+  console.log("2. Sign in and authorize the application");
+  console.log("3. Copy the code shown on the page\n");
 
   // Open browser if requested
   if (openBrowser) {
     try {
       await openUrl(authUrl);
-      console.log('   (Browser opened automatically)\n');
+      console.log("   (Browser opened automatically)\n");
     } catch {
       // Silently fail - user can open manually
     }
@@ -95,12 +99,12 @@ export async function login(options: LoginOptions = {}): Promise<LoginResult> {
     if (!code) {
       return {
         success: false,
-        message: 'No authorization code provided.',
+        message: "No authorization code provided.",
       };
     }
 
     // Exchange code for tokens
-    console.log('\nExchanging code for tokens...');
+    console.log("\nExchanging code for tokens...");
     const tokens = await exchangeCodeForTokens(code, codeVerifier);
 
     // Save credentials
@@ -108,12 +112,12 @@ export async function login(options: LoginOptions = {}): Promise<LoginResult> {
 
     return {
       success: true,
-      message: 'Successfully authenticated with Claude!',
+      message: "Successfully authenticated with Claude!",
     };
   } catch (error) {
     return {
       success: false,
-      message: `Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      message: `Authentication failed: ${error instanceof Error ? error.message : "Unknown error"}`,
     };
   }
 }
@@ -125,7 +129,7 @@ export async function logout(): Promise<LoginResult> {
   if (!(await isAuthenticated())) {
     return {
       success: true,
-      message: 'Not currently authenticated.',
+      message: "Not currently authenticated.",
     };
   }
 
@@ -133,7 +137,7 @@ export async function logout(): Promise<LoginResult> {
 
   return {
     success: true,
-    message: 'Successfully logged out.',
+    message: "Successfully logged out.",
   };
 }
 
@@ -147,23 +151,23 @@ async function openUrl(url: string): Promise<void> {
   let args: string[];
 
   switch (platform) {
-    case 'darwin':
-      command = 'open';
+    case "darwin":
+      command = "open";
       args = [url];
       break;
-    case 'win32':
-      command = 'cmd';
-      args = ['/c', 'start', '', url];
+    case "win32":
+      command = "cmd";
+      args = ["/c", "start", "", url];
       break;
     default:
       // Linux and others
-      command = 'xdg-open';
+      command = "xdg-open";
       args = [url];
   }
 
   const proc = Bun.spawn([command, ...args], {
-    stdout: 'ignore',
-    stderr: 'ignore',
+    stdout: "ignore",
+    stderr: "ignore",
   });
 
   await proc.exited;

@@ -1,9 +1,14 @@
 #!/usr/bin/env bun
-import type { AgentRow, AuthState } from '@whiffle/core';
-import { readEnv, WHIFFLE_ENV, WHIFFLE_HUB_PORT, WHIFFLE_MDNS_TYPE } from '@whiffle/core';
-import { CONFIG_PATH, readConfig } from './config';
-import { discoverHub, type Hub } from './discover';
-import { clearToken, login, LoginError, saveToken } from './login';
+import type { AgentRow, AuthState } from "@whiffle/core";
+import {
+  readEnv,
+  WHIFFLE_ENV,
+  WHIFFLE_HUB_PORT,
+  WHIFFLE_MDNS_TYPE,
+} from "@whiffle/core";
+import { CONFIG_PATH, readConfig } from "./config";
+import { discoverHub, type Hub } from "./discover";
+import { clearToken, LoginError, login, saveToken } from "./login";
 import {
   CHECKOUT_ROOT,
   DEPLOY_BRANCH,
@@ -12,11 +17,11 @@ import {
   deployRoot,
   isServiceAction,
   isServiceId,
-  service,
-  ServiceError,
   SERVICE_ACTIONS,
   SERVICE_IDS,
-} from './service';
+  ServiceError,
+  service,
+} from "./service";
 
 /** Reported by `--version`; keep in sync with package.json. */
 /**
@@ -26,7 +31,7 @@ import {
  */
 declare const __WHIFFLE_VERSION__: string | undefined;
 const CLI_VERSION =
-  typeof __WHIFFLE_VERSION__ === 'string' ? __WHIFFLE_VERSION__ : '0.0.0-dev';
+  typeof __WHIFFLE_VERSION__ === "string" ? __WHIFFLE_VERSION__ : "0.0.0-dev";
 
 const HELP = `whiffle ${CLI_VERSION} — join this machine to a whiffle fleet
 
@@ -34,7 +39,7 @@ Usage
   whiffle up [--hub <url>] [--verbose]      run the agent daemon on this machine
   whiffle hub [--verbose]                   run the hub here
   whiffle status [--hub <url>] [--verbose]  print the hub it found, and the fleet
-  whiffle service <${SERVICE_ACTIONS.join('|')}> [service...]
+  whiffle service <${SERVICE_ACTIONS.join("|")}> [service...]
                                             run whiffle as per-user services
   whiffle update [--check] [--to <version>] install the newest release and restart
   whiffle deploy init [--origin <url>]      developer mode: run from a git clone
@@ -42,7 +47,7 @@ Usage
   whiffle logout                            forget it
 
 Services
-  ${SERVICE_IDS.join(', ')} — each its own per-user service, started by systemd or
+  ${SERVICE_IDS.join(", ")} — each its own per-user service, started by systemd or
   launchd and kept up across reboots. \`install\`, \`uninstall\`, \`restart\` and
   \`status\` take any of them and act on all three when given none; \`logs\` takes
   exactly one. A machine nobody points a browser at wants \`agent\` alone.
@@ -123,25 +128,25 @@ Start one with \`whiffle hub\`, or point this machine at an existing one with
 see what each step tried.`;
 
 interface Args {
-  command?: string;
   /** The verb after the command, for the one command that takes one: `service`. */
   action?: string;
-  /** Everything after the verb — the services `service` acts on. */
-  rest: string[];
-  hub?: string;
-  token?: string;
-  origin?: string;
-  /** `update --to <version>`: a specific release rather than the newest. */
-  to?: string;
   /** `update --check`: report what is available and change nothing. */
   check: boolean;
+  command?: string;
   dev: boolean;
-  whenIdle: boolean;
-  force: boolean;
   follow: boolean;
-  verbose: boolean;
+  force: boolean;
   help: boolean;
+  hub?: string;
+  origin?: string;
+  /** Everything after the verb — the services `service` acts on. */
+  rest: string[];
+  /** `update --to <version>`: a specific release rather than the newest. */
+  to?: string;
+  token?: string;
+  verbose: boolean;
   version: boolean;
+  whenIdle: boolean;
 }
 
 class UsageError extends Error {}
@@ -161,54 +166,68 @@ const parseArgs = (argv: string[]): Args => {
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index] as string;
     switch (arg) {
-      case '--hub':
+      case "--hub":
         args.hub = argv[++index];
-        if (!args.hub) throw new UsageError('--hub needs a URL');
+        if (!args.hub) {
+          throw new UsageError("--hub needs a URL");
+        }
         break;
-      case '--token':
+      case "--token":
         args.token = argv[++index];
-        if (!args.token) throw new UsageError('--token needs a token');
+        if (!args.token) {
+          throw new UsageError("--token needs a token");
+        }
         break;
-      case '--origin':
+      case "--origin":
         args.origin = argv[++index];
-        if (!args.origin) throw new UsageError('--origin needs a git URL');
+        if (!args.origin) {
+          throw new UsageError("--origin needs a git URL");
+        }
         break;
-      case '--to':
+      case "--to":
         args.to = argv[++index];
-        if (!args.to) throw new UsageError('--to needs a version');
+        if (!args.to) {
+          throw new UsageError("--to needs a version");
+        }
         break;
-      case '--check':
+      case "--check":
         args.check = true;
         break;
-      case '--dev':
+      case "--dev":
         args.dev = true;
         break;
-      case '--when-idle':
+      case "--when-idle":
         args.whenIdle = true;
         break;
-      case '--force':
+      case "--force":
         args.force = true;
         break;
-      case '--follow':
-      case '-f':
+      case "--follow":
+      case "-f":
         args.follow = true;
         break;
-      case '--verbose':
-      case '-v':
+      case "--verbose":
+      case "-v":
         args.verbose = true;
         break;
-      case '--help':
-      case '-h':
+      case "--help":
+      case "-h":
         args.help = true;
         break;
-      case '--version':
+      case "--version":
         args.version = true;
         break;
       default:
-        if (arg.startsWith('-')) throw new UsageError(`unknown option ${arg}`);
-        if (!args.command) args.command = arg;
-        else if (!args.action) args.action = arg;
-        else args.rest.push(arg);
+        if (arg.startsWith("-")) {
+          throw new UsageError(`unknown option ${arg}`);
+        }
+        if (!args.command) {
+          args.command = arg;
+        } else if (args.action) {
+          args.rest.push(arg);
+        } else {
+          args.action = arg;
+        }
     }
   }
   return args;
@@ -219,35 +238,53 @@ const note = (line: string): void => console.error(line);
 const resolve = async (args: Args): Promise<Hub | undefined> =>
   discoverHub({ hub: args.hub, log: args.verbose ? note : undefined });
 
-const seen = (at: AgentRow['lastSeenAt']): string => {
-  if (!at) return 'never';
+const seen = (at: AgentRow["lastSeenAt"]): string => {
+  if (!at) {
+    return "never";
+  }
   const seconds = Math.round((Date.now() - new Date(at).getTime()) / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
+  if (seconds < 60) {
+    return `${seconds}s ago`;
+  }
+  if (seconds < 3600) {
+    return `${Math.round(seconds / 60)}m ago`;
+  }
   return `${Math.round(seconds / 3600)}h ago`;
 };
 
 const printFleet = (agents: AgentRow[]): void => {
   if (agents.length === 0) {
-    console.log('\nfleet    empty — nothing has registered yet');
+    console.log("\nfleet    empty — nothing has registered yet");
     return;
   }
   const rows = agents.map((agent) => [
     agent.hostname,
     agent.status,
-    agent.auth === 'authenticated' ? 'yes' : agent.auth === 'unknown' ? '?' : 'NO',
+    agent.auth === "authenticated"
+      ? "yes"
+      : agent.auth === "unknown"
+        ? "?"
+        : "NO",
     agent.os,
     seen(agent.lastSeenAt),
     agent.machineId,
   ]);
-  const headers = ['MACHINE', 'STATUS', 'SIGNED IN', 'OS', 'LAST SEEN', 'ID'];
+  const headers = ["MACHINE", "STATUS", "SIGNED IN", "OS", "LAST SEEN", "ID"];
   const widths = headers.map((header, column) =>
-    Math.max(header.length, ...rows.map((row) => (row[column] as string).length))
+    Math.max(
+      header.length,
+      ...rows.map((row) => (row[column] as string).length)
+    )
   );
   const line = (cells: string[]): string =>
-    cells.map((cell, column) => cell.padEnd(widths[column] as number)).join('  ').trimEnd();
+    cells
+      .map((cell, column) => cell.padEnd(widths[column] as number))
+      .join("  ")
+      .trimEnd();
   console.log(`\n${line(headers)}`);
-  for (const row of rows) console.log(line(row));
+  for (const row of rows) {
+    console.log(line(row));
+  }
 };
 
 const status = async (args: Args): Promise<number> => {
@@ -263,7 +300,9 @@ const status = async (args: Args): Promise<number> => {
   console.log(`config   ${CONFIG_PATH}`);
 
   const agents = await fetch(`${hub.httpUrl}/api/agents`)
-    .then((response) => (response.ok ? (response.json() as Promise<AgentRow[]>) : undefined))
+    .then((response) =>
+      response.ok ? (response.json() as Promise<AgentRow[]>) : undefined
+    )
     .catch(() => undefined);
   if (!agents) {
     console.error(`\nwhiffle: ${hub.httpUrl} did not answer /api/agents`);
@@ -279,9 +318,13 @@ const status = async (args: Args): Promise<number> => {
  * value itself is never logged, framed, or written anywhere but the config.
  */
 const applyToken = async (): Promise<boolean> => {
-  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) return true;
+  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
+    return true;
+  }
   const token = (await readConfig())?.claudeToken;
-  if (!token) return false;
+  if (!token) {
+    return false;
+  }
   process.env.CLAUDE_CODE_OAUTH_TOKEN = token;
   return true;
 };
@@ -291,8 +334,8 @@ const applyToken = async (): Promise<boolean> => {
  * differs by why. The macOS case is the one worth spelling out: the credentials
  * are there and correct, so "log in again" is the one thing that will not work.
  */
-const authNote = (state: Exclude<AuthState, 'authenticated'>): string =>
-  state === 'unreadable-credentials'
+const authNote = (state: Exclude<AuthState, "authenticated">): string =>
+  state === "unreadable-credentials"
     ? `whiffle: this machine has Claude Code credentials, but this process cannot read them.
 They live in your login keychain, and the keychain only opens for a process
 inside your desktop session — a daemon started over SSH is not one, so sessions
@@ -308,9 +351,11 @@ start and then answer "Not logged in".`;
  */
 const preflight = async (): Promise<AuthState> => {
   // Loaded here rather than at the top so `status` never pays for the agent SDK.
-  const { probeAuth } = await import('@whiffle/agent');
+  const { probeAuth } = await import("@whiffle/agent");
   const state = await probeAuth();
-  if (state === 'authenticated') return state;
+  if (state === "authenticated") {
+    return state;
+  }
 
   console.error(authNote(state));
 
@@ -322,13 +367,17 @@ anyway; the fleet will show this machine as needing sign-in.`);
     return state;
   }
 
-  const answer = prompt('\nRun `claude setup-token` now to fix it? [Y/n]')?.trim().toLowerCase();
-  if (answer && answer !== 'y' && answer !== 'yes') return state;
+  const answer = prompt("\nRun `claude setup-token` now to fix it? [Y/n]")
+    ?.trim()
+    .toLowerCase();
+  if (answer && answer !== "y" && answer !== "yes") {
+    return state;
+  }
 
   await login();
   // The token the flow produced is loaded like any other, so `up` continues with
   // exactly what a later start would have.
-  return (await applyToken()) ? 'authenticated' : state;
+  return (await applyToken()) ? "authenticated" : state;
 };
 
 const up = async (args: Args): Promise<number> => {
@@ -342,12 +391,14 @@ const up = async (args: Args): Promise<number> => {
   await applyToken();
   const auth = await preflight();
   if (process.stdin.isTTY) {
-    console.log('whiffle: `whiffle service install` runs this in the background instead.');
+    console.log(
+      "whiffle: `whiffle service install` runs this in the background instead."
+    );
   }
 
   // The daemon reads its hub from the environment, so this is the handoff.
   process.env[WHIFFLE_ENV.hubUrl] = hub.wsUrl;
-  const { runDaemon, watchDeployment } = await import('@whiffle/agent');
+  const { runDaemon, watchDeployment } = await import("@whiffle/agent");
   runDaemon(auth);
   // The git-pull path is DEVELOPER MODE now, and off unless asked for.
   //
@@ -362,7 +413,7 @@ const up = async (args: Args): Promise<number> => {
   // Kept, rather than deleted, because running the fleet straight from a
   // checkout is genuinely how this gets developed. It simply has to be chosen:
   // WHIFFLE_DEPLOY_POLL=1, or a clone that says so in its own marker.
-  if (readEnv(WHIFFLE_ENV.deployPoll) === '1') {
+  if (readEnv(WHIFFLE_ENV.deployPoll) === "1") {
     watchDeployment({ root: CHECKOUT_ROOT });
   }
   return 0;
@@ -370,11 +421,15 @@ const up = async (args: Args): Promise<number> => {
 
 const runService = async (args: Args): Promise<number> => {
   if (!isServiceAction(args.action)) {
-    throw new UsageError(`whiffle service needs one of: ${SERVICE_ACTIONS.join(', ')}`);
+    throw new UsageError(
+      `whiffle service needs one of: ${SERVICE_ACTIONS.join(", ")}`
+    );
   }
   const named = args.rest.map((id) => {
     if (!isServiceId(id)) {
-      throw new UsageError(`whiffle service does not know ${id} — one of: ${SERVICE_IDS.join(', ')}`);
+      throw new UsageError(
+        `whiffle service does not know ${id} — one of: ${SERVICE_IDS.join(", ")}`
+      );
     }
     return id;
   });
@@ -383,7 +438,7 @@ const runService = async (args: Args): Promise<number> => {
   const ids = named.length > 0 ? named : SERVICE_IDS;
   await service(args.action, {
     ids,
-    mode: args.dev ? 'dev' : 'prod',
+    mode: args.dev ? "dev" : "prod",
     follow: args.follow,
     whenIdle: args.whenIdle,
     force: args.force,
@@ -405,23 +460,27 @@ const runService = async (args: Args): Promise<number> => {
  * installed and the services come back on it.
  */
 const runUpdate = async (args: Args): Promise<number> => {
-  const { checkVersion, registryUpdate } = await import('@whiffle/agent');
+  const { checkVersion, registryUpdate } = await import("@whiffle/agent");
   const state = await checkVersion(CLI_VERSION);
 
   if (state.latest === null) {
-    console.error(`whiffle: could not reach the registry — ${state.reason ?? 'no reason given'}`);
+    console.error(
+      `whiffle: could not reach the registry — ${state.reason ?? "no reason given"}`
+    );
     console.error(`whiffle: this machine stays on ${state.installed}.`);
     return 1;
   }
 
   const wanted = args.to;
-  if (!wanted && !state.behind) {
+  if (!(wanted || state.behind)) {
     console.log(`whiffle ${state.installed} is the newest release.`);
     return 0;
   }
   if (args.check) {
-    console.log(`whiffle ${state.installed} installed; ${state.latest} available.`);
-    console.log('Run `whiffle update` to install it.');
+    console.log(
+      `whiffle ${state.installed} installed; ${state.latest} available.`
+    );
+    console.log("Run `whiffle update` to install it.");
     return 0;
   }
 
@@ -432,37 +491,45 @@ const runUpdate = async (args: Args): Promise<number> => {
     force: args.force ?? false,
   });
   console.log(`installed ${report.to}`);
-  if (report.restarted.length > 0) console.log(`restarted ${report.restarted.join(', ')}`);
-  if (report.skipped) console.log(`skipped   ${report.skipped}`);
+  if (report.restarted.length > 0) {
+    console.log(`restarted ${report.restarted.join(", ")}`);
+  }
+  if (report.skipped) {
+    console.log(`skipped   ${report.skipped}`);
+  }
   return 0;
 };
 
 const runDeploy = async (args: Args): Promise<number> => {
-  if (args.action !== 'init') {
-    throw new UsageError('whiffle deploy takes one verb: init');
+  if (args.action !== "init") {
+    throw new UsageError("whiffle deploy takes one verb: init");
   }
   const result = await deployInit({
     ...(args.origin === undefined ? {} : { origin: args.origin }),
     note: (line) => console.log(line),
   });
-  console.log('');
-  console.log(`clone    ${result.root} (${result.origin}, ${result.branch}) at ${result.head}`);
+  console.log("");
+  console.log(
+    `clone    ${result.root} (${result.origin}, ${result.branch}) at ${result.head}`
+  );
   console.log(`marker   ${result.root}/${DEPLOY_MARKER}`);
-  for (const generated of result.units) console.log(`unit     ${generated.path}`);
-  console.log('');
+  for (const generated of result.units) {
+    console.log(`unit     ${generated.path}`);
+  }
+  console.log("");
   console.log(`This machine now deploys on every push to ${result.branch}.`);
   return 0;
 };
 
 /** Importing the hub boots it: its entry point listens, and then stays up. */
 const hub = async (): Promise<number> => {
-  await import('@whiffle/hub');
+  await import("@whiffle/hub");
   return 0;
 };
 
 const run = async (argv: string[]): Promise<number> => {
   const args = parseArgs(argv);
-  if (args.help || (!args.command && !args.version)) {
+  if (args.help || !(args.command || args.version)) {
     console.log(HELP);
     return 0;
   }
@@ -472,28 +539,33 @@ const run = async (argv: string[]): Promise<number> => {
   }
 
   switch (args.command) {
-    case 'up':
+    case "up":
       return up(args);
-    case 'hub':
+    case "hub":
       return hub();
-    case 'status':
+    case "status":
       return status(args);
-    case 'service':
+    case "service":
       return runService(args);
-    case 'update':
+    case "update":
       return runUpdate(args);
-    case 'deploy':
+    case "deploy":
       return runDeploy(args);
-    case 'login':
-      if (args.token) await saveToken(args.token);
-      else await login();
-      console.log(`whiffle: token saved to ${CONFIG_PATH}. Restart the daemon to use it.`);
+    case "login":
+      if (args.token) {
+        await saveToken(args.token);
+      } else {
+        await login();
+      }
+      console.log(
+        `whiffle: token saved to ${CONFIG_PATH}. Restart the daemon to use it.`
+      );
       return 0;
-    case 'logout':
+    case "logout":
       console.log(
         (await clearToken())
           ? `whiffle: token cleared from ${CONFIG_PATH}.`
-          : 'whiffle: no token was stored.'
+          : "whiffle: no token was stored."
       );
       return 0;
     default:
@@ -515,4 +587,6 @@ const code = await run(Bun.argv.slice(2)).catch((error: unknown) => {
 
 // A command that left something running — the daemon, the hub — keeps the
 // process alive on its own; exiting here would cut it off.
-if (code !== 0) process.exit(code);
+if (code !== 0) {
+  process.exit(code);
+}

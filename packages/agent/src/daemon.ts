@@ -1,3 +1,4 @@
+import { arch, hostname, platform } from "node:os";
 import type {
   AuthState,
   BuildInfo,
@@ -7,32 +8,27 @@ import type {
   HeartbeatPayload,
   SpawnPayload,
   ToolStatus,
-} from '@whiffle/core';
-import { WHIFFLE_ENV, WHIFFLE_HUB_PORT } from '@whiffle/core';
-import { fetchClaudeLimits } from '@whiffle/core/usage/limits';
-import { Data, Duration, Effect, Fiber, Schedule } from 'effect';
-import { arch, hostname, platform } from 'node:os';
-import { buildInfo } from './build';
-import { latestDeploy } from './deploy';
-import { convergeDeniedTools, DENIED_WEB_TOOLS } from './denied-tools';
-import { rediscoverHub, toWsUrl } from './discovery';
-import { machineId } from './machine-id';
-import { resumableSessions, SessionSupervisor } from './session';
-import { probeTools } from './tools';
-import { harnesses } from './harnesses';
-import { UsageScanner } from './usage/scanner';
+} from "@whiffle/core";
+import { WHIFFLE_ENV, WHIFFLE_HUB_PORT } from "@whiffle/core";
+import { fetchClaudeLimits } from "@whiffle/core/usage/limits";
+import { Data, Duration, Effect, Fiber, Schedule } from "effect";
+import { buildInfo } from "./build";
+import { convergeDeniedTools, DENIED_WEB_TOOLS } from "./denied-tools";
+import { latestDeploy } from "./deploy";
+import { rediscoverHub, toWsUrl } from "./discovery";
+import { harnesses } from "./harnesses";
+import { machineId } from "./machine-id";
+import { resumableSessions, SessionSupervisor } from "./session";
+import { probeTools } from "./tools";
+import { UsageScanner } from "./usage/scanner";
 
 const DEFAULT_HUB_URL = `ws://localhost:${WHIFFLE_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
 const USAGE_INTERVAL = Duration.seconds(60);
 const USAGE_FULL_REBUILD_MS = 30 * 60 * 1000;
 
-
 /** How the hub identifies this machine in its registry. */
 interface MachineIdentity {
-  machineId: string;
-  hostname: string;
-  os: string;
   /**
    * Whether this daemon can reach Claude Code's credentials. It travels with the
    * identity because it is a fact about the machine, not about a session, and
@@ -40,6 +36,9 @@ interface MachineIdentity {
    * ready to.
    */
   auth: AuthState;
+  hostname: string;
+  machineId: string;
+  os: string;
 }
 
 /**
@@ -48,24 +47,6 @@ interface MachineIdentity {
  * running and the hub marks every other row it calls running as unknown.
  */
 export interface RegisterPayload extends MachineIdentity {
-  instances: string[];
-  /**
-   * The sessions this machine could resume, so the rows the daemon no
-   * longer carries settle as sleeping or as lost rather than all alike. Absent
-   * when the catalog could not be read.
-   */
-  resumable?: string[];
-  /**
-   * What each harness adapter on this machine can do, and whether it is
-   * installed and authenticated — the rail's per-harness word, and what gates
-   * the fleet syncs and spawn forms.
-   */
-  harnesses?: HarnessReport[];
-  /**
-   * What the machine has of the tool catalog (NEW.md §10), so the hub can send
-   * an install for whatever its policy requires and this machine lacks.
-   */
-  tools?: ToolStatus[];
   /**
    * The whiffle this daemon is running (NEW.md §12), as it reported at register.
    */
@@ -77,9 +58,27 @@ export interface RegisterPayload extends MachineIdentity {
    * daemon with no deployment watcher running simply omits it.
    */
   deploy?: DeployInfo;
+  /**
+   * What each harness adapter on this machine can do, and whether it is
+   * installed and authenticated — the rail's per-harness word, and what gates
+   * the fleet syncs and spawn forms.
+   */
+  harnesses?: HarnessReport[];
+  instances: string[];
+  /**
+   * The sessions this machine could resume, so the rows the daemon no
+   * longer carries settle as sleeping or as lost rather than all alike. Absent
+   * when the catalog could not be read.
+   */
+  resumable?: string[];
+  /**
+   * What the machine has of the tool catalog (NEW.md §10), so the hub can send
+   * an install for whatever its policy requires and this machine lacks.
+   */
+  tools?: ToolStatus[];
 }
 
-export class ConnectionLost extends Data.TaggedError('ConnectionLost')<{
+export class ConnectionLost extends Data.TaggedError("ConnectionLost")<{
   readonly url: string;
   readonly reason: string;
 }> {}
@@ -188,11 +187,16 @@ export const reconnecting = <E extends { readonly reason: string }, R>(
     };
   }
 ) => {
-  const healthyAfter = Duration.toMillis(options?.healthyAfter ?? HEALTHY_CONNECTION);
+  const healthyAfter = Duration.toMillis(
+    options?.healthyAfter ?? HEALTHY_CONNECTION
+  );
   const now = options?.now ?? (() => Date.now());
   const rediscover = options?.rediscover;
-  const failureThreshold = rediscover?.failureCount ?? REDISCOVERY_FAILURE_COUNT;
-  const failureWindow = Duration.toMillis(rediscover?.window ?? REDISCOVERY_FAILURE_WINDOW);
+  const failureThreshold =
+    rediscover?.failureCount ?? REDISCOVERY_FAILURE_COUNT;
+  const failureWindow = Duration.toMillis(
+    rediscover?.window ?? REDISCOVERY_FAILURE_WINDOW
+  );
 
   const buildSeries = () => {
     // Series-scoped, not attempt-scoped: unlike `liveAt` below, this must
@@ -209,13 +213,22 @@ export const reconnecting = <E extends { readonly reason: string }, R>(
       return session(() => {
         liveAt = now();
       }).pipe(
-        Effect.tapError((error) => Effect.logWarning(`${error.reason} — reconnecting`)),
+        Effect.tapError((error) =>
+          Effect.logWarning(`${error.reason} — reconnecting`)
+        ),
         Effect.tapError(() => {
-          if (!rediscover) return Effect.void;
+          if (!rediscover) {
+            return Effect.void;
+          }
           const at = now();
           failures += 1;
           firstFailureAt ??= at;
-          if (failures < failureThreshold || at - firstFailureAt < failureWindow) return Effect.void;
+          if (
+            failures < failureThreshold ||
+            at - firstFailureAt < failureWindow
+          ) {
+            return Effect.void;
+          }
           failures = 0;
           firstFailureAt = undefined;
           return rediscover.onTrigger();
@@ -231,7 +244,8 @@ export const reconnecting = <E extends { readonly reason: string }, R>(
   return Effect.forever(Effect.suspend(buildSeries));
 };
 
-const closeReason = (event: CloseEvent): string => event.reason || `close code ${event.code}`;
+const closeReason = (event: CloseEvent): string =>
+  event.reason || `close code ${event.code}`;
 
 const send = (socket: WebSocket, envelope: Envelope): void => {
   socket.send(JSON.stringify(envelope));
@@ -242,20 +256,24 @@ const open = (url: string) =>
   Effect.callback<WebSocket, ConnectionLost>((resume) => {
     const socket = new WebSocket(url);
     const onOpen = () => {
-      socket.removeEventListener('close', onClose);
+      socket.removeEventListener("close", onClose);
       resume(Effect.succeed(socket));
     };
     const onClose = (event: CloseEvent) => {
-      socket.removeEventListener('open', onOpen);
-      resume(Effect.fail(new ConnectionLost({ url, reason: closeReason(event) })));
+      socket.removeEventListener("open", onOpen);
+      resume(
+        Effect.fail(new ConnectionLost({ url, reason: closeReason(event) }))
+      );
     };
-    socket.addEventListener('open', onOpen, { once: true });
-    socket.addEventListener('close', onClose, { once: true });
+    socket.addEventListener("open", onOpen, { once: true });
+    socket.addEventListener("close", onClose, { once: true });
     return Effect.sync(() => socket.close());
   });
 
 const connection = (url: string) =>
-  Effect.acquireRelease(open(url), (socket) => Effect.sync(() => socket.close()));
+  Effect.acquireRelease(open(url), (socket) =>
+    Effect.sync(() => socket.close())
+  );
 
 /** Never succeeds — it fails when the hub goes away, which is what drives the retry. */
 const closed = (socket: WebSocket, url: string) =>
@@ -270,14 +288,23 @@ const closed = (socket: WebSocket, url: string) =>
     // `ConnectionLost` is ever raised, and the retry below never gets its turn.
     // The daemon keeps its sessions and looks healthy while the hub stops
     // hearing from it altogether.
-    if (socket.readyState === WebSocket.CLOSING || socket.readyState === WebSocket.CLOSED) {
-      resume(Effect.fail(new ConnectionLost({ url, reason: 'closed while registering' })));
+    if (
+      socket.readyState === WebSocket.CLOSING ||
+      socket.readyState === WebSocket.CLOSED
+    ) {
+      resume(
+        Effect.fail(
+          new ConnectionLost({ url, reason: "closed while registering" })
+        )
+      );
       return;
     }
     const onClose = (event: CloseEvent) =>
-      resume(Effect.fail(new ConnectionLost({ url, reason: closeReason(event) })));
-    socket.addEventListener('close', onClose, { once: true });
-    return Effect.sync(() => socket.removeEventListener('close', onClose));
+      resume(
+        Effect.fail(new ConnectionLost({ url, reason: closeReason(event) }))
+      );
+    socket.addEventListener("close", onClose, { once: true });
+    return Effect.sync(() => socket.removeEventListener("close", onClose));
   });
 
 /**
@@ -287,13 +314,15 @@ const closed = (socket: WebSocket, url: string) =>
  * has to clone a repository or cut a worktree first is not a session that
  * already exists to be adopted — both go straight to the supervisor.
  */
-export const adoptable = (payload: SpawnPayload | undefined): payload is SpawnPayload =>
+export const adoptable = (
+  payload: SpawnPayload | undefined
+): payload is SpawnPayload =>
   payload !== undefined &&
-  typeof payload.instanceId === 'string' &&
+  typeof payload.instanceId === "string" &&
   payload.instanceId.length > 0 &&
-  typeof payload.cwd === 'string' &&
+  typeof payload.cwd === "string" &&
   payload.cwd.length > 0 &&
-  (payload.harness === undefined || payload.harness === 'claude') &&
+  (payload.harness === undefined || payload.harness === "claude") &&
   payload.bootstrap === undefined &&
   payload.scratch === undefined;
 
@@ -333,7 +362,7 @@ const attach = (
       build: yield* Effect.promise(() => buildInfo()),
       ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
     };
-    send(socket, { verb: 'register', machineId: identity.machineId, payload });
+    send(socket, { verb: "register", machineId: identity.machineId, payload });
     yield* Effect.logInfo(`registered with ${url}`);
     markLive();
     // A hub that restarted while a session sat on a permission ask has
@@ -343,34 +372,52 @@ const attach = (
     supervisor.replayOpenAsks();
 
     supervisor.reannounce = () => {
-      if (socket.readyState !== WebSocket.OPEN) return;
-      void Promise.all(harnesses().map((adapter) => adapter.detect())).then((harnesses) => {
-        send(socket, {
-          verb: 'register',
-          machineId: identity.machineId,
-          payload: { ...identity, auth: harnesses[0]?.auth ?? identity.auth, harnesses, instances: supervisor.instanceIds },
-        });
-      });
+      if (socket.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      void Promise.all(harnesses().map((adapter) => adapter.detect())).then(
+        (harnesses) => {
+          send(socket, {
+            verb: "register",
+            machineId: identity.machineId,
+            payload: {
+              ...identity,
+              auth: harnesses[0]?.auth ?? identity.auth,
+              harnesses,
+              instances: supervisor.instanceIds,
+            },
+          });
+        }
+      );
     };
 
     // A hand-off leaves as a `send` addressed at the target's machine; the hub
     // relays it the same way it relays a dashboard's.
     supervisor.emit = (envelope) => {
-      if (socket.readyState !== WebSocket.OPEN) return;
-      send(socket, { ...envelope, machineId: envelope.machineId || identity.machineId });
+      if (socket.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      send(socket, {
+        ...envelope,
+        machineId: envelope.machineId || identity.machineId,
+      });
     };
 
     supervisor.sink = (frame) => {
-      if (socket.readyState !== WebSocket.OPEN) return;
+      if (socket.readyState !== WebSocket.OPEN) {
+        return;
+      }
       // Every frame a session sinks is instance-scoped. `usage` is the one
       // FramePayload variant the hub originates for dashboards, so it never
       // arrives here — narrowing on the field keeps that asymmetry honest.
-      if (!('instanceId' in frame)) return;
+      if (!("instanceId" in frame)) {
+        return;
+      }
       send(socket, {
-        verb: 'frames',
+        verb: "frames",
         machineId: identity.machineId,
         instanceId: frame.instanceId,
-        requestId: 'requestId' in frame ? frame.requestId : undefined,
+        requestId: "requestId" in frame ? frame.requestId : undefined,
         payload: frame,
       });
     };
@@ -399,7 +446,9 @@ const attach = (
     let awaitingRegisterAck = true;
 
     const takeCustody = (ackPayload: unknown, spawns: Envelope[]): void => {
-      const named = spawns.map((envelope) => custodyRow(envelope.payload as SpawnPayload));
+      const named = spawns.map((envelope) =>
+        custodyRow(envelope.payload as SpawnPayload)
+      );
       void supervisor
         // Whatever sessiond is still holding that the hub did NOT name is still
         // this machine's to carry. The hub decides what to restore from its own
@@ -411,40 +460,54 @@ const attach = (
         .catch(() => [] as Awaited<ReturnType<typeof supervisor.survivors>>)
         .then((surviving) => {
           const claimed = new Set(named.map((row) => row.instanceId));
-          const rows = [...named, ...surviving.filter((row) => !claimed.has(row.instanceId))];
-          if (rows.length === 0) return [] as string[];
+          const rows = [
+            ...named,
+            ...surviving.filter((row) => !claimed.has(row.instanceId)),
+          ];
+          if (rows.length === 0) {
+            return [] as string[];
+          }
           return supervisor.reattachFrom(ackPayload, rows);
         })
         .catch((error: unknown) => {
           // A sessiond that cannot be reached is not a reason to lose the
           // hub's restores: adopt nothing, spawn everything, exactly as before.
-          Effect.runFork(Effect.logWarning(`reattach failed: ${String(error)}`));
+          Effect.runFork(
+            Effect.logWarning(`reattach failed: ${String(error)}`)
+          );
           return [] as string[];
         })
         .then((adopted) => {
           if (adopted.length > 0) {
             Effect.runFork(
-              Effect.logInfo(`took custody of ${adopted.length} surviving session(s): ${adopted.join(', ')}`)
+              Effect.logInfo(
+                `took custody of ${adopted.length} surviving session(s): ${adopted.join(", ")}`
+              )
             );
           }
           for (const envelope of spawns) {
-            if (!adopted.includes((envelope.payload as SpawnPayload).instanceId)) {
+            if (
+              !adopted.includes((envelope.payload as SpawnPayload).instanceId)
+            ) {
               supervisor.dispatch(envelope);
             }
           }
         });
     };
 
-    socket.addEventListener('message', (event) => {
+    socket.addEventListener("message", (event) => {
       const envelope = JSON.parse(String(event.data)) as Envelope;
       if (awaitingRegisterAck) {
-        if (envelope.verb === 'register') {
+        if (envelope.verb === "register") {
           awaitingRegisterAck = false;
           const spawns = heldSpawns.splice(0);
           takeCustody(envelope.payload, spawns);
           return;
         }
-        if (envelope.verb === 'spawn' && adoptable(envelope.payload as SpawnPayload | undefined)) {
+        if (
+          envelope.verb === "spawn" &&
+          adoptable(envelope.payload as SpawnPayload | undefined)
+        ) {
           heldSpawns.push(envelope);
           return;
         }
@@ -456,7 +519,7 @@ const attach = (
       Effect.repeat(
         Effect.sync(() =>
           send(socket, {
-            verb: 'heartbeat',
+            verb: "heartbeat",
             machineId: identity.machineId,
             // `instances` rides every beat (not just register) so the hub can
             // reconcile session truth continuously — see HeartbeatPayload.
@@ -488,7 +551,7 @@ const attach = (
           const buckets = scanner.reportBuckets(Date.now());
           const limits = yield* Effect.promise(() => fetchClaudeLimits());
           send(socket, {
-            verb: 'usage',
+            verb: "usage",
             machineId: identity.machineId,
             payload: { buckets, limits },
           });
@@ -535,7 +598,7 @@ export const startDaemon = (auth?: AuthState) =>
     let hubUrl = url;
     // The claude harness's auth is the machine's headline word — the original
     // rail still reads it — while `register` carries every harness's own.
-    const claude = harnesses().find((adapter) => adapter.kind === 'claude');
+    const claude = harnesses().find((adapter) => adapter.kind === "claude");
     const machineIdValue = yield* Effect.promise(() => machineId());
     // Child processes — the opencode server and its plugins most of all — read
     // the machine's identity and the hub off the environment they inherit.
@@ -544,19 +607,30 @@ export const startDaemon = (auth?: AuthState) =>
     // The sessions this daemon spawns carry the deny list in their own options;
     // the settings file is how the `claude` the user starts by hand gets it too.
     const denied = yield* Effect.promise(() => convergeDeniedTools());
-    if (denied.state === 'applied') {
-      yield* Effect.logInfo(`denied ${DENIED_WEB_TOOLS.join(', ')} in ~/.claude/settings.json`);
-    } else if (denied.state === 'failed') {
+    if (denied.state === "applied") {
+      yield* Effect.logInfo(
+        `denied ${DENIED_WEB_TOOLS.join(", ")} in ~/.claude/settings.json`
+      );
+    } else if (denied.state === "failed") {
       yield* Effect.logWarning(denied.detail);
     }
     const identity: MachineIdentity = {
       machineId: machineIdValue,
       hostname: hostname(),
       os: `${platform()}-${arch()}`,
-      auth: auth ?? (yield* Effect.promise(() => (claude ? claude.detect() : Promise.resolve({ auth: 'unauthenticated' as AuthState })).then((r) => r.auth))),
+      auth:
+        auth ??
+        (yield* Effect.promise(() =>
+          (claude
+            ? claude.detect()
+            : Promise.resolve({ auth: "unauthenticated" as AuthState })
+          ).then((r) => r.auth)
+        )),
     };
-    if (identity.auth !== 'authenticated') {
-      yield* Effect.logWarning(`Claude Code credentials are ${identity.auth} on this machine`);
+    if (identity.auth !== "authenticated") {
+      yield* Effect.logWarning(
+        `Claude Code credentials are ${identity.auth} on this machine`
+      );
     }
 
     // Outlives any one connection: a hub restart must not kill running sessions.
@@ -565,22 +639,25 @@ export const startDaemon = (auth?: AuthState) =>
       (running) =>
         // Detached, not drained: the sessions outlive this daemon in sessiond,
         // and the next one reattaches to them. See `SessionSupervisor.detach`.
-        Effect.logInfo(`detaching ${running.instanceIds.length} session(s)`).pipe(
-          Effect.andThen(Effect.sync(() => running.detach()))
-        )
+        Effect.logInfo(
+          `detaching ${running.instanceIds.length} session(s)`
+        ).pipe(Effect.andThen(Effect.sync(() => running.detach())))
     );
 
     // The usage scanner outlives connections too: its dedup set is rebuilt only
     // on start (USAGE-SPEC.md §5.1), so a reconnect must not reset it.
     const scanner = yield* Effect.promise(() => UsageScanner.load());
 
-    yield* Effect.logInfo(`whiffle agent ${identity.machineId} connecting to ${url}`);
+    yield* Effect.logInfo(
+      `whiffle agent ${identity.machineId} connecting to ${url}`
+    );
     // The connection — and only the connection — is what the loop re-enters.
     // The supervisor above it keeps its sessions and the scanner keeps its
     // dedup set across every reconnect; an interrupt still unwinds through this
     // to the supervisor's release, so a signalled daemon drains between turns.
     yield* reconnecting(
-      (markLive) => Effect.scoped(attach(scanner, supervisor, identity, hubUrl, markLive)),
+      (markLive) =>
+        Effect.scoped(attach(scanner, supervisor, identity, hubUrl, markLive)),
       {
         rediscover: {
           onTrigger: () =>
@@ -588,7 +665,9 @@ export const startDaemon = (auth?: AuthState) =>
               const winner = await rediscoverHub({
                 log: (line) => Effect.runSync(Effect.logInfo(line)),
               });
-              if (winner) hubUrl = toWsUrl(winner);
+              if (winner) {
+                hubUrl = toWsUrl(winner);
+              }
             }).pipe(
               // A rediscovery attempt that throws (a probe rejecting oddly, a
               // malformed tailscale JSON) must never take the reconnect loop
@@ -623,5 +702,5 @@ export const runDaemon = (auth?: AuthState): void => {
     (process as NodeJS.EventEmitter).off(signal, drain);
     void Effect.runPromise(Fiber.interrupt(daemon)).then(() => process.exit(0));
   };
-  process.on('SIGINT', drain).on('SIGTERM', drain);
+  process.on("SIGINT", drain).on("SIGTERM", drain);
 };

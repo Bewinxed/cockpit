@@ -1,33 +1,42 @@
 <script lang="ts">
-	import { Accordion as AccordionPrimitive } from "bits-ui";
-	import { HugeiconsIcon } from "@hugeicons/svelte"
-	import { ArrowDown01Icon } from '@hugeicons/core-free-icons';
-	import { ArrowUp01Icon } from '@hugeicons/core-free-icons';
-	import { cn, type WithoutChild } from "$lib/utils.js";
+  import { ArrowDown01Icon, ArrowUp01Icon } from "@hugeicons/core-free-icons";
+  import { HugeiconsIcon } from "@hugeicons/svelte";
+  import { Accordion as AccordionPrimitive } from "bits-ui";
+  import { cn, type WithoutChild } from "$lib/utils.js";
 
-	let {
-		ref = $bindable(null),
-		class: className,
-		level = 3,
-		children,
-		...restProps
-	}: WithoutChild<AccordionPrimitive.TriggerProps> & {
-		level?: AccordionPrimitive.HeaderProps["level"];
-	} = $props();
+  let {
+    ref = $bindable(null),
+    class: className,
+    level = 3,
+    children,
+    ...restProps
+  }: WithoutChild<AccordionPrimitive.TriggerProps> & {
+    level?: AccordionPrimitive.HeaderProps["level"];
+  } = $props();
 </script>
 
-<AccordionPrimitive.Header {level} class="flex">
-	<AccordionPrimitive.Trigger
-		data-slot="accordion-trigger"
-		bind:ref
-		class={cn(
+<AccordionPrimitive.Header class="flex" {level}>
+  <AccordionPrimitive.Trigger
+    class={cn(
 			"gap-6 p-4 text-left text-sm font-medium hover:underline **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4 **:data-[slot=accordion-trigger-icon]:text-muted-foreground group/accordion-trigger relative flex flex-1 items-start justify-between border border-transparent transition-all outline-none disabled:pointer-events-none disabled:opacity-50",
 			className
 		)}
-		{...restProps}
-	>
-		{@render children?.()}
-		<HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} data-slot="accordion-trigger-icon" class="cn-accordion-trigger-icon pointer-events-none shrink-0 group-aria-expanded/accordion-trigger:hidden" />
-		<HugeiconsIcon icon={ArrowUp01Icon} strokeWidth={2} data-slot="accordion-trigger-icon" class="cn-accordion-trigger-icon pointer-events-none hidden shrink-0 group-aria-expanded/accordion-trigger:inline" />
-	</AccordionPrimitive.Trigger>
+    data-slot="accordion-trigger"
+    bind:ref
+    {...restProps}
+  >
+    {@render children?.()}
+    <HugeiconsIcon
+      class="cn-accordion-trigger-icon pointer-events-none shrink-0 group-aria-expanded/accordion-trigger:hidden"
+      data-slot="accordion-trigger-icon"
+      icon={ArrowDown01Icon}
+      strokeWidth={2}
+    />
+    <HugeiconsIcon
+      class="cn-accordion-trigger-icon pointer-events-none hidden shrink-0 group-aria-expanded/accordion-trigger:inline"
+      data-slot="accordion-trigger-icon"
+      icon={ArrowUp01Icon}
+      strokeWidth={2}
+    />
+  </AccordionPrimitive.Trigger>
 </AccordionPrimitive.Header>

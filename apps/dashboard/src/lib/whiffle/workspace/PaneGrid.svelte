@@ -13,10 +13,10 @@
    * would keep sizes under a key of its own that survives a tree mutation
    * which reshapes the group, and then apply the old numbers to new children.
    */
-  import * as Resizable from '$lib/components/ui/resizable';
-  import PaneLeaf from './PaneLeaf.svelte';
-  import Self from './PaneGrid.svelte';
-  import { workspace, type PaneNode } from './workspace.svelte';
+  import * as Resizable from "$lib/components/ui/resizable";
+  import Self from "./PaneGrid.svelte";
+  import PaneLeaf from "./PaneLeaf.svelte";
+  import { type PaneNode, workspace } from "./workspace.svelte";
 
   let { node }: { node: PaneNode } = $props();
 </script>
@@ -25,9 +25,9 @@
   <PaneLeaf leaf={node} />
 {:else}
   <Resizable.PaneGroup
+    class="grid-group"
     direction={node.dir === 'h' ? 'horizontal' : 'vertical'}
     onLayoutChange={(sizes) => workspace.resize(node.id, sizes)}
-    class="grid-group"
   >
     {#each node.kids as kid, i (kid.id)}
       {#if i > 0}
@@ -66,8 +66,8 @@
       background: var(--border-control);
     }
   }
-  :global(.grid-group [data-pane-resizer][data-active='pointer']),
-  :global(.grid-group [data-pane-resizer][data-active='keyboard']) {
+  :global(.grid-group [data-pane-resizer][data-active="pointer"]),
+  :global(.grid-group [data-pane-resizer][data-active="keyboard"]) {
     background: var(--ink-muted);
   }
   @media (prefers-reduced-motion: reduce) {

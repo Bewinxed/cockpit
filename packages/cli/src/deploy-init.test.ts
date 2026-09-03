@@ -1,17 +1,17 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { homedir, platform, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { homedir, platform, tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   DEPLOY_BRANCH,
   DEPLOY_MARKER,
+  type DeployInitResult,
+  type DeployStep,
   deployInit,
   deployRoot,
   ServiceError,
-  type DeployInitResult,
-  type DeployStep,
   type ServiceSpec,
-} from './service';
+} from "./service";
 
 /**
  * `deploy init` against a *local bare repository* in a scratch directory.
@@ -28,7 +28,7 @@ let origin: string;
 const sh = async (cwd: string, ...argv: string[]): Promise<string> => {
   const ran = await Bun.$`${argv}`.cwd(cwd).quiet().nothrow();
   if (ran.exitCode !== 0) {
-    throw new Error(`${argv.join(' ')} failed: ${ran.stderr.toString()}`);
+    throw new Error(`${argv.join(" ")} failed: ${ran.stderr.toString()}`);
   }
   return ran.stdout.toString().trim();
 };
@@ -40,11 +40,16 @@ const recorder = () => {
     steps,
     run: async ({ argv, cwd }: DeployStep) => {
       steps.push([...argv]);
-      if (argv[0] !== 'git') return { ok: true, said: `stubbed ${argv.join(' ')}` };
+      if (argv[0] !== "git") {
+        return { ok: true, said: `stubbed ${argv.join(" ")}` };
+      }
       const ran = await Bun.$`${argv}`.cwd(cwd).quiet().nothrow();
       return {
         ok: ran.exitCode === 0,
-        said: (ran.stdout.toString().trim() || ran.stderr.toString().trim()).split('\n').slice(-4).join('\n'),
+        said: (ran.stdout.toString().trim() || ran.stderr.toString().trim())
+          .split("\n")
+          .slice(-4)
+          .join("\n"),
       };
     },
   };
@@ -62,17 +67,20 @@ const captor = () => {
 };
 
 beforeAll(async () => {
-  scratch = mkdtempSync(join(tmpdir(), 'whiffle-deploy-init-'));
-  origin = join(scratch, 'origin.git');
-  await sh(scratch, 'git', 'init', '--bare', '--initial-branch=main', origin);
-  const work = join(scratch, 'work');
-  await sh(scratch, 'git', 'clone', origin, work);
-  await sh(work, 'git', 'config', 'user.email', 'test@example.invalid');
-  await sh(work, 'git', 'config', 'user.name', 'deploy test');
-  await Bun.write(join(work, 'package.json'), '{"name":"whiffle","workspaces":["packages/*"]}\n');
-  await sh(work, 'git', 'add', '-A');
-  await sh(work, 'git', 'commit', '-m', 'first');
-  await sh(work, 'git', 'push', 'origin', 'main');
+  scratch = mkdtempSync(join(tmpdir(), "whiffle-deploy-init-"));
+  origin = join(scratch, "origin.git");
+  await sh(scratch, "git", "init", "--bare", "--initial-branch=main", origin);
+  const work = join(scratch, "work");
+  await sh(scratch, "git", "clone", origin, work);
+  await sh(work, "git", "config", "user.email", "test@example.invalid");
+  await sh(work, "git", "config", "user.name", "deploy test");
+  await Bun.write(
+    join(work, "package.json"),
+    '{"name":"whiffle","workspaces":["packages/*"]}\n'
+  );
+  await sh(work, "git", "add", "-A");
+  await sh(work, "git", "commit", "-m", "first");
+  await sh(work, "git", "push", "origin", "main");
 });
 
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -85,163 +93,196 @@ let root: string;
 const notes: string[] = [];
 
 beforeAll(async () => {
-  root = join(scratch, 'home', '.whiffle', 'app');
+  root = join(scratch, "home", ".whiffle", "app");
   const runner = recorder();
   const capture = captor();
   result = await deployInit({
     root,
     origin,
-    ids: ['hub', 'dashboard', 'sessiond', 'agent'],
+    ids: ["hub", "dashboard", "sessiond", "agent"],
     note: (line) => notes.push(line),
     run: runner.run,
     install: capture.install,
     // Never the operator's own database, not even to read: both ends are
     // scratch paths that do not exist, so the move is a no-op here.
-    dbPath: join(scratch, 'data', 'whiffle.db'),
-    legacyDb: join(scratch, 'nonexistent', 'whiffle.db'),
+    dbPath: join(scratch, "data", "whiffle.db"),
+    legacyDb: join(scratch, "nonexistent", "whiffle.db"),
   });
   steps = runner.steps;
   installed = capture.installed;
 });
 
-describe('the clone it builds (G1)', () => {
-  test('it is a real single-branch clone of origin/main at the deploy root', async () => {
+describe("the clone it builds (G1)", () => {
+  test("it is a real single-branch clone of origin/main at the deploy root", async () => {
     expect(result.root).toBe(root);
     expect(result.origin).toBe(origin);
     expect(result.branch).toBe(DEPLOY_BRANCH);
-    expect(await sh(root, 'git', 'rev-parse', '--abbrev-ref', 'HEAD')).toBe('main');
-    expect(await sh(root, 'git', 'remote', 'get-url', 'origin')).toBe(origin);
-    expect(await sh(root, 'git', 'rev-parse', '--short', 'origin/main')).toBe(result.head);
+    expect(await sh(root, "git", "rev-parse", "--abbrev-ref", "HEAD")).toBe(
+      "main"
+    );
+    expect(await sh(root, "git", "remote", "get-url", "origin")).toBe(origin);
+    expect(await sh(root, "git", "rev-parse", "--short", "origin/main")).toBe(
+      result.head
+    );
   });
 
-  test('the marker is there, and says what created it', async () => {
-    const marker = (await Bun.file(join(root, DEPLOY_MARKER)).json()) as Record<string, string>;
+  test("the marker is there, and says what created it", async () => {
+    const marker = (await Bun.file(join(root, DEPLOY_MARKER)).json()) as Record<
+      string,
+      string
+    >;
     expect(marker).toMatchObject({
       root,
       origin,
-      branch: 'main',
-      createdBy: 'whiffle deploy init',
+      branch: "main",
+      createdBy: "whiffle deploy init",
     });
     expect(Number.isFinite(Date.parse(marker.createdAt as string))).toBe(true);
     expect(result.marker).toEqual(marker as never);
   });
 
-  test('the marker does not dirty the clone — or the update flow could never pull', async () => {
+  test("the marker does not dirty the clone — or the update flow could never pull", async () => {
     // The dirty guard in `updateCheckout` refuses a checkout with uncommitted
     // changes, so a marker that showed up in `git status` would lock the
     // machine out of its own deploys on day one.
-    expect(await sh(root, 'git', 'status', '--porcelain')).toBe('');
-    expect(await Bun.file(join(root, '.git', 'info', 'exclude')).text()).toContain(DEPLOY_MARKER);
+    expect(await sh(root, "git", "status", "--porcelain")).toBe("");
+    expect(
+      await Bun.file(join(root, ".git", "info", "exclude")).text()
+    ).toContain(DEPLOY_MARKER);
   });
 
-  test('it installs and builds inside the clone, in that order', () => {
-    const shape = steps.map((argv) => argv.slice(0, 4).join(' '));
-    expect(shape.some((line) => line.startsWith('git clone --branch main'))).toBe(true);
-    const install = shape.findIndex((line) => line.endsWith(' install'));
-    const build = shape.findIndex((line) => line.includes('--filter @whiffle/dashboard'));
+  test("it installs and builds inside the clone, in that order", () => {
+    const shape = steps.map((argv) => argv.slice(0, 4).join(" "));
+    expect(
+      shape.some((line) => line.startsWith("git clone --branch main"))
+    ).toBe(true);
+    const install = shape.findIndex((line) => line.endsWith(" install"));
+    const build = shape.findIndex((line) =>
+      line.includes("--filter @whiffle/dashboard")
+    );
     expect(install).toBeGreaterThan(0);
     expect(build).toBeGreaterThan(install);
   });
 
-  test('nothing it ran was a service command', () => {
+  test("nothing it ran was a service command", () => {
     for (const argv of steps) {
-      expect(['systemctl', 'launchctl', 'service']).not.toContain(argv[0] as string);
+      expect(["systemctl", "launchctl", "service"]).not.toContain(
+        argv[0] as string
+      );
     }
   });
 });
 
-describe('the units it generates point at the clone (G1)', () => {
-  test('every service names an entry point inside the deployment clone', () => {
+describe("the units it generates point at the clone (G1)", () => {
+  test("every service names an entry point inside the deployment clone", () => {
     expect(result.units.map((generated) => generated.id)).toEqual([
-      'hub',
-      'dashboard',
-      'sessiond',
-      'agent',
+      "hub",
+      "dashboard",
+      "sessiond",
+      "agent",
     ]);
     const expected: Record<string, string> = {
-      hub: join(root, 'packages', 'hub', 'src', 'index.ts'),
+      hub: join(root, "packages", "hub", "src", "index.ts"),
       // Its own server, not adapter-node's: the dashboard has to carry the
       // browser's /ws upgrade through to the hub, which build/index.js does not.
-      dashboard: join(root, 'apps', 'dashboard', 'serve.js'),
-      sessiond: join(root, 'packages', 'sessiond', 'src', 'main.ts'),
-      agent: join(root, 'packages', 'cli', 'src', 'cli.ts'),
+      dashboard: join(root, "apps", "dashboard", "serve.js"),
+      sessiond: join(root, "packages", "sessiond", "src", "main.ts"),
+      agent: join(root, "packages", "cli", "src", "cli.ts"),
     };
     for (const generated of result.units) {
       expect(generated.text).toContain(expected[generated.id] as string);
       // And never at this repository, which is the working tree the whole
       // contract exists to get the services out of.
-      expect(generated.text).not.toContain(join(process.cwd(), 'packages', 'hub', 'src'));
+      expect(generated.text).not.toContain(
+        join(process.cwd(), "packages", "hub", "src")
+      );
     }
   });
 
   test("the hub's DB path is the C9 data dir, never a path inside a checkout", () => {
-    const hub = result.units.find((generated) => generated.id === 'hub');
-    if (!hub) throw new Error('no hub unit was generated');
+    const hub = result.units.find((generated) => generated.id === "hub");
+    if (!hub) {
+      throw new Error("no hub unit was generated");
+    }
     const dataDir =
-      platform() === 'darwin'
-        ? join(homedir(), 'Library', 'Application Support', 'whiffle')
-        : join(process.env.XDG_DATA_HOME ?? join(homedir(), '.local', 'share'), 'whiffle');
-    expect(hub.text).toContain(`WHIFFLE_DB_PATH=${join(dataDir, 'whiffle.db')}`);
+      platform() === "darwin"
+        ? join(homedir(), "Library", "Application Support", "whiffle")
+        : join(
+            process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
+            "whiffle"
+          );
+    expect(hub.text).toContain(
+      `WHIFFLE_DB_PATH=${join(dataDir, "whiffle.db")}`
+    );
     expect(hub.text).not.toContain(`WHIFFLE_DB_PATH=${root}`);
   });
 
-  test('they are handed to the installer, and to nothing else', () => {
-    expect(installed.map((spec) => spec.id)).toEqual(['hub', 'dashboard', 'sessiond', 'agent']);
-    expect(installed.every((spec) => spec.mode === 'prod')).toBe(true);
+  test("they are handed to the installer, and to nothing else", () => {
+    expect(installed.map((spec) => spec.id)).toEqual([
+      "hub",
+      "dashboard",
+      "sessiond",
+      "agent",
+    ]);
+    expect(installed.every((spec) => spec.mode === "prod")).toBe(true);
   });
 });
 
-describe('what it refuses', () => {
-  test('a directory that exists, holds something, and carries no marker', async () => {
-    const occupied = join(scratch, 'somebodys-work');
+describe("what it refuses", () => {
+  test("a directory that exists, holds something, and carries no marker", async () => {
+    const occupied = join(scratch, "somebodys-work");
     mkdirSync(occupied, { recursive: true });
-    await Bun.write(join(occupied, 'README.md'), 'mine\n');
+    await Bun.write(join(occupied, "README.md"), "mine\n");
     const capture = captor();
     await expect(
       deployInit({
         root: occupied,
         origin,
-          note: () => {},
+        note: () => {},
         run: recorder().run,
         install: capture.install,
-        dbPath: join(scratch, 'data', 'whiffle.db'),
-        legacyDb: join(scratch, 'nonexistent', 'whiffle.db'),
+        dbPath: join(scratch, "data", "whiffle.db"),
+        legacyDb: join(scratch, "nonexistent", "whiffle.db"),
       })
     ).rejects.toThrow(ServiceError);
-    expect(await Bun.file(join(occupied, 'README.md')).text()).toBe('mine\n');
+    expect(await Bun.file(join(occupied, "README.md")).text()).toBe("mine\n");
     expect(capture.installed).toEqual([]);
   });
 
-  test('re-running on an existing clone fast-forwards it rather than re-cloning', async () => {
+  test("re-running on an existing clone fast-forwards it rather than re-cloning", async () => {
     const runner = recorder();
     const capture = captor();
     await deployInit({
       root,
       origin,
-      ids: ['agent'],
+      ids: ["agent"],
       note: () => {},
       run: runner.run,
       install: capture.install,
     });
-    const shape = runner.steps.map((argv) => argv.join(' '));
-    expect(shape.some((line) => line.startsWith('git clone'))).toBe(false);
-    expect(shape).toContain('git fetch origin main');
-    expect(shape).toContain('git merge --ff-only origin/main');
+    const shape = runner.steps.map((argv) => argv.join(" "));
+    expect(shape.some((line) => line.startsWith("git clone"))).toBe(false);
+    expect(shape).toContain("git fetch origin main");
+    expect(shape).toContain("git merge --ff-only origin/main");
     // The catch-up is fast-forward only here too: nothing in this verb resets.
-    expect(shape.some((line) => line.includes('reset') || line.includes('--force'))).toBe(false);
+    expect(
+      shape.some((line) => line.includes("reset") || line.includes("--force"))
+    ).toBe(false);
   });
 });
 
-test('the deploy root is per-user, outside any checkout, and overridable', () => {
+test("the deploy root is per-user, outside any checkout, and overridable", () => {
   const previous = process.env.WHIFFLE_DEPLOY_ROOT;
   delete process.env.WHIFFLE_DEPLOY_ROOT;
   try {
-    expect(deployRoot()).toBe(join(homedir(), '.whiffle', 'app'));
+    expect(deployRoot()).toBe(join(homedir(), ".whiffle", "app"));
   } finally {
-    if (previous !== undefined) process.env.WHIFFLE_DEPLOY_ROOT = previous;
+    if (previous !== undefined) {
+      process.env.WHIFFLE_DEPLOY_ROOT = previous;
+    }
   }
-  process.env.WHIFFLE_DEPLOY_ROOT = '/tmp/elsewhere';
-  expect(deployRoot()).toBe('/tmp/elsewhere');
+  process.env.WHIFFLE_DEPLOY_ROOT = "/tmp/elsewhere";
+  expect(deployRoot()).toBe("/tmp/elsewhere");
   delete process.env.WHIFFLE_DEPLOY_ROOT;
 });
 
@@ -255,22 +296,22 @@ test('the deploy root is per-user, outside any checkout, and overridable', () =>
  * did nothing and the hub came up on a brand-new empty database sitting beside
  * a full one. `deploy init` is the only moment both ends are known.
  */
-describe('the database it rescues', () => {
-  test('moves the legacy file, with its -wal and -shm, out of the checkout', async () => {
-    const checkout = join(scratch, 'devtree', 'packages', 'hub');
+describe("the database it rescues", () => {
+  test("moves the legacy file, with its -wal and -shm, out of the checkout", async () => {
+    const checkout = join(scratch, "devtree", "packages", "hub");
     mkdirSync(checkout, { recursive: true });
-    const legacy = join(checkout, 'whiffle.db');
-    for (const suffix of ['', '-wal', '-shm']) {
+    const legacy = join(checkout, "whiffle.db");
+    for (const suffix of ["", "-wal", "-shm"]) {
       await Bun.write(`${legacy}${suffix}`, `the fleet's memory${suffix}`);
     }
-    const target = join(scratch, 'rescued', 'whiffle.db');
+    const target = join(scratch, "rescued", "whiffle.db");
 
     const notes: string[] = [];
     const capture = captor();
     await deployInit({
-      root: join(scratch, 'home2', '.whiffle', 'app'),
+      root: join(scratch, "home2", ".whiffle", "app"),
       origin,
-      ids: ['hub'],
+      ids: ["hub"],
       note: (line) => notes.push(line),
       run: recorder().run,
       install: capture.install,
@@ -283,22 +324,26 @@ describe('the database it rescues', () => {
     expect(existsSync(`${target}-shm`)).toBe(true);
     // Gone from the tree, so a `git clean -fdx` can never take it.
     expect(existsSync(legacy)).toBe(false);
-    expect(notes.some((line) => line.includes('moved the database out of the checkout'))).toBe(true);
+    expect(
+      notes.some((line) =>
+        line.includes("moved the database out of the checkout")
+      )
+    ).toBe(true);
   });
 
-  test('a database already at the target is never clobbered', async () => {
-    const checkout = join(scratch, 'devtree2', 'packages', 'hub');
+  test("a database already at the target is never clobbered", async () => {
+    const checkout = join(scratch, "devtree2", "packages", "hub");
     mkdirSync(checkout, { recursive: true });
-    const legacy = join(checkout, 'whiffle.db');
-    await Bun.write(legacy, 'the stale one');
-    const target = join(scratch, 'rescued2', 'whiffle.db');
-    await Bun.write(target, 'the live one');
+    const legacy = join(checkout, "whiffle.db");
+    await Bun.write(legacy, "the stale one");
+    const target = join(scratch, "rescued2", "whiffle.db");
+    await Bun.write(target, "the live one");
 
     const capture = captor();
     await deployInit({
-      root: join(scratch, 'home3', '.whiffle', 'app'),
+      root: join(scratch, "home3", ".whiffle", "app"),
       origin,
-      ids: ['hub'],
+      ids: ["hub"],
       note: () => {},
       run: recorder().run,
       install: capture.install,
@@ -306,7 +351,7 @@ describe('the database it rescues', () => {
       legacyDb: legacy,
     });
 
-    expect(await Bun.file(target).text()).toBe('the live one');
+    expect(await Bun.file(target).text()).toBe("the live one");
     expect(existsSync(legacy)).toBe(true);
   });
 });

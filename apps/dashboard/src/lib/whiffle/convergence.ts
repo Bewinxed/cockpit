@@ -6,10 +6,10 @@
  * caught up or refused to. Every reader here is pure: given the frame data a
  * machine already carries, no reach into the network.
  */
-import type { BuildInfo, DeployInfo, FleetSyncReport } from '@whiffle/core';
+import type { BuildInfo, DeployInfo, FleetSyncReport } from "@whiffle/core";
 
 /** Whether a machine's own reported build is level with the hub's. */
-export type BuildConvergence = 'unknown' | 'current' | 'behind';
+export type BuildConvergence = "unknown" | "current" | "behind";
 
 /**
  * `unknown` whenever either side has nothing to compare — most importantly a
@@ -18,9 +18,14 @@ export type BuildConvergence = 'unknown' | 'current' | 'behind';
  * shape of the incident this leaf exists to catch: 21 days of `commit: None`
  * rendering as nothing, rather than as the absence it is.
  */
-export function buildConvergence(build: BuildInfo | undefined, hubBuild: BuildInfo | undefined): BuildConvergence {
-  if (!build?.commit || !hubBuild?.commit) return 'unknown';
-  return build.commit === hubBuild.commit ? 'current' : 'behind';
+export function buildConvergence(
+  build: BuildInfo | undefined,
+  hubBuild: BuildInfo | undefined
+): BuildConvergence {
+  if (!(build?.commit && hubBuild?.commit)) {
+    return "unknown";
+  }
+  return build.commit === hubBuild.commit ? "current" : "behind";
 }
 
 /**
@@ -37,7 +42,10 @@ export function buildConvergence(build: BuildInfo | undefined, hubBuild: BuildIn
  * machine that has never synced at all. "11 days" is the number that would
  * have made the Mac's drift visible on day one; this is where it comes from.
  */
-export function fleetSyncAgeMs(fleet: FleetSyncReport | undefined, now: number = Date.now()): number | undefined {
+export function fleetSyncAgeMs(
+  fleet: FleetSyncReport | undefined,
+  now: number = Date.now()
+): number | undefined {
   return fleet ? Math.max(0, now - fleet.at) : undefined;
 }
 
@@ -51,19 +59,32 @@ export function fleetSyncAgeMs(fleet: FleetSyncReport | undefined, now: number =
  * has never ticked, sends no field at all, and every reader here must answer
  * `undefined` for it exactly as `hubBuild` does on an older hub.
  */
-export type { DeployKind } from '@whiffle/core';
+export type { DeployKind } from "@whiffle/core";
 
 export type MachineDeployInfo = DeployInfo;
 
 /** A `diverged` clone refuses to deploy at all — the one state that must never read as merely stale. */
-export const isDeployDiverged = (deploy: MachineDeployInfo | undefined): boolean => deploy?.kind === 'diverged';
+export const isDeployDiverged = (
+  deploy: MachineDeployInfo | undefined
+): boolean => deploy?.kind === "diverged";
 
 /** Whether a deploy state is worth a badge at all — `unmarked` is an ordinary dev tree, not a fact to flag. */
-export const isDeployNoteworthy = (deploy: MachineDeployInfo | undefined): boolean =>
-  deploy !== undefined && deploy.kind !== 'unmarked' && deploy.kind !== 'current';
+export const isDeployNoteworthy = (
+  deploy: MachineDeployInfo | undefined
+): boolean =>
+  deploy !== undefined &&
+  deploy.kind !== "unmarked" &&
+  deploy.kind !== "current";
 
 /** The kinds a machine may claim; anything else is not one, and badges nothing. */
-const DEPLOY_KINDS: readonly string[] = ['unmarked', 'unreachable', 'current', 'behind', 'ahead', 'diverged'];
+const DEPLOY_KINDS: readonly string[] = [
+  "unmarked",
+  "unreachable",
+  "current",
+  "behind",
+  "ahead",
+  "diverged",
+];
 
 /**
  * Structural, and deliberately still so. `AgentRow.deploy` is typed now, but
@@ -72,7 +93,11 @@ const DEPLOY_KINDS: readonly string[] = ['unmarked', 'unreachable', 'current', '
  * badge with no meaning. Callers may pass `machine.deploy` directly.
  */
 export function deployInfoOf(deploy: unknown): MachineDeployInfo | undefined {
-  if (!deploy || typeof deploy !== 'object' || !('kind' in deploy)) return undefined;
-  if (!DEPLOY_KINDS.includes((deploy as { kind: unknown }).kind as string)) return undefined;
+  if (!deploy || typeof deploy !== "object" || !("kind" in deploy)) {
+    return undefined;
+  }
+  if (!DEPLOY_KINDS.includes((deploy as { kind: unknown }).kind as string)) {
+    return undefined;
+  }
   return deploy as MachineDeployInfo;
 }

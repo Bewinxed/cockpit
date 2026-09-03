@@ -9,7 +9,7 @@
  * Viewports for the three targets:
  *   ultrawide 3440x1440 · macbook16 1728x1080 · iphone 390x844
  */
-import { chromium } from 'playwright-core';
+import { chromium } from "playwright-core";
 
 const args = process.argv.slice(2);
 const get = (flag, dflt) => {
@@ -18,23 +18,23 @@ const get = (flag, dflt) => {
 };
 const has = (flag) => args.includes(flag);
 
-const url = get('--url');
-const out = get('--out');
-if (!url || !out) {
-  console.error('need --url and --out');
+const url = get("--url");
+const out = get("--out");
+if (!(url && out)) {
+  console.error("need --url and --out");
   process.exit(1);
 }
-const [w, h] = get('--viewport', '1728x1080').split('x').map(Number);
-const wait = Number(get('--wait', '2500'));
+const [w, h] = get("--viewport", "1728x1080").split("x").map(Number);
+const wait = Number(get("--wait", "2500"));
 
 const exe =
   process.env.CHROMIUM_BIN ||
-  '/home/bewinxed/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome';
+  "/home/bewinxed/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome";
 
 const browser = await chromium.launch({
   executablePath: exe,
   headless: true,
-  args: ['--no-sandbox', '--disable-gpu'],
+  args: ["--no-sandbox", "--disable-gpu"],
 });
 const page = await browser.newPage({
   viewport: { width: w, height: h },
@@ -44,17 +44,30 @@ const page = await browser.newPage({
 
 // Theme is applied from localStorage before hydration, so seed it first.
 await page.addInitScript(
-  (theme) => localStorage.setItem('whiffle-theme', theme),
-  has('--dark') ? 'dark' : 'light'
+  (theme) => localStorage.setItem("whiffle-theme", theme),
+  has("--dark") ? "dark" : "light"
 );
 
-await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 }).catch(() => {});
+await page
+  .goto(url, { waitUntil: "networkidle", timeout: 30_000 })
+  .catch(() => {});
 await page.waitForTimeout(wait);
 await page
-  .screenshot({ path: out, fullPage: has('--fullpage'), animations: 'disabled', caret: 'hide', timeout: 20000 })
+  .screenshot({
+    path: out,
+    fullPage: has("--fullpage"),
+    animations: "disabled",
+    caret: "hide",
+    timeout: 20_000,
+  })
   .catch(async (e) => {
-    console.error(`retrying after: ${e.message.split('\n')[0]}`);
-    await page.screenshot({ path: out, fullPage: has('--fullpage'), animations: 'disabled', timeout: 20000 });
+    console.error(`retrying after: ${e.message.split("\n")[0]}`);
+    await page.screenshot({
+      path: out,
+      fullPage: has("--fullpage"),
+      animations: "disabled",
+      timeout: 20_000,
+    });
   });
 await browser.close();
-console.log(`WROTE ${out} (${w}x${h}${has('--dark') ? ' dark' : ''})`);
+console.log(`WROTE ${out} (${w}x${h}${has("--dark") ? " dark" : ""})`);

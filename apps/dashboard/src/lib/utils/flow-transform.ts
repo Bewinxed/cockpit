@@ -3,23 +3,27 @@
  * Handles grouping of consecutive tool messages and subagent spawning
  */
 
-import type { Node, Edge } from '@xyflow/svelte';
-import type { Message } from '$lib/whiffle/types';
-import { NODE_TYPES } from '$lib/components/features/flow/nodes';
-import { COMPACT_CONFIG } from './flow-constants';
+import type { Edge, Node } from "@xyflow/svelte";
+import { NODE_TYPES } from "$lib/components/features/flow/nodes";
+import type { Message } from "$lib/whiffle/types";
+import { COMPACT_CONFIG } from "./flow-constants";
 import type {
-  MessageGroup,
+  AssistantNodeData,
   FlowData,
   FlowTransformOptions,
-  UserNodeData,
-  AssistantNodeData,
-  ToolNodeData,
+  MessageGroup,
   SubagentNodeData,
   SystemNodeData,
-} from './flow-types';
+  ToolNodeData,
+  UserNodeData,
+} from "./flow-types";
 
 // Re-export types for external use
-export type { MessageGroup, FlowData, FlowTransformOptions } from './flow-types';
+export type {
+  FlowData,
+  FlowTransformOptions,
+  MessageGroup,
+} from "./flow-types";
 
 // ============================================================
 // Message Type Detection Helpers
@@ -27,12 +31,12 @@ export type { MessageGroup, FlowData, FlowTransformOptions } from './flow-types'
 
 /** Check if a message is a Task tool.use (subagent spawn) */
 export function isTaskToolUse(msg: Message): boolean {
-  return msg.type === 'tool.use' && !!msg.metadata?.subagentType;
+  return msg.type === "tool.use" && !!msg.metadata?.subagentType;
 }
 
 /** Check if a message is a TaskOutput tool (retrieves subagent results) */
 export function isTaskOutputTool(msg: Message): boolean {
-  return msg.type === 'tool.use' && msg.metadata?.toolName === 'TaskOutput';
+  return msg.type === "tool.use" && msg.metadata?.toolName === "TaskOutput";
 }
 
 /** Check if a message belongs to a subagent (has parentToolUseId) */
@@ -48,7 +52,9 @@ export function isSubagentMessage(msg: Message): boolean {
  * Filter messages for main chat flow (excludes subagent messages and TaskOutput)
  */
 export function filterChatMessages(messages: Message[]): Message[] {
-  return messages.filter(msg => !isTaskOutputTool(msg) && !isSubagentMessage(msg));
+  return messages.filter(
+    (msg) => !(isTaskOutputTool(msg) || isSubagentMessage(msg))
+  );
 }
 
 /**
@@ -75,10 +81,14 @@ export function groupMessages(messages: Message[]): MessageGroup[] {
         i++;
       }
 
-      groups.push({ type: 'subagent_group', messages: subagentMessages, startIndex });
+      groups.push({
+        type: "subagent_group",
+        messages: subagentMessages,
+        startIndex,
+      });
     }
     // Regular tool messages get grouped together
-    else if (msg.type === 'tool.use' || msg.type === 'tool.result') {
+    else if (msg.type === "tool.use" || msg.type === "tool.result") {
       const toolMessages: Message[] = [msg];
       const startIndex = i;
       i++;
@@ -86,7 +96,7 @@ export function groupMessages(messages: Message[]): MessageGroup[] {
       while (i < chatMessages.length) {
         const nextMsg = chatMessages[i];
         if (
-          (nextMsg.type === 'tool.use' || nextMsg.type === 'tool.result') &&
+          (nextMsg.type === "tool.use" || nextMsg.type === "tool.result") &&
           !isTaskToolUse(nextMsg) &&
           !isTaskOutputTool(nextMsg)
         ) {
@@ -97,9 +107,9 @@ export function groupMessages(messages: Message[]): MessageGroup[] {
         }
       }
 
-      groups.push({ type: 'tool_group', messages: toolMessages, startIndex });
+      groups.push({ type: "tool_group", messages: toolMessages, startIndex });
     } else {
-      groups.push({ type: 'single', message: msg, index: i });
+      groups.push({ type: "single", message: msg, index: i });
       i++;
     }
   }
@@ -115,19 +125,27 @@ export function groupMessages(messages: Message[]): MessageGroup[] {
  * Determine node type based on message group
  */
 function getNodeType(group: MessageGroup): string {
-  if (group.type === 'tool_group') return NODE_TYPES.TOOL;
-  if (group.type === 'subagent_group') return NODE_TYPES.SUBAGENT;
+  if (group.type === "tool_group") {
+    return NODE_TYPES.TOOL;
+  }
+  if (group.type === "subagent_group") {
+    return NODE_TYPES.SUBAGENT;
+  }
 
   const msg = group.message;
 
   switch (msg.type) {
-    case 'user':
+    case "user":
       return NODE_TYPES.USER;
-    case 'assistant':
-    case 'thinking':
+    case "assistant":
+    case "thinking":
       return NODE_TYPES.ASSISTANT;
     default:
-      if (msg.type.startsWith('system.') || msg.type.startsWith('result.') || msg.type.startsWith('ui.')) {
+      if (
+        msg.type.startsWith("system.") ||
+        msg.type.startsWith("result.") ||
+        msg.type.startsWith("ui.")
+      ) {
         return NODE_TYPES.SYSTEM;
       }
       return NODE_TYPES.ASSISTANT;
@@ -138,18 +156,23 @@ function getNodeType(group: MessageGroup): string {
  * Get a stable ID for a message group
  */
 function getGroupId(group: MessageGroup): string {
-  if (group.type === 'single') {
+  if (group.type === "single") {
     return group.message.sdkUuid || group.message.id || `msg-${group.index}`;
   }
   const firstMsg = group.messages[0];
-  return firstMsg.sdkUuid || firstMsg.id || firstMsg.metadata?.toolId || `group-${group.startIndex}`;
+  return (
+    firstMsg.sdkUuid ||
+    firstMsg.id ||
+    firstMsg.metadata?.toolId ||
+    `group-${group.startIndex}`
+  );
 }
 
 /**
  * Get messages from a group (normalized)
  */
 function getGroupMessages(group: MessageGroup): Message[] {
-  return group.type === 'single' ? [group.message] : group.messages;
+  return group.type === "single" ? [group.message] : group.messages;
 }
 
 /**
@@ -162,14 +185,14 @@ function groupSubagentMessages(messages: Message[]): MessageGroup[] {
   while (i < messages.length) {
     const msg = messages[i];
 
-    if (msg.type === 'tool.use' || msg.type === 'tool.result') {
+    if (msg.type === "tool.use" || msg.type === "tool.result") {
       const toolMessages: Message[] = [msg];
       const startIndex = i;
       i++;
 
       while (i < messages.length) {
         const nextMsg = messages[i];
-        if (nextMsg.type === 'tool.use' || nextMsg.type === 'tool.result') {
+        if (nextMsg.type === "tool.use" || nextMsg.type === "tool.result") {
           toolMessages.push(nextMsg);
           i++;
         } else {
@@ -177,9 +200,9 @@ function groupSubagentMessages(messages: Message[]): MessageGroup[] {
         }
       }
 
-      groups.push({ type: 'tool_group', messages: toolMessages, startIndex });
+      groups.push({ type: "tool_group", messages: toolMessages, startIndex });
     } else {
-      groups.push({ type: 'single', message: msg, index: i });
+      groups.push({ type: "single", message: msg, index: i });
       i++;
     }
   }
@@ -213,15 +236,18 @@ export function messagesToFlow(
     const group = groups[groupIdx];
 
     // Handle subagent_group specially - create individual nodes with branches
-    if (group.type === 'subagent_group' && group.messages.length > 0) {
+    if (group.type === "subagent_group" && group.messages.length > 0) {
       const branchEndNodeIds: string[] = [];
 
       for (let subIdx = 0; subIdx < group.messages.length; subIdx++) {
         const msg = group.messages[subIdx];
         const toolId = msg.metadata?.toolId;
-        const subagentNodeId = toolId || msg.sdkUuid || msg.id || `subagent-${groupIdx}-${subIdx}`;
+        const subagentNodeId =
+          toolId || msg.sdkUuid || msg.id || `subagent-${groupIdx}-${subIdx}`;
 
-        const subagentState = toolId ? options.subagents?.get(toolId) : undefined;
+        const subagentState = toolId
+          ? options.subagents?.get(toolId)
+          : undefined;
 
         const subagentData: SubagentNodeData = {
           instanceId,
@@ -245,7 +271,7 @@ export function messagesToFlow(
             id: `e-${prevId}-${subagentNodeId}`,
             source: prevId,
             target: subagentNodeId,
-            type: 'smoothstep',
+            type: "smoothstep",
           });
         }
 
@@ -258,7 +284,7 @@ export function messagesToFlow(
           for (let sgIdx = 0; sgIdx < subagentGroups.length; sgIdx++) {
             const sg = subagentGroups[sgIdx];
 
-            if (sg.type === 'tool_group') {
+            if (sg.type === "tool_group") {
               const toolNodeId = `${subagentNodeId}-tools-${sgIdx}`;
               const toolData: ToolNodeData = {
                 instanceId,
@@ -266,7 +292,9 @@ export function messagesToFlow(
                 content: sg.messages[0].content as string,
                 height: 60 + sg.messages.length * 25,
                 isStreaming: options.streamingToolId
-                  ? sg.messages.some(m => m.metadata?.toolId === options.streamingToolId)
+                  ? sg.messages.some(
+                      (m) => m.metadata?.toolId === options.streamingToolId
+                    )
                   : false,
               };
 
@@ -281,19 +309,29 @@ export function messagesToFlow(
                 id: `e-${branchPrevId}-${toolNodeId}`,
                 source: branchPrevId,
                 target: toolNodeId,
-                type: 'smoothstep',
+                type: "smoothstep",
               });
 
               branchPrevId = toolNodeId;
-            } else if (sg.type === 'single') {
+            } else if (sg.type === "single") {
               const singleNodeId = `${subagentNodeId}-msg-${sgIdx}`;
               const singleMsg = sg.message;
 
               let nodeType: string = NODE_TYPES.ASSISTANT;
-              if (singleMsg.type === 'user') nodeType = NODE_TYPES.USER;
-              else if (singleMsg.type.startsWith('system.') || singleMsg.type.startsWith('result.') || singleMsg.type.startsWith('ui.')) nodeType = NODE_TYPES.SYSTEM;
+              if (singleMsg.type === "user") {
+                nodeType = NODE_TYPES.USER;
+              } else if (
+                singleMsg.type.startsWith("system.") ||
+                singleMsg.type.startsWith("result.") ||
+                singleMsg.type.startsWith("ui.")
+              ) {
+                nodeType = NODE_TYPES.SYSTEM;
+              }
 
-              const singleData: AssistantNodeData | UserNodeData | SystemNodeData = {
+              const singleData:
+                | AssistantNodeData
+                | UserNodeData
+                | SystemNodeData = {
                 instanceId,
                 message: singleMsg,
                 content: singleMsg.content as string,
@@ -311,7 +349,7 @@ export function messagesToFlow(
                 id: `e-${branchPrevId}-${singleNodeId}`,
                 source: branchPrevId,
                 target: singleNodeId,
-                type: 'smoothstep',
+                type: "smoothstep",
               });
 
               branchPrevId = singleNodeId;
@@ -335,7 +373,7 @@ export function messagesToFlow(
     // Build typed node data
     let data: UserNodeData | AssistantNodeData | ToolNodeData | SystemNodeData;
 
-    if (group.type === 'single') {
+    if (group.type === "single") {
       if (nodeType === NODE_TYPES.USER) {
         data = {
           instanceId,
@@ -366,7 +404,7 @@ export function messagesToFlow(
         content: firstMsg.content as string,
         height: COMPACT_CONFIG.nodeHeightMin,
         isStreaming: options.streamingToolId
-          ? messages.some(m => m.metadata?.toolId === options.streamingToolId)
+          ? messages.some((m) => m.metadata?.toolId === options.streamingToolId)
           : false,
       } satisfies ToolNodeData;
     }
@@ -384,7 +422,7 @@ export function messagesToFlow(
         id: `e-${prevId}-${nodeId}`,
         source: prevId,
         target: nodeId,
-        type: 'smoothstep',
+        type: "smoothstep",
       });
     }
 

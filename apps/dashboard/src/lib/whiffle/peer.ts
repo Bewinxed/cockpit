@@ -1,4 +1,4 @@
-import type { InstanceRow } from './client.svelte';
+import type { InstanceRow } from "./client.svelte";
 
 /**
  * One session the composer can hand work to, as the rail names it.
@@ -8,15 +8,16 @@ import type { InstanceRow } from './client.svelte';
  * addressing by name rather than by the id the wire uses.
  */
 export interface PeerTarget {
-  id: string;
-  machineId: string;
-  label: string;
-  hostname: string;
   busy: boolean;
+  hostname: string;
+  id: string;
+  label: string;
+  machineId: string;
 }
 
 /** The last path segment, which is what the rail shows for a session. */
-export const leafOf = (path: string): string => path.split('/').filter(Boolean).pop() ?? path;
+export const leafOf = (path: string): string =>
+  path.split("/").filter(Boolean).pop() ?? path;
 
 /**
  * Matches a partial `@name` against the offered sessions. Case-insensitive and
@@ -25,10 +26,13 @@ export const leafOf = (path: string): string => path.split('/').filter(Boolean).
  */
 export function matchPeers(peers: PeerTarget[], term: string): PeerTarget[] {
   const needle = term.trim().toLowerCase();
-  if (!needle) return peers;
+  if (!needle) {
+    return peers;
+  }
   return peers.filter(
     (peer) =>
-      peer.label.toLowerCase().includes(needle) || peer.hostname.toLowerCase().includes(needle)
+      peer.label.toLowerCase().includes(needle) ||
+      peer.hostname.toLowerCase().includes(needle)
   );
 }
 
@@ -39,15 +43,24 @@ export function matchPeers(peers: PeerTarget[], term: string): PeerTarget[] {
  * opens a word — an email address or a `foo@bar` in a path is not an address
  * for us, and popping a menu over one would fight the reader mid-sentence.
  */
-export function mentionAt(text: string, caret: number): { term: string; start: number } | null {
+export function mentionAt(
+  text: string,
+  caret: number
+): { term: string; start: number } | null {
   const before = text.slice(0, caret);
-  const at = before.lastIndexOf('@');
-  if (at === -1) return null;
+  const at = before.lastIndexOf("@");
+  if (at === -1) {
+    return null;
+  }
   // Opening a word: start of input, or preceded by whitespace.
-  if (at > 0 && !/\s/.test(before[at - 1])) return null;
+  if (at > 0 && !/\s/.test(before[at - 1])) {
+    return null;
+  }
   const term = before.slice(at + 1);
   // Still one word — a space ends the mention.
-  if (/\s/.test(term)) return null;
+  if (/\s/.test(term)) {
+    return null;
+  }
   return { term, start: at };
 }
 

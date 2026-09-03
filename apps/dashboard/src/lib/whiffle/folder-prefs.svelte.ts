@@ -8,11 +8,11 @@
  * also what `identity.ts` hashes: an override and the default it replaces are
  * always talking about the same thing.
  */
-import { identityHue } from './identity';
-import { readJson, writeJson } from './storage';
+import { identityHue } from "./identity";
+import { readJson, writeJson } from "./storage";
 
 /** Whether the rail folds this directory's sessions under a header. */
-export type Grouping = 'grouped' | 'ungrouped';
+export type Grouping = "grouped" | "ungrouped";
 
 export interface FolderPref {
   grouping?: Grouping;
@@ -20,11 +20,13 @@ export interface FolderPref {
   hue?: number;
 }
 
-const KEY = 'whiffle-folder-prefs';
+const KEY = "whiffle-folder-prefs";
 
 function read(): Record<string, FolderPref> {
   const stored = readJson<unknown>(KEY, {});
-  return stored && typeof stored === 'object' ? (stored as Record<string, FolderPref>) : {};
+  return stored && typeof stored === "object"
+    ? (stored as Record<string, FolderPref>)
+    : {};
 }
 
 // Module scope, so every surface that draws a folder — rail, board, peek pane,
@@ -39,10 +41,15 @@ const save = (): void => {
 function edit(cwd: string, patch: FolderPref): void {
   const next: FolderPref = { ...prefs[cwd], ...patch };
   for (const [field, value] of Object.entries(next)) {
-    if (value === undefined) delete next[field as keyof FolderPref];
+    if (value === undefined) {
+      delete next[field as keyof FolderPref];
+    }
   }
-  if (Object.keys(next).length === 0) delete prefs[cwd];
-  else prefs[cwd] = next;
+  if (Object.keys(next).length === 0) {
+    delete prefs[cwd];
+  } else {
+    prefs[cwd] = next;
+  }
   save();
 }
 

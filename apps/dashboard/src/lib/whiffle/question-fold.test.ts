@@ -1,7 +1,7 @@
-import { expect, test } from 'bun:test';
-import type { UserQuestionResult } from '@whiffle/core';
-import { ASK_USER_QUESTION } from '@whiffle/core';
-import { applyToolResult, mapFrame } from './frames';
+import { expect, test } from "bun:test";
+import type { UserQuestionResult } from "@whiffle/core";
+import { ASK_USER_QUESTION } from "@whiffle/core";
+import { applyToolResult, mapFrame } from "./frames";
 
 /**
  * The other half of the question contract, from the folding layer's side: an
@@ -18,11 +18,11 @@ import { applyToolResult, mapFrame } from './frames';
  */
 const QUESTIONS = [
   {
-    question: 'Which entities should the pipeline manage?',
-    header: 'Entities',
+    question: "Which entities should the pipeline manage?",
+    header: "Entities",
     options: [
-      { label: 'Characters', description: 'People the shots keep consistent.' },
-      { label: 'Props', description: 'Objects and wardrobe.' },
+      { label: "Characters", description: "People the shots keep consistent." },
+      { label: "Props", description: "Objects and wardrobe." },
     ],
     multiSelect: true,
   },
@@ -30,55 +30,66 @@ const QUESTIONS = [
 
 const use = (id: string) =>
   ({
-    type: 'assistant',
+    type: "assistant",
     message: {
-      content: [{ type: 'tool_use', id, name: ASK_USER_QUESTION, input: { questions: QUESTIONS } }],
+      content: [
+        {
+          type: "tool_use",
+          id,
+          name: ASK_USER_QUESTION,
+          input: { questions: QUESTIONS },
+        },
+      ],
     },
   }) as never;
 
 const fold = (id: string, questionResult: UserQuestionResult) => {
-  const mapping = mapFrame('i1', use(id));
+  const mapping = mapFrame("i1", use(id));
   applyToolResult(mapping.messages, {
     toolId: id,
-    result: 'answered',
+    result: "answered",
     isError: false,
     questionResult,
   });
   return mapping.messages[0];
 };
 
-test('an answered question folds its outcome onto the tool message', () => {
-  const message = fold('q-1', {
-    outcome: 'answered',
+test("an answered question folds its outcome onto the tool message", () => {
+  const message = fold("q-1", {
+    outcome: "answered",
     questions: QUESTIONS,
-    answers: { 'Which entities should the pipeline manage?': ['Characters', 'Props'] },
+    answers: {
+      "Which entities should the pipeline manage?": ["Characters", "Props"],
+    },
   });
 
   expect(message.metadata?.toolName).toBe(ASK_USER_QUESTION);
   const result = message.metadata?.toolUseResult;
-  expect(result?.outcome).toBe('answered');
+  expect(result?.outcome).toBe("answered");
   // Keyed by question text and still an array: the fold is a hand-off, not a
   // transformation, and anything it normalised here would be a lie downstream.
-  expect(result && result.outcome === 'answered' ? result.answers : null).toEqual({
-    'Which entities should the pipeline manage?': ['Characters', 'Props'],
+  expect(
+    result && result.outcome === "answered" ? result.answers : null
+  ).toEqual({
+    "Which entities should the pipeline manage?": ["Characters", "Props"],
   });
 });
 
-test('a dismissed question folds as dismissed, with no answers to misread', () => {
-  const message = fold('q-2', { outcome: 'dismissed', questions: QUESTIONS });
+test("a dismissed question folds as dismissed, with no answers to misread", () => {
+  const message = fold("q-2", { outcome: "dismissed", questions: QUESTIONS });
 
   const result = message.metadata?.toolUseResult;
-  expect(result?.outcome).toBe('dismissed');
-  expect(result).not.toHaveProperty('answers');
+  expect(result?.outcome).toBe("dismissed");
+  expect(result).not.toHaveProperty("answers");
 });
 
-test('an unanswered question carries no outcome, and is pending rather than faulty', () => {
+test("an unanswered question carries no outcome, and is pending rather than faulty", () => {
   // The state between the ask and the answer. It must not look like the absent
   // case: the renderer draws "waiting" off `toolStatus`, and drawing the red
   // fault chip here would cry broken at every question while it is being read.
-  const mapping = mapFrame('i1', use('q-3'));
+  const mapping = mapFrame("i1", use("q-3"));
   const message = mapping.messages[0];
 
   expect(message.metadata?.toolUseResult).toBeUndefined();
-  expect(message.metadata?.toolStatus).toBe('pending');
+  expect(message.metadata?.toolStatus).toBe("pending");
 });

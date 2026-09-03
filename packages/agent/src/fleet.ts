@@ -8,7 +8,20 @@
  * an MCP server they added by hand — or a plugin they installed themselves —
  * outlives every sync this daemon runs.
  */
+
+import {
+  chmod,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  rmdir,
+  stat,
+} from "node:fs/promises";
+import { platform } from "node:os";
+import { delimiter, isAbsolute, join } from "node:path";
 import type {
+  CliInstall,
   ConfigInspection,
   DiscoveredMcp,
   DiscoveredSkill,
@@ -19,58 +32,54 @@ import type {
   FleetMcpServer,
   FleetMemory,
   FleetMemoryDoc,
-  FleetScope,
   FleetPluginPayload,
+  FleetScope,
   FleetSkillPayload,
   FleetSyncReport,
   FleetToolchain,
-  CliInstall,
   HookEvent,
   HookHandler,
   MachineMemoryDoc,
   MachineMemorySet,
   MarketplacePluginInfo,
   SkillFile,
-} from '@whiffle/core';
-import { hookProblem, memoryDocProblem } from '@whiffle/core';
-import { chmod, readdir, realpath, rename, rm, rmdir, stat } from 'node:fs/promises';
-import { platform } from 'node:os';
-import { delimiter, isAbsolute, join } from 'node:path';
-import { expandHome } from './fs';
-import { resolveBin, toolEnv, toolPath } from './tools';
+} from "@whiffle/core";
+import { hookProblem, memoryDocProblem } from "@whiffle/core";
+import { expandHome } from "./fs";
+import { resolveBin, toolEnv, toolPath } from "./tools";
 
 /**
  * User-scope MCP servers live at the top level of this file — not in
  * `~/.claude/settings.json`, and not in anything under `~/.claude/`. Every
  * project loads them, and the SDK reads them whatever its `settingSources` say.
  */
-const CLAUDE_JSON = expandHome('~/.claude.json');
+const CLAUDE_JSON = expandHome("~/.claude.json");
 
 /** What whiffle manages here. Anything this does not name is never touched. */
-const SIDECAR = expandHome('~/.claude/whiffle-fleet.json');
+const SIDECAR = expandHome("~/.claude/whiffle-fleet.json");
 
 /** Where a plain skill's files land — one directory per skill, all of it whiffle's. */
-const SKILLS_DIR = expandHome('~/.claude/skills');
+const SKILLS_DIR = expandHome("~/.claude/skills");
 
 /**
  * The fleet's OWN marketplace, written from the bytes the hub resolved. All of
  * it whiffle's, like a skill's directory — rewritten whole whenever the set
  * changes, and never edited by anything else.
  */
-export const VENDOR_DIR = expandHome('~/.claude/whiffle-marketplace');
+export const VENDOR_DIR = expandHome("~/.claude/whiffle-marketplace");
 
 /** What that marketplace is called once linked, and the half after every `@`. */
-const VENDOR_NAME = 'whiffle';
+const VENDOR_NAME = "whiffle";
 
 /** The user-scope memory every session on this machine reads (NEW.md §11). */
-const MEMORY_PATH = expandHome('~/.claude/CLAUDE.md');
+const MEMORY_PATH = expandHome("~/.claude/CLAUDE.md");
 
 /**
  * The documents the main memory links, one file per path the set names. All of
  * it whiffle's, like a skill's directory — nothing under here was ever written
  * by anything else, so a file the set stops carrying is a file that goes.
  */
-const MEMORIES_DIR = expandHome('~/.claude/memories');
+const MEMORIES_DIR = expandHome("~/.claude/memories");
 
 /**
  * The hook that puts a model's own document in front of the session running
@@ -78,10 +87,10 @@ const MEMORIES_DIR = expandHome('~/.claude/memories');
  * it lives beside the sidecar and is written whenever it is not what this
  * version of whiffle generates.
  */
-const MEMORY_HOOK_PATH = expandHome('~/.claude/whiffle-model-memory.sh');
+const MEMORY_HOOK_PATH = expandHome("~/.claude/whiffle-model-memory.sh");
 
 /** Where Claude Code reads a user's hooks; the same file the user's own are in. */
-const SETTINGS_PATH = expandHome('~/.claude/settings.json');
+const SETTINGS_PATH = expandHome("~/.claude/settings.json");
 
 /**
  * Where a fleet hook's own script lands, one file per hook id. Named by id
@@ -89,17 +98,17 @@ const SETTINGS_PATH = expandHome('~/.claude/settings.json');
  * registration but never orphans a script under an old name, and a hand edit
  * survives a hash bump to the same file it was made in.
  */
-const HOOKS_DIR = expandHome('~/.claude/whiffle-hooks');
+const HOOKS_DIR = expandHome("~/.claude/whiffle-hooks");
 
-const PLUGINS_DIR = expandHome('~/.claude/plugins');
+const PLUGINS_DIR = expandHome("~/.claude/plugins");
 /** The CLI's own account of what is linked and what is installed. */
-const KNOWN_MARKETPLACES = join(PLUGINS_DIR, 'known_marketplaces.json');
-const INSTALLED_PLUGINS = join(PLUGINS_DIR, 'installed_plugins.json');
+const KNOWN_MARKETPLACES = join(PLUGINS_DIR, "known_marketplaces.json");
+const INSTALLED_PLUGINS = join(PLUGINS_DIR, "installed_plugins.json");
 /** Where a linked marketplace's clone lands. */
-const MARKETPLACES_DIR = join(PLUGINS_DIR, 'marketplaces');
+const MARKETPLACES_DIR = join(PLUGINS_DIR, "marketplaces");
 
 /** Where the local installer puts the CLI when it is not on any PATH. */
-const LOCAL_CLAUDE = expandHome('~/.claude/local/claude');
+const LOCAL_CLAUDE = expandHome("~/.claude/local/claude");
 
 /** How long one `claude plugin …` gets: a first clone of a marketplace is slow. */
 const CLI_TIMEOUT_MS = 120_000;
@@ -107,9 +116,11 @@ const CLI_TIMEOUT_MS = 120_000;
 /** The end of a command's output: enough to name what happened, not a wall of it. */
 const TAIL_LINES = 4;
 
-const tail = (output: string): string => output.trim().split('\n').slice(-TAIL_LINES).join('\n');
+const tail = (output: string): string =>
+  output.trim().split("\n").slice(-TAIL_LINES).join("\n");
 
-const said = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+const said = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 /**
  * One marketplace whiffle linked, under both of the names it answers to.
@@ -121,22 +132,21 @@ const said = (error: unknown): string => (error instanceof Error ? error.message
  * be a name the CLI is known to answer to rather than a hopeful one.
  */
 interface ManagedMarketplace {
-  name: string;
   linkedAs: string;
+  name: string;
 }
 
 interface Sidecar {
-  mcp: string[];
-  marketplaces: ManagedMarketplace[];
-  plugins: string[];
-  /** Skill name → the hash of the files written, which is what makes a sync a no-op. */
-  skills: Record<string, string>;
   /**
-   * Plugin name → the hash of the vendored files written under
-   * {@link VENDOR_DIR}. Same purpose as `skills`, and the reason a sync that
-   * changes nothing rewrites nothing.
+   * Hook id → what whiffle last registered for it. `command` is the identity
+   * {@link withoutHooks} removes by — a command handler's `command` verbatim,
+   * or the exact entry whiffle wrote otherwise — so a hook renamed or moved to
+   * a different event or settings file is still collectable by what it used to
+   * be, not by whatever this version of whiffle would write today.
    */
-  vendoredPlugins?: Record<string, string>;
+  hooks: Record<string, ManagedHook>;
+  marketplaces: ManagedMarketplace[];
+  mcp: string[];
   /** The hash whiffle last wrote to `~/.claude/CLAUDE.md`; absent = unmanaged. */
   memory?: string;
   /**
@@ -147,29 +157,32 @@ interface Sidecar {
   memoryDocs: Record<string, string>;
   /** The SessionStart command whiffle registered; only this one is ever removed. */
   memoryHook?: string;
+  plugins: string[];
+  /** Skill name → the hash of the files written, which is what makes a sync a no-op. */
+  skills: Record<string, string>;
   /**
-   * Hook id → what whiffle last registered for it. `command` is the identity
-   * {@link withoutHooks} removes by — a command handler's `command` verbatim,
-   * or the exact entry whiffle wrote otherwise — so a hook renamed or moved to
-   * a different event or settings file is still collectable by what it used to
-   * be, not by whatever this version of whiffle would write today.
+   * Plugin name → the hash of the vendored files written under
+   * {@link VENDOR_DIR}. Same purpose as `skills`, and the reason a sync that
+   * changes nothing rewrites nothing.
    */
-  hooks: Record<string, ManagedHook>;
+  vendoredPlugins?: Record<string, string>;
 }
 
 /** What whiffle registered for one hook, enough to find and remove it later. */
 interface ManagedHook {
+  command: string;
+  cwd?: string;
+  event: HookEvent;
   /** sha256 of the script whiffle wrote, or of the hub's row when there is no script. */
   hash: string;
-  command: string;
-  event: HookEvent;
   scope: FleetScope;
-  cwd?: string;
 }
 
 const readJson = async <T>(path: string): Promise<T | undefined> => {
   const file = Bun.file(path);
-  if (!(await file.exists())) return undefined;
+  if (!(await file.exists())) {
+    return undefined;
+  }
   try {
     return (await file.json()) as T;
   } catch {
@@ -184,7 +197,10 @@ const readJson = async <T>(path: string): Promise<T | undefined> => {
  * spawned with its execute bit, so a half-written one is worse than a
  * half-written JSON blob: it is a shell prefix somebody's session is about to run.
  */
-const writeAtomic = async (path: string, content: string | Buffer): Promise<void> => {
+const writeAtomic = async (
+  path: string,
+  content: string | Buffer
+): Promise<void> => {
   const temp = `${path}.whiffle-${process.pid}`;
   await Bun.write(temp, content);
   await rename(temp, path);
@@ -208,7 +224,9 @@ export const upgradeMarketplaces = (
   linked: Record<string, KnownMarketplace>
 ): ManagedMarketplace[] =>
   (stored ?? []).flatMap((one) => {
-    if (typeof one !== 'string') return [one];
+    if (typeof one !== "string") {
+      return [one];
+    }
     return linked[one] ? [{ name: one, linkedAs: one }] : [];
   });
 
@@ -217,11 +235,16 @@ const readSidecar = async (): Promise<Sidecar> => {
   // Typed to admit the older shape too, so the upgrade is a fact of the type
   // rather than a cast: what is on disk may predate a marketplace's two names.
   const stored = await readJson<
-    Partial<Omit<Sidecar, 'marketplaces'>> & { marketplaces?: (string | ManagedMarketplace)[] }
+    Partial<Omit<Sidecar, "marketplaces">> & {
+      marketplaces?: (string | ManagedMarketplace)[];
+    }
   >(SIDECAR);
   return {
     mcp: stored?.mcp ?? [],
-    marketplaces: upgradeMarketplaces(stored?.marketplaces, await linkedMarketplaces()),
+    marketplaces: upgradeMarketplaces(
+      stored?.marketplaces,
+      await linkedMarketplaces()
+    ),
     plugins: stored?.plugins ?? [],
     // A sidecar written before skills existed names none, which is the truth.
     skills: stored?.skills ?? {},
@@ -242,11 +265,16 @@ const readClaudeJson = async (): Promise<
   { ok: true; root: ClaudeJson } | { ok: false; detail: string }
 > => {
   const file = Bun.file(CLAUDE_JSON);
-  if (!(await file.exists())) return { ok: true, root: {} };
+  if (!(await file.exists())) {
+    return { ok: true, root: {} };
+  }
   try {
     return { ok: true, root: (await file.json()) as ClaudeJson };
   } catch (error) {
-    return { ok: false, detail: `could not parse ~/.claude.json: ${tail(said(error))}` };
+    return {
+      ok: false,
+      detail: `could not parse ~/.claude.json: ${tail(said(error))}`,
+    };
   }
 };
 
@@ -264,16 +292,31 @@ const mcpServersOf = (root: ClaudeJson): Record<string, unknown> => ({
  * dropped, because the entry is still what the user asked for and it starts
  * working the moment the runner arrives.
  */
-const forThisMachine = (config: FleetMcpConfig): { config: FleetMcpConfig; detail?: string } => {
-  if ('url' in config) return { config };
-  if (/[\\/]/.test(config.command)) return { config };
+const forThisMachine = (
+  config: FleetMcpConfig
+): { config: FleetMcpConfig; detail?: string } => {
+  if ("url" in config) {
+    return { config };
+  }
+  if (/[\\/]/.test(config.command)) {
+    return { config };
+  }
 
   const resolved = resolveBin(config.command);
-  if (!resolved) return { config, detail: `runner '${config.command}' not found on PATH yet` };
-  // A `.cmd` shim is a script, and a spawn with no shell cannot run one.
-  if (platform() === 'win32' && /\.(cmd|bat)$/i.test(resolved)) {
+  if (!resolved) {
     return {
-      config: { ...config, command: 'cmd', args: ['/c', resolved, ...(config.args ?? [])] },
+      config,
+      detail: `runner '${config.command}' not found on PATH yet`,
+    };
+  }
+  // A `.cmd` shim is a script, and a spawn with no shell cannot run one.
+  if (platform() === "win32" && /\.(cmd|bat)$/i.test(resolved)) {
+    return {
+      config: {
+        ...config,
+        command: "cmd",
+        args: ["/c", resolved, ...(config.args ?? [])],
+      },
     };
   }
   return { config: { ...config, command: resolved } };
@@ -287,30 +330,38 @@ const forThisMachine = (config: FleetMcpConfig): { config: FleetMcpConfig; detai
 const syncMcp = async (
   desired: FleetMcpServer[],
   managed: string[],
-  report: FleetSyncReport['mcp']
+  report: FleetSyncReport["mcp"]
 ): Promise<string[]> => {
   const wanted = desired.filter((server) => server.enabled);
   const failed = (detail: string): string[] => {
-    for (const server of wanted) report[server.name] = { state: 'failed', detail };
+    for (const server of wanted) {
+      report[server.name] = { state: "failed", detail };
+    }
     return managed;
   };
 
   const file = await readClaudeJson();
   // Nothing is written over a file that cannot be read: the rest of it is the
   // user's own, and a rewrite from an empty root would take it with them.
-  if (!file.ok) return failed(file.detail);
+  if (!file.ok) {
+    return failed(file.detail);
+  }
 
   const servers = mcpServersOf(file.root);
   const details = new Map<string, string>();
   for (const server of wanted) {
     const { config, detail } = forThisMachine(server.config);
     servers[server.name] = config;
-    if (detail) details.set(server.name, detail);
+    if (detail) {
+      details.set(server.name, detail);
+    }
   }
 
   const names = wanted.map((server) => server.name);
   const gone = managed.filter((name) => !names.includes(name));
-  for (const name of gone) delete servers[name];
+  for (const name of gone) {
+    delete servers[name];
+  }
 
   try {
     await writeJson(CLAUDE_JSON, { ...file.root, mcpServers: servers });
@@ -320,16 +371,20 @@ const syncMcp = async (
 
   for (const name of names) {
     const detail = details.get(name);
-    report[name] = { state: 'applied', ...(detail ? { detail } : {}) };
+    report[name] = { state: "applied", ...(detail ? { detail } : {}) };
   }
-  for (const name of gone) report[name] = { state: 'removed' };
+  for (const name of gone) {
+    report[name] = { state: "removed" };
+  }
   return names;
 };
 
 /** The CLI the skill half drives — on PATH, or where the local installer puts it. */
 const claudeBin = async (): Promise<string | undefined> => {
-  const onPath = resolveBin('claude');
-  if (onPath) return onPath;
+  const onPath = resolveBin("claude");
+  if (onPath) {
+    return onPath;
+  }
   return (await Bun.file(LOCAL_CLAUDE).exists()) ? LOCAL_CLAUDE : undefined;
 };
 
@@ -343,12 +398,12 @@ const claudeBin = async (): Promise<string | undefined> => {
  */
 const CLAUDE_ELSEWHERE = [
   LOCAL_CLAUDE,
-  expandHome('~/.bun/bin/claude'),
-  expandHome('~/.local/bin/claude'),
-  expandHome('~/.npm-global/bin/claude'),
-  '/opt/homebrew/bin/claude',
-  '/usr/local/bin/claude',
-  '/usr/bin/claude',
+  expandHome("~/.bun/bin/claude"),
+  expandHome("~/.local/bin/claude"),
+  expandHome("~/.npm-global/bin/claude"),
+  "/opt/homebrew/bin/claude",
+  "/usr/local/bin/claude",
+  "/usr/bin/claude",
 ];
 
 /**
@@ -358,17 +413,17 @@ const CLAUDE_ELSEWHERE = [
  * worth holding the report open for. A probe that times out reports the path
  * with no version, which is still the fact that matters.
  */
-const VERSION_TIMEOUT_MS = 5_000;
+const VERSION_TIMEOUT_MS = 5000;
 
 /** The first `x.y.z` a version command prints, the same rule tools.ts uses. */
 const VERSION_PATTERN = /\d+\.\d+\.\d+/;
 
 const askVersion = async (path: string): Promise<string | undefined> => {
   try {
-    const child = Bun.spawn([path, '--version'], {
+    const child = Bun.spawn([path, "--version"], {
       env: toolEnv(),
-      stdout: 'pipe',
-      stderr: 'pipe',
+      stdout: "pipe",
+      stderr: "pipe",
       timeout: VERSION_TIMEOUT_MS,
     });
     const [out, err] = await Promise.all([
@@ -393,18 +448,22 @@ export const claudeInstalls = async (used?: string): Promise<CliInstall[]> => {
     ...toolPath()
       .split(delimiter)
       .filter(Boolean)
-      .map((dir) => join(dir, 'claude')),
+      .map((dir) => join(dir, "claude")),
     ...CLAUDE_ELSEWHERE,
   ];
 
   const seen = new Set<string>();
   const found: string[] = [];
   for (const path of candidates) {
-    if (!(await Bun.file(path).exists())) continue;
+    if (!(await Bun.file(path).exists())) {
+      continue;
+    }
     // A path that cannot be resolved is still a path: fall back to itself
     // rather than dropping an install because one readlink failed.
     const real = await realpath(path).catch(() => path);
-    if (seen.has(real)) continue;
+    if (seen.has(real)) {
+      continue;
+    }
     seen.add(real);
     found.push(path);
   }
@@ -417,7 +476,9 @@ export const claudeInstalls = async (used?: string): Promise<CliInstall[]> => {
       return {
         path,
         ...(version ? { version } : {}),
-        ...(usedReal !== undefined && real === usedReal ? { used: true as const } : {}),
+        ...(usedReal !== undefined && real === usedReal
+          ? { used: true as const }
+          : {}),
       };
     })
   );
@@ -432,8 +493,12 @@ export const claudeInstalls = async (used?: string): Promise<CliInstall[]> => {
  */
 let toolchainCache: FleetToolchain | undefined;
 
-export const machineToolchain = async (fresh: boolean): Promise<FleetToolchain> => {
-  if (!fresh && toolchainCache) return toolchainCache;
+export const machineToolchain = async (
+  fresh: boolean
+): Promise<FleetToolchain> => {
+  if (!fresh && toolchainCache) {
+    return toolchainCache;
+  }
   const claude = await claudeInstalls(await claudeBin());
   toolchainCache = claude.length > 0 ? { claude } : {};
   return toolchainCache;
@@ -456,8 +521,8 @@ const runClaude = async (
 ): Promise<Ran> => {
   const child = Bun.spawn([bin, ...args], {
     env: { ...toolEnv(), ...extraEnv },
-    stdout: 'pipe',
-    stderr: 'pipe',
+    stdout: "pipe",
+    stderr: "pipe",
     timeout: CLI_TIMEOUT_MS,
   });
   const [stdout, stderr] = await Promise.all([
@@ -465,7 +530,9 @@ const runClaude = async (
     new Response(child.stderr).text(),
   ]);
   const code = await child.exited;
-  if (child.signalCode) return { output: `timed out after ${CLI_TIMEOUT_MS / 1000}s` };
+  if (child.signalCode) {
+    return { output: `timed out after ${CLI_TIMEOUT_MS / 1000}s` };
+  }
   return { output: tail(stderr) || tail(stdout) || `exited ${code}` };
 };
 
@@ -490,11 +557,11 @@ const SSH_REFUSED =
  * `~/.gitconfig`, not this daemon, not the operator's own clones.
  */
 const HTTPS_GITHUB: Record<string, string> = {
-  GIT_CONFIG_COUNT: '2',
-  GIT_CONFIG_KEY_0: 'url.https://github.com/.insteadOf',
-  GIT_CONFIG_VALUE_0: 'git@github.com:',
-  GIT_CONFIG_KEY_1: 'url.https://github.com/.insteadOf',
-  GIT_CONFIG_VALUE_1: 'ssh://git@github.com/',
+  GIT_CONFIG_COUNT: "2",
+  GIT_CONFIG_KEY_0: "url.https://github.com/.insteadOf",
+  GIT_CONFIG_VALUE_0: "git@github.com:",
+  GIT_CONFIG_KEY_1: "url.https://github.com/.insteadOf",
+  GIT_CONFIG_VALUE_1: "ssh://git@github.com/",
 };
 
 /**
@@ -509,19 +576,24 @@ const HTTPS_GITHUB: Record<string, string> = {
  */
 const runClaudeCloning = async (bin: string, args: string[]): Promise<Ran> => {
   const first = await runClaude(bin, args);
-  if (!SSH_REFUSED.test(first.output)) return first;
+  if (!SSH_REFUSED.test(first.output)) {
+    return first;
+  }
   return await runClaude(bin, args, HTTPS_GITHUB);
 };
 
 const isLinked = async (name: string): Promise<boolean> =>
-  (await readJson<Record<string, unknown>>(KNOWN_MARKETPLACES))?.[name] !== undefined;
+  (await readJson<Record<string, unknown>>(KNOWN_MARKETPLACES))?.[name] !==
+  undefined;
 
 /** One entry of the CLI's own account of what is linked, and where it came from. */
 export interface KnownMarketplace {
   source?: { source?: string; repo?: string; url?: string; path?: string };
 }
 
-const linkedMarketplaces = async (): Promise<Record<string, KnownMarketplace>> =>
+const linkedMarketplaces = async (): Promise<
+  Record<string, KnownMarketplace>
+> =>
   (await readJson<Record<string, KnownMarketplace>>(KNOWN_MARKETPLACES)) ?? {};
 
 /**
@@ -533,15 +605,15 @@ const sourceKey = (source: string): string =>
   source
     .trim()
     .toLowerCase()
-    .replace(/^git\+/, '')
-    .replace(/^git@github\.com:/, '')
-    .replace(/^(https?|ssh):\/\/([^@]*@)?(www\.)?github\.com\//, '')
-    .replace(/\.git$/, '')
-    .replace(/\/+$/, '');
+    .replace(/^git\+/, "")
+    .replace(/^git@github\.com:/, "")
+    .replace(/^(https?|ssh):\/\/([^@]*@)?(www\.)?github\.com\//, "")
+    .replace(/\.git$/, "")
+    .replace(/\/+$/, "");
 
 const sourceKeysOf = (entry: KnownMarketplace): string[] =>
   [entry.source?.repo, entry.source?.url, entry.source?.path]
-    .filter((one): one is string => typeof one === 'string')
+    .filter((one): one is string => typeof one === "string")
     .map(sourceKey);
 
 /**
@@ -559,12 +631,19 @@ export const linkedNameIn = (
   name: string,
   source: string
 ): string | undefined => {
-  if (linked[name]) return name;
+  if (linked[name]) {
+    return name;
+  }
   const wanted = sourceKey(source);
-  return Object.keys(linked).find((key) => sourceKeysOf(linked[key]).includes(wanted));
+  return Object.keys(linked).find((key) =>
+    sourceKeysOf(linked[key]).includes(wanted)
+  );
 };
 
-const linkedNameFor = async (name: string, source: string): Promise<string | undefined> =>
+const linkedNameFor = async (
+  name: string,
+  source: string
+): Promise<string | undefined> =>
   linkedNameIn(await linkedMarketplaces(), name, source);
 
 interface InstalledPlugins {
@@ -575,14 +654,14 @@ interface InstalledPlugins {
 /** Whether the CLI lists the plugin at the scope this daemon installs at. */
 const isInstalled = async (id: string): Promise<boolean> => {
   const stored = await readJson<InstalledPlugins>(INSTALLED_PLUGINS);
-  return (stored?.plugins?.[id] ?? []).some((entry) => entry.scope === 'user');
+  return (stored?.plugins?.[id] ?? []).some((entry) => entry.scope === "user");
 };
 
 /** `plugin@marketplace` is the CLI's own form, and the half after the `@` is the link. */
-const marketplaceOf = (id: string): string => id.split('@').pop() ?? '';
+const marketplaceOf = (id: string): string => id.split("@").pop() ?? "";
 
 /** And the half before it, which is what a vendored plugin is called. */
-const pluginNameOf = (id: string): string => id.split('@')[0] ?? id;
+const pluginNameOf = (id: string): string => id.split("@")[0] ?? id;
 
 /**
  * Which of the marketplaces whiffle linked last time are whiffle's to unlink
@@ -596,11 +675,13 @@ const pluginNameOf = (id: string): string => id.split('@')[0] ?? id;
 export const toUnlink = (
   managed: ManagedMarketplace[],
   kept: ManagedMarketplace[],
-  config: Pick<FleetConfig, 'marketplaces'>
+  config: Pick<FleetConfig, "marketplaces">
 ): ManagedMarketplace[] => {
   const keeping = new Set(kept.map(({ linkedAs }) => linkedAs));
   const asked = new Set(config.marketplaces.map(({ name }) => name));
-  return managed.filter(({ name, linkedAs }) => !keeping.has(linkedAs) && !asked.has(name));
+  return managed.filter(
+    ({ name, linkedAs }) => !(keeping.has(linkedAs) || asked.has(name))
+  );
 };
 
 /**
@@ -612,15 +693,18 @@ const syncPlugins = async (
   config: FleetConfig,
   managed: Sidecar,
   report: FleetSyncReport
-): Promise<Pick<Sidecar, 'marketplaces' | 'plugins' | 'vendoredPlugins'>> => {
+): Promise<Pick<Sidecar, "marketplaces" | "plugins" | "vendoredPlugins">> => {
   const wantedPlugins = config.plugins.filter((plugin) => plugin.enabled);
   const bin = await claudeBin();
   if (!bin) {
     for (const { name } of config.marketplaces) {
-      report.marketplaces[name] = { state: 'failed', detail: 'claude CLI not found' };
+      report.marketplaces[name] = {
+        state: "failed",
+        detail: "claude CLI not found",
+      };
     }
     for (const { id } of wantedPlugins) {
-      report.plugins[id] = { state: 'failed', detail: 'claude CLI not found' };
+      report.plugins[id] = { state: "failed", detail: "claude CLI not found" };
     }
     return { marketplaces: managed.marketplaces, plugins: managed.plugins };
   }
@@ -635,25 +719,39 @@ const syncPlugins = async (
     const already = await linkedNameFor(name, source);
     if (already) {
       marketplaces.push({ name, linkedAs: already });
-      report.marketplaces[name] = { state: 'applied' };
+      report.marketplaces[name] = { state: "applied" };
       continue;
     }
-    const ran = await runClaudeCloning(bin, ['plugin', 'marketplace', 'add', source]);
+    const ran = await runClaudeCloning(bin, [
+      "plugin",
+      "marketplace",
+      "add",
+      source,
+    ]);
     const linkedAs = await linkedNameFor(name, source);
     if (!linkedAs) {
       // Nothing was linked, so there is nothing for a later sync to take away.
-      report.marketplaces[name] = { state: 'failed', detail: ran.output };
+      report.marketplaces[name] = { state: "failed", detail: ran.output };
       continue;
     }
     marketplaces.push({ name, linkedAs });
-    report.marketplaces[name] = { state: 'applied' };
+    report.marketplaces[name] = { state: "applied" };
   }
 
-  for (const { name, linkedAs } of toUnlink(managed.marketplaces, marketplaces, config)) {
-    const ran = await runClaude(bin, ['plugin', 'marketplace', 'remove', linkedAs]);
+  for (const { name, linkedAs } of toUnlink(
+    managed.marketplaces,
+    marketplaces,
+    config
+  )) {
+    const ran = await runClaude(bin, [
+      "plugin",
+      "marketplace",
+      "remove",
+      linkedAs,
+    ]);
     report.marketplaces[name] = (await isLinked(linkedAs))
-      ? { state: 'failed', detail: ran.output }
-      : { state: 'removed' };
+      ? { state: "failed", detail: ran.output }
+      : { state: "removed" };
   }
 
   // Whatever the hub resolved for itself is installed from the bytes it sent;
@@ -671,33 +769,53 @@ const syncPlugins = async (
 
   const linked = await linkedMarketplaces();
   for (const { id } of wantedPlugins) {
-    if (carried.has(pluginNameOf(id))) continue;
+    if (carried.has(pluginNameOf(id))) {
+      continue;
+    }
     const marketplace = marketplaceOf(id);
     // The CLI's own account, not this run's report: a plugin id names the
     // marketplace the CLI's way, which is not the key the report is under.
     if (!linked[marketplace]) {
-      report.plugins[id] = { state: 'failed', detail: `marketplace ${marketplace} is not linked` };
+      report.plugins[id] = {
+        state: "failed",
+        detail: `marketplace ${marketplace} is not linked`,
+      };
       continue;
     }
     if (await isInstalled(id)) {
-      report.plugins[id] = { state: 'applied' };
+      report.plugins[id] = { state: "applied" };
       continue;
     }
-    const ran = await runClaudeCloning(bin, ['plugin', 'install', id, '--scope', 'user']);
+    const ran = await runClaudeCloning(bin, [
+      "plugin",
+      "install",
+      id,
+      "--scope",
+      "user",
+    ]);
     report.plugins[id] = (await isInstalled(id))
-      ? { state: 'applied' }
-      : { state: 'failed', detail: ran.output };
+      ? { state: "applied" }
+      : { state: "failed", detail: ran.output };
   }
 
   const plugins = wantedPlugins.map(({ id }) => id);
   for (const id of managed.plugins) {
-    if (plugins.includes(id)) continue;
+    if (plugins.includes(id)) {
+      continue;
+    }
     // A vendored plugin is uninstalled under the name it was installed with;
     // `syncVendoredPlugins` has already done that one.
     if (!carried.has(pluginNameOf(id))) {
-      await runClaude(bin, ['plugin', 'uninstall', id, '--scope', 'user', '-y']);
+      await runClaude(bin, [
+        "plugin",
+        "uninstall",
+        id,
+        "--scope",
+        "user",
+        "-y",
+      ]);
     }
-    report.plugins[id] = { state: 'removed' };
+    report.plugins[id] = { state: "removed" };
   }
 
   return { marketplaces, plugins, vendoredPlugins: vendored };
@@ -709,7 +827,7 @@ const syncPlugins = async (
  * anywhere else on this machine.
  */
 const isSafeSkillPath = (path: string): boolean =>
-  path !== '' && !isAbsolute(path) && !path.split('/').includes('..');
+  path !== "" && !isAbsolute(path) && !path.split("/").includes("..");
 
 const dirExists = async (path: string): Promise<boolean> => {
   try {
@@ -728,7 +846,10 @@ const writeSkill = async (skill: FleetSkillPayload): Promise<void> => {
   const dir = join(SKILLS_DIR, skill.name);
   await rm(dir, { recursive: true, force: true });
   for (const file of skill.files ?? []) {
-    await Bun.write(join(dir, file.path), Buffer.from(file.contentBase64, 'base64'));
+    await Bun.write(
+      join(dir, file.path),
+      Buffer.from(file.contentBase64, "base64")
+    );
   }
 };
 
@@ -752,30 +873,41 @@ export const writeVendoredMarketplace = async (
   // erase the plugins whose content it deliberately did not resend — and it
   // would rewrite megabytes to change one of them in any case.
   for (const plugin of plugins) {
-    if (!plugin.files) continue;
-    const dir = join(into, 'plugins', plugin.name);
+    if (!plugin.files) {
+      continue;
+    }
+    const dir = join(into, "plugins", plugin.name);
     await rm(dir, { recursive: true, force: true });
     for (const file of plugin.files) {
       // The same refusal a skill's files get: a path out of the directory is a
       // file the fleet would write somewhere nobody asked it to.
-      if (!isSafeSkillPath(file.path)) throw new Error(`unsafe path ${file.path}`);
-      await Bun.write(join(dir, file.path), Buffer.from(file.contentBase64, 'base64'));
+      if (!isSafeSkillPath(file.path)) {
+        throw new Error(`unsafe path ${file.path}`);
+      }
+      await Bun.write(
+        join(dir, file.path),
+        Buffer.from(file.contentBase64, "base64")
+      );
     }
   }
 
   // What the fleet no longer carries goes, whether or not its bytes arrived.
   const wanted = new Set(plugins.map(({ name }) => name));
-  const present = await readdir(join(into, 'plugins')).catch(() => [] as string[]);
+  const present = await readdir(join(into, "plugins")).catch(
+    () => [] as string[]
+  );
   for (const name of present) {
-    if (!wanted.has(name)) await rm(join(into, 'plugins', name), { recursive: true, force: true });
+    if (!wanted.has(name)) {
+      await rm(join(into, "plugins", name), { recursive: true, force: true });
+    }
   }
 
   await Bun.write(
-    join(into, '.claude-plugin', 'marketplace.json'),
+    join(into, ".claude-plugin", "marketplace.json"),
     `${JSON.stringify(
       {
         name: VENDOR_NAME,
-        owner: { name: 'whiffle' },
+        owner: { name: "whiffle" },
         plugins: plugins.map((plugin) => ({
           name: plugin.name,
           source: `./plugins/${plugin.name}`,
@@ -818,23 +950,38 @@ const syncVendoredPlugins = async (
   // Linked once, then refreshed in place: `add` on an already-linked path is an
   // error, and `update` is what re-reads a directory whose contents moved.
   const linked = await linkedMarketplaces();
-  if (!linked[VENDOR_NAME]) await runClaude(bin, ['plugin', 'marketplace', 'add', VENDOR_DIR]);
-  else if (changed) await runClaude(bin, ['plugin', 'marketplace', 'update', VENDOR_NAME]);
+  if (!linked[VENDOR_NAME]) {
+    await runClaude(bin, ["plugin", "marketplace", "add", VENDOR_DIR]);
+  } else if (changed) {
+    await runClaude(bin, ["plugin", "marketplace", "update", VENDOR_NAME]);
+  }
 
   for (const { id } of wanted) {
     const name = pluginNameOf(id);
     const plugin = byName.get(name);
-    if (!plugin) continue;
+    if (!plugin) {
+      continue;
+    }
     const vendoredId = `${name}@${VENDOR_NAME}`;
 
-    const already = managed[name] === plugin.hash && (await isInstalled(vendoredId));
+    const already =
+      managed[name] === plugin.hash && (await isInstalled(vendoredId));
     const ran = already
       ? undefined
-      : await runClaude(bin, ['plugin', 'install', vendoredId, '--scope', 'user']);
+      : await runClaude(bin, [
+          "plugin",
+          "install",
+          vendoredId,
+          "--scope",
+          "user",
+        ]);
 
-    if (!already && !(await isInstalled(vendoredId))) {
+    if (!(already || (await isInstalled(vendoredId)))) {
       // Left unmanaged so the next sync writes and installs it again.
-      report[id] = { state: 'failed', detail: ran?.output ?? 'install did not land' };
+      report[id] = {
+        state: "failed",
+        detail: ran?.output ?? "install did not land",
+      };
       continue;
     }
 
@@ -845,15 +992,31 @@ const syncVendoredPlugins = async (
     // it is the one already holding both: it takes the fast path from here on,
     // and a hand-over that only ran once would never reach it.
     if (id !== vendoredId && (await isInstalled(id))) {
-      await runClaude(bin, ['plugin', 'uninstall', id, '--scope', 'user', '-y']);
+      await runClaude(bin, [
+        "plugin",
+        "uninstall",
+        id,
+        "--scope",
+        "user",
+        "-y",
+      ]);
     }
     written[name] = plugin.hash;
-    report[id] = { state: 'applied' };
+    report[id] = { state: "applied" };
   }
 
   for (const name of Object.keys(managed)) {
-    if (byName.has(name)) continue;
-    await runClaude(bin, ['plugin', 'uninstall', `${name}@${VENDOR_NAME}`, '--scope', 'user', '-y']);
+    if (byName.has(name)) {
+      continue;
+    }
+    await runClaude(bin, [
+      "plugin",
+      "uninstall",
+      `${name}@${VENDOR_NAME}`,
+      "--scope",
+      "user",
+      "-y",
+    ]);
   }
   return written;
 };
@@ -866,14 +1029,14 @@ const syncVendoredPlugins = async (
  */
 const syncSkillFiles = async (
   desired: FleetSkillPayload[],
-  managed: Sidecar['skills'],
+  managed: Sidecar["skills"],
   report: Record<string, FleetItemState>
-): Promise<Sidecar['skills']> => {
-  const written: Sidecar['skills'] = {};
+): Promise<Sidecar["skills"]> => {
+  const written: Sidecar["skills"] = {};
   for (const skill of desired) {
     if (managed[skill.name] === skill.hash) {
       written[skill.name] = skill.hash;
-      report[skill.name] = { state: 'applied' };
+      report[skill.name] = { state: "applied" };
       continue;
     }
 
@@ -883,44 +1046,56 @@ const syncSkillFiles = async (
     // written, and the next sync carries the content, because the claim that
     // suppressed it is exactly what this failure retracts.
     if (!skill.files) {
-      if (managed[skill.name] !== undefined) written[skill.name] = managed[skill.name];
-      report[skill.name] = { state: 'failed', detail: 'the hub sent no files for this hash' };
+      if (managed[skill.name] !== undefined) {
+        written[skill.name] = managed[skill.name];
+      }
+      report[skill.name] = {
+        state: "failed",
+        detail: "the hub sent no files for this hash",
+      };
       continue;
     }
 
     const unsafe = skill.files.find(({ path }) => !isSafeSkillPath(path));
     if (unsafe) {
       // Nothing is written, so the machine keeps whatever it already had.
-      if (managed[skill.name] !== undefined) written[skill.name] = managed[skill.name];
-      report[skill.name] = { state: 'failed', detail: `unsafe path ${unsafe.path}` };
+      if (managed[skill.name] !== undefined) {
+        written[skill.name] = managed[skill.name];
+      }
+      report[skill.name] = {
+        state: "failed",
+        detail: `unsafe path ${unsafe.path}`,
+      };
       continue;
     }
 
     try {
       await writeSkill(skill);
       written[skill.name] = skill.hash;
-      report[skill.name] = { state: 'applied' };
+      report[skill.name] = { state: "applied" };
     } catch (error) {
       // A write that got part of the way through still left whiffle's files
       // behind, so the name stays managed — under a hash nothing matches, which
       // is what has the next sync write it again.
-      written[skill.name] = '';
-      report[skill.name] = { state: 'failed', detail: tail(said(error)) };
+      written[skill.name] = "";
+      report[skill.name] = { state: "failed", detail: tail(said(error)) };
     }
   }
 
   const wanted = new Set(desired.map(({ name }) => name));
   for (const name of Object.keys(managed)) {
-    if (wanted.has(name)) continue;
+    if (wanted.has(name)) {
+      continue;
+    }
     await rm(join(SKILLS_DIR, name), { recursive: true, force: true });
-    report[name] = { state: 'removed' };
+    report[name] = { state: "removed" };
   }
   return written;
 };
 
 /** The same hash the hub took of the same document: sha256 of its UTF-8 bytes. */
 const hashText = (content: string): string =>
-  new Bun.CryptoHasher('sha256').update(content).digest('hex');
+  new Bun.CryptoHasher("sha256").update(content).digest("hex");
 
 /** What is really at a memory file; null is a machine that has none. */
 const fileHashAt = async (path: string): Promise<string | null> => {
@@ -931,7 +1106,13 @@ const fileHashAt = async (path: string): Promise<string | null> => {
 /** What is really at `~/.claude/CLAUDE.md`; null is a machine that has none. */
 const memoryFileHash = (): Promise<string | null> => fileHashAt(MEMORY_PATH);
 
-export type MemoryPlan = 'write' | 'skip' | 'drift' | 'remove' | 'unmanage' | 'none';
+export type MemoryPlan =
+  | "write"
+  | "skip"
+  | "drift"
+  | "remove"
+  | "unmanage"
+  | "none";
 
 /**
  * What to do about the user CLAUDE.md, from hashes alone. Drift is a machine
@@ -944,20 +1125,26 @@ export function memoryPlan(
   managedHash: string | undefined
 ): MemoryPlan {
   if (!desired) {
-    if (managedHash === undefined) return 'none';
-    return fileHash === managedHash ? 'remove' : 'unmanage';
+    if (managedHash === undefined) {
+      return "none";
+    }
+    return fileHash === managedHash ? "remove" : "unmanage";
   }
   // A file whiffle has never written is somebody's own: it is taken over only
   // when it already says the same thing, or when the reader said to.
   if (managedHash === undefined) {
-    return fileHash === null || fileHash === desired.hash || desired.force ? 'write' : 'drift';
+    return fileHash === null || fileHash === desired.hash || desired.force
+      ? "write"
+      : "drift";
   }
-  if (fileHash !== managedHash) return desired.force ? 'write' : 'drift';
-  return desired.hash === managedHash ? 'skip' : 'write';
+  if (fileHash !== managedHash) {
+    return desired.force ? "write" : "drift";
+  }
+  return desired.hash === managedHash ? "skip" : "write";
 }
 
 /** What a drifted machine reports, and what the dashboard offers to settle. */
-const DRIFTED = 'edited on this machine — adopt it or overwrite';
+const DRIFTED = "edited on this machine — adopt it or overwrite";
 
 /**
  * Applies the plan and answers with the hash whiffle now manages, or nothing
@@ -972,32 +1159,35 @@ const syncMemory = async (
   const plan = memoryPlan(desired, await memoryFileHash(), managed);
 
   if (!desired) {
-    if (plan === 'remove') {
+    if (plan === "remove") {
       await rm(MEMORY_PATH, { force: true });
-      report.memory = { state: 'removed' };
-    } else if (plan === 'unmanage') {
-      report.memory = { state: 'removed', detail: 'kept: edited on this machine' };
+      report.memory = { state: "removed" };
+    } else if (plan === "unmanage") {
+      report.memory = {
+        state: "removed",
+        detail: "kept: edited on this machine",
+      };
     }
     return undefined;
   }
 
-  if (plan === 'drift') {
-    report.memory = { state: 'failed', detail: DRIFTED };
+  if (plan === "drift") {
+    report.memory = { state: "failed", detail: DRIFTED };
     return managed;
   }
-  if (plan === 'skip') {
-    report.memory = { state: 'applied' };
+  if (plan === "skip") {
+    report.memory = { state: "applied" };
     return managed;
   }
 
   try {
     await Bun.write(MEMORY_PATH, desired.content);
-    report.memory = { state: 'applied' };
+    report.memory = { state: "applied" };
     return desired.hash;
   } catch (error) {
     // The machine keeps the hash it had, so the next sync writes again rather
     // than believing this one landed.
-    report.memory = { state: 'failed', detail: tail(said(error)) };
+    report.memory = { state: "failed", detail: tail(said(error)) };
     return managed;
   }
 };
@@ -1007,14 +1197,19 @@ const syncMemory = async (
  * it under. Markdown only, and depth is whatever the set uses — `models/` is
  * the one this version writes, and a reader should still see the rest.
  */
-const memoryDocPaths = async (root: string = MEMORIES_DIR, prefix = ''): Promise<string[]> => {
+const memoryDocPaths = async (
+  root: string = MEMORIES_DIR,
+  prefix = ""
+): Promise<string[]> => {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   const paths: string[] = [];
   for (const entry of entries) {
     const relative = `${prefix}${entry.name}`;
     if (entry.isDirectory()) {
-      paths.push(...(await memoryDocPaths(join(root, entry.name), `${relative}/`)));
-    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      paths.push(
+        ...(await memoryDocPaths(join(root, entry.name), `${relative}/`))
+      );
+    } else if (entry.isFile() && entry.name.endsWith(".md")) {
       paths.push(relative);
     }
   }
@@ -1029,16 +1224,22 @@ const memoryDocPaths = async (root: string = MEMORIES_DIR, prefix = ''): Promise
 const pruneEmptyDirs = async (): Promise<void> => {
   const dirs = new Set<string>();
   const walk = async (root: string, prefix: string): Promise<void> => {
-    for (const entry of await readdir(root, { withFileTypes: true }).catch(() => [])) {
-      if (!entry.isDirectory()) continue;
+    for (const entry of await readdir(root, { withFileTypes: true }).catch(
+      () => []
+    )) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
       dirs.add(`${prefix}${entry.name}`);
       await walk(join(root, entry.name), `${prefix}${entry.name}/`);
     }
   };
-  await walk(MEMORIES_DIR, '');
+  await walk(MEMORIES_DIR, "");
 
   // Deepest first, so a parent is only tried once its children are gone.
-  for (const relative of [...dirs].sort((a, b) => b.split('/').length - a.split('/').length)) {
+  for (const relative of [...dirs].sort(
+    (a, b) => b.split("/").length - a.split("/").length
+  )) {
     await rmdir(join(MEMORIES_DIR, relative)).catch(() => {});
   }
   await rmdir(MEMORIES_DIR).catch(() => {});
@@ -1064,10 +1265,16 @@ export function memorySetPlan(
 ): Record<string, MemoryPlan> {
   const plans: Record<string, MemoryPlan> = {};
   for (const doc of desired) {
-    plans[doc.path] = memoryPlan(doc, onDisk[doc.path] ?? null, managed[doc.path]);
+    plans[doc.path] = memoryPlan(
+      doc,
+      onDisk[doc.path] ?? null,
+      managed[doc.path]
+    );
   }
   for (const [path, hash] of Object.entries(managed)) {
-    if (plans[path] !== undefined) continue;
+    if (plans[path] !== undefined) {
+      continue;
+    }
     plans[path] = memoryPlan(undefined, onDisk[path] ?? null, hash);
   }
   return plans;
@@ -1096,12 +1303,17 @@ const syncMemoryDocs = async (
       continue;
     }
     // Nothing is written, so the machine keeps whatever it already had.
-    if (managed[doc.path] !== undefined) written[doc.path] = managed[doc.path];
-    report[doc.path] = { state: 'failed', detail: problem };
+    if (managed[doc.path] !== undefined) {
+      written[doc.path] = managed[doc.path];
+    }
+    report[doc.path] = { state: "failed", detail: problem };
   }
 
   const onDisk: Record<string, string | null> = {};
-  for (const path of new Set([...safe.map((doc) => doc.path), ...Object.keys(managed)])) {
+  for (const path of new Set([
+    ...safe.map((doc) => doc.path),
+    ...Object.keys(managed),
+  ])) {
     onDisk[path] = await fileHashAt(join(MEMORIES_DIR, path));
   }
 
@@ -1112,40 +1324,49 @@ const syncMemoryDocs = async (
   for (const [path, plan] of Object.entries(plans)) {
     const doc = wanted.get(path);
     if (!doc) {
-      if (plan === 'remove') {
+      if (plan === "remove") {
         await rm(join(MEMORIES_DIR, path), { force: true });
-        report[path] = { state: 'removed' };
+        report[path] = { state: "removed" };
         removed = true;
       } else {
         // An edited one outlives the fleet's row, unmanaged and where it is.
-        report[path] = { state: 'removed', detail: 'kept: edited on this machine' };
+        report[path] = {
+          state: "removed",
+          detail: "kept: edited on this machine",
+        };
       }
       continue;
     }
 
-    if (plan === 'drift') {
-      report[path] = { state: 'failed', detail: DRIFTED };
-      if (managed[path] !== undefined) written[path] = managed[path];
+    if (plan === "drift") {
+      report[path] = { state: "failed", detail: DRIFTED };
+      if (managed[path] !== undefined) {
+        written[path] = managed[path];
+      }
       continue;
     }
-    if (plan === 'skip') {
+    if (plan === "skip") {
       written[path] = managed[path];
-      report[path] = { state: 'applied' };
+      report[path] = { state: "applied" };
       continue;
     }
 
     try {
       await Bun.write(join(MEMORIES_DIR, path), doc.content);
       written[path] = doc.hash;
-      report[path] = { state: 'applied' };
+      report[path] = { state: "applied" };
     } catch (error) {
       // The machine keeps the hash it had, so the next sync writes again rather
       // than believing this one landed.
-      if (managed[path] !== undefined) written[path] = managed[path];
-      report[path] = { state: 'failed', detail: tail(said(error)) };
+      if (managed[path] !== undefined) {
+        written[path] = managed[path];
+      }
+      report[path] = { state: "failed", detail: tail(said(error)) };
     }
   }
-  if (removed) await pruneEmptyDirs();
+  if (removed) {
+    await pruneEmptyDirs();
+  }
 
   return written;
 };
@@ -1204,14 +1425,14 @@ exit 0
  * handler carries `command`; the other four handler types do not, so an entry
  * without one is matched on its own JSON instead (see {@link withoutHooks}). */
 interface HookCommand {
-  type?: string;
   command?: string;
+  type?: string;
 }
 
 /** One matcher's worth of hooks; an absent `matcher` is every session start. */
 interface HookMatcher {
-  matcher?: string;
   hooks?: HookCommand[];
+  matcher?: string;
 }
 
 /**
@@ -1223,14 +1444,19 @@ interface HookMatcher {
  * is still found and taken out — a set keyed off today's constants would leave
  * the old one behind forever.
  */
-export function withoutHooks(entries: HookMatcher[], commands: string[]): HookMatcher[] {
+export function withoutHooks(
+  entries: HookMatcher[],
+  commands: string[]
+): HookMatcher[] {
   const gone = new Set(commands);
   const isOurs = (hook: HookCommand): boolean =>
-    gone.has(hook.command !== undefined ? hook.command : JSON.stringify(hook));
+    gone.has(hook.command === undefined ? JSON.stringify(hook) : hook.command);
   return entries.flatMap((entry) => {
     const hooks = entry.hooks ?? [];
     const kept = hooks.filter((hook) => !isOurs(hook));
-    if (kept.length === hooks.length) return [entry];
+    if (kept.length === hooks.length) {
+      return [entry];
+    }
     return kept.length > 0 ? [{ ...entry, hooks: kept }] : [];
   });
 }
@@ -1247,46 +1473,72 @@ const syncMemoryHook = async (
   report: FleetSyncReport
 ): Promise<string | undefined> => {
   const wanted = desired.some(
-    (doc) => doc.path.startsWith('models/') && memoryDocProblem(doc.path) === undefined
+    (doc) =>
+      doc.path.startsWith("models/") && memoryDocProblem(doc.path) === undefined
   );
-  if (!wanted && managed === undefined) return undefined;
+  if (!wanted && managed === undefined) {
+    return undefined;
+  }
 
   const stored = await readJson<Record<string, unknown>>(SETTINGS_PATH);
   // Nothing is written over a file that cannot be read: the rest of it is the
   // user's permissions and plugins, and a rewrite would take them with it.
   if (stored === undefined && (await Bun.file(SETTINGS_PATH).exists())) {
-    report.memoryHook = { state: 'failed', detail: 'could not parse ~/.claude/settings.json' };
+    report.memoryHook = {
+      state: "failed",
+      detail: "could not parse ~/.claude/settings.json",
+    };
     return managed;
   }
 
   const root = stored ?? {};
-  const hooks = { ...((root.hooks as Record<string, unknown> | undefined) ?? {}) };
+  const hooks = {
+    ...((root.hooks as Record<string, unknown> | undefined) ?? {}),
+  };
   const starts = (hooks.SessionStart as HookMatcher[] | undefined) ?? [];
   const command = MEMORY_HOOK_PATH;
   const next = wanted
-    ? [...withoutHooks(starts, [command]), { hooks: [{ type: 'command', command }] }]
+    ? [
+        ...withoutHooks(starts, [command]),
+        { hooks: [{ type: "command", command }] },
+      ]
     : withoutHooks(starts, [managed ?? command]);
 
-  if (next.length > 0) hooks.SessionStart = next;
-  else delete hooks.SessionStart;
+  if (next.length > 0) {
+    hooks.SessionStart = next;
+  } else {
+    delete hooks.SessionStart;
+  }
   const settings = { ...root };
-  if (Object.keys(hooks).length > 0) settings.hooks = hooks;
-  else delete settings.hooks;
+  if (Object.keys(hooks).length > 0) {
+    settings.hooks = hooks;
+  } else {
+    delete settings.hooks;
+  }
 
   try {
-    if (wanted && (await Bun.file(MEMORY_HOOK_PATH).text().catch(() => '')) !== MEMORY_HOOK) {
+    if (
+      wanted &&
+      (await Bun.file(MEMORY_HOOK_PATH)
+        .text()
+        .catch(() => "")) !== MEMORY_HOOK
+    ) {
       await writeAtomic(MEMORY_HOOK_PATH, MEMORY_HOOK);
       // Claude Code spawns the command itself, so it has to be executable.
       await chmod(MEMORY_HOOK_PATH, 0o755);
     }
-    if (JSON.stringify(settings) !== JSON.stringify(root)) await writeJson(SETTINGS_PATH, settings);
-    if (!wanted) await rm(MEMORY_HOOK_PATH, { force: true });
+    if (JSON.stringify(settings) !== JSON.stringify(root)) {
+      await writeJson(SETTINGS_PATH, settings);
+    }
+    if (!wanted) {
+      await rm(MEMORY_HOOK_PATH, { force: true });
+    }
   } catch (error) {
-    report.memoryHook = { state: 'failed', detail: tail(said(error)) };
+    report.memoryHook = { state: "failed", detail: tail(said(error)) };
     return managed;
   }
 
-  report.memoryHook = wanted ? { state: 'applied' } : { state: 'removed' };
+  report.memoryHook = wanted ? { state: "applied" } : { state: "removed" };
   return wanted ? command : undefined;
 };
 
@@ -1297,9 +1549,9 @@ const hookScriptPath = (id: string): string => join(HOOKS_DIR, `${id}.sh`);
  * for one bound to a project — the same file a project MCP server's counterpart
  * would use if MCP had one, and the only settings file a session in that
  * checkout actually reads for its hooks. */
-const settingsPathFor = (hook: Pick<FleetHook, 'scope' | 'cwd'>): string =>
-  hook.scope && hook.scope !== 'user' && hook.cwd
-    ? join(hook.cwd, '.claude', 'settings.json')
+const settingsPathFor = (hook: Pick<FleetHook, "scope" | "cwd">): string =>
+  hook.scope && hook.scope !== "user" && hook.cwd
+    ? join(hook.cwd, ".claude", "settings.json")
     : SETTINGS_PATH;
 
 /**
@@ -1309,13 +1561,20 @@ const settingsPathFor = (hook: Pick<FleetHook, 'scope' | 'cwd'>): string =>
  * row has to mean the same thing on every box it reaches. Every other handler,
  * and a command handler with no script, is written exactly as the hub sent it.
  */
-const handlerFor = (hook: FleetHook, scriptPath: string | undefined): HookHandler =>
-  hook.handler.type === 'command' && scriptPath ? { ...hook.handler, command: scriptPath } : hook.handler;
+const handlerFor = (
+  hook: FleetHook,
+  scriptPath: string | undefined
+): HookHandler =>
+  hook.handler.type === "command" && scriptPath
+    ? { ...hook.handler, command: scriptPath }
+    : hook.handler;
 
 /** What {@link withoutHooks} removes this handler by, and what the sidecar
  * remembers registering it as. */
 const identityOf = (handler: HookHandler): string =>
-  handler.type === 'command' && handler.command ? handler.command : JSON.stringify(handler);
+  handler.type === "command" && handler.command
+    ? handler.command
+    : JSON.stringify(handler);
 
 /**
  * Writes every enabled hook's script and registers it in the settings.json its
@@ -1333,7 +1592,9 @@ const syncHooks = async (
 ): Promise<Record<string, ManagedHook>> => {
   const written: Record<string, ManagedHook> = {};
   const keep = (id: string): void => {
-    if (managed[id]) written[id] = managed[id];
+    if (managed[id]) {
+      written[id] = managed[id];
+    }
   };
 
   // A disabled hook is simply not written — that is the whole of per-hook
@@ -1342,16 +1603,21 @@ const syncHooks = async (
   // at the bottom, same as a hook the fleet has stopped carrying at all.
   const wanted: FleetHook[] = [];
   for (const hook of desired) {
-    if (!hook.enabled) continue;
+    if (!hook.enabled) {
+      continue;
+    }
     const problems = Object.values(hookProblem(hook));
     if (problems.length > 0) {
       keep(hook.id);
-      report[hook.id] = { state: 'failed', detail: problems[0] };
+      report[hook.id] = { state: "failed", detail: problems[0] };
       continue;
     }
-    if (hook.scope && hook.scope !== 'user' && !hook.cwd) {
+    if (hook.scope && hook.scope !== "user" && !hook.cwd) {
       keep(hook.id);
-      report[hook.id] = { state: 'failed', detail: 'bound to a project this machine has no checkout for' };
+      report[hook.id] = {
+        state: "failed",
+        detail: "bound to a project this machine has no checkout for",
+      };
       continue;
     }
     wanted.push(hook);
@@ -1364,27 +1630,31 @@ const syncHooks = async (
   const hashes = new Map<string, string>();
   const settled: FleetHook[] = [];
   for (const hook of wanted) {
-    if (hook.handler.type !== 'command' || !hook.script) {
+    if (hook.handler.type !== "command" || !hook.script) {
       settled.push(hook);
       continue;
     }
     const path = hookScriptPath(hook.id);
-    const plan = memoryPlan({ hash: hook.hash, force: hook.force }, await fileHashAt(path), managed[hook.id]?.hash);
-    if (plan === 'drift') {
-      report[hook.id] = { state: 'failed', detail: DRIFTED };
+    const plan = memoryPlan(
+      { hash: hook.hash, force: hook.force },
+      await fileHashAt(path),
+      managed[hook.id]?.hash
+    );
+    if (plan === "drift") {
+      report[hook.id] = { state: "failed", detail: DRIFTED };
       hashes.set(hook.id, managed[hook.id]?.hash ?? hook.hash);
       scriptPaths.set(hook.id, path);
       settled.push(hook);
       continue;
     }
-    if (plan === 'write') {
+    if (plan === "write") {
       try {
         await writeAtomic(path, hook.script);
         // Claude Code spawns it directly, so it has to carry its own execute bit.
         await chmod(path, 0o755);
       } catch (error) {
         keep(hook.id);
-        report[hook.id] = { state: 'failed', detail: tail(said(error)) };
+        report[hook.id] = { state: "failed", detail: tail(said(error)) };
         continue;
       }
     }
@@ -1402,7 +1672,9 @@ const syncHooks = async (
   }
   for (const record of Object.values(managed)) {
     const path = settingsPathFor(record);
-    if (!bySettings.has(path)) bySettings.set(path, []);
+    if (!bySettings.has(path)) {
+      bySettings.set(path, []);
+    }
   }
 
   for (const [path, hooks] of bySettings) {
@@ -1414,13 +1686,15 @@ const syncHooks = async (
       const detail = `could not parse ${path}`;
       for (const hook of hooks) {
         keep(hook.id);
-        report[hook.id] = { state: 'failed', detail };
+        report[hook.id] = { state: "failed", detail };
       }
       continue;
     }
 
     const root = stored ?? {};
-    const settingsHooks = { ...((root.hooks as Record<string, unknown> | undefined) ?? {}) };
+    const settingsHooks = {
+      ...((root.hooks as Record<string, unknown> | undefined) ?? {}),
+    };
 
     // Everything whiffle registered out of this file last time, whatever event
     // it ran on — a hook that moved to a different event still needs its old
@@ -1430,9 +1704,14 @@ const syncHooks = async (
       .map((record) => record.command);
 
     const byEvent = new Map<HookEvent, FleetHook[]>();
-    for (const hook of hooks) byEvent.set(hook.event, [...(byEvent.get(hook.event) ?? []), hook]);
+    for (const hook of hooks) {
+      byEvent.set(hook.event, [...(byEvent.get(hook.event) ?? []), hook]);
+    }
 
-    const events = new Set<HookEvent>([...byEvent.keys(), ...(Object.keys(settingsHooks) as HookEvent[])]);
+    const events = new Set<HookEvent>([
+      ...byEvent.keys(),
+      ...(Object.keys(settingsHooks) as HookEvent[]),
+    ]);
     for (const event of events) {
       const current = (settingsHooks[event] as HookMatcher[] | undefined) ?? [];
       const additions = (byEvent.get(event) ?? []).map((hook): HookMatcher => {
@@ -1441,19 +1720,27 @@ const syncHooks = async (
           hash: hashes.get(hook.id) ?? hook.hash,
           command: identityOf(handler),
           event: hook.event,
-          scope: hook.scope ?? 'user',
+          scope: hook.scope ?? "user",
           ...(hook.cwd ? { cwd: hook.cwd } : {}),
         };
-        return hook.matcher ? { matcher: hook.matcher, hooks: [handler] } : { hooks: [handler] };
+        return hook.matcher
+          ? { matcher: hook.matcher, hooks: [handler] }
+          : { hooks: [handler] };
       });
       const next = [...withoutHooks(current, registeredHere), ...additions];
-      if (next.length > 0) settingsHooks[event] = next;
-      else delete settingsHooks[event];
+      if (next.length > 0) {
+        settingsHooks[event] = next;
+      } else {
+        delete settingsHooks[event];
+      }
     }
 
     const settings = { ...root };
-    if (Object.keys(settingsHooks).length > 0) settings.hooks = settingsHooks;
-    else delete settings.hooks;
+    if (Object.keys(settingsHooks).length > 0) {
+      settings.hooks = settingsHooks;
+    } else {
+      delete settings.hooks;
+    }
 
     if (JSON.stringify(settings) !== JSON.stringify(root)) {
       try {
@@ -1462,15 +1749,17 @@ const syncHooks = async (
         const detail = tail(said(error));
         for (const hook of hooks) {
           keep(hook.id);
-          report[hook.id] = { state: 'failed', detail };
+          report[hook.id] = { state: "failed", detail };
         }
         continue;
       }
     }
 
     for (const hook of hooks) {
-      if (report[hook.id]) continue; // already reported failed/drift above
-      report[hook.id] = { state: 'applied' };
+      if (report[hook.id]) {
+        continue; // already reported failed/drift above
+      }
+      report[hook.id] = { state: "applied" };
     }
   }
 
@@ -1479,9 +1768,13 @@ const syncHooks = async (
   // whiffle wrote one) are whiffle's to take away.
   const stillHere = new Set(settled.map((hook) => hook.id));
   for (const [id, record] of Object.entries(managed)) {
-    if (stillHere.has(id) || written[id]) continue;
-    if (record.command.startsWith(HOOKS_DIR)) await rm(record.command, { force: true });
-    report[id] = { state: 'removed' };
+    if (stillHere.has(id) || written[id]) {
+      continue;
+    }
+    if (record.command.startsWith(HOOKS_DIR)) {
+      await rm(record.command, { force: true });
+    }
+    report[id] = { state: "removed" };
   }
 
   return written;
@@ -1504,7 +1797,11 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
 
   const mcp = await syncMcp(config.mcp, managed.mcp, report.mcp);
   const installed = await syncPlugins(config, managed, report);
-  const skills = await syncSkillFiles(config.skills ?? [], managed.skills, skillStates);
+  const skills = await syncSkillFiles(
+    config.skills ?? [],
+    managed.skills,
+    skillStates
+  );
   const memory = await syncMemory(config.memory, managed.memory, report);
   // A hub that predates the set sends no `docs`, which reads as a fleet that
   // links none — and the machine gives back the ones whiffle wrote it.
@@ -1551,7 +1848,9 @@ let queue: Promise<unknown> = Promise.resolve();
  * entry in it came to. Idempotent: a second sync with the same config writes the
  * same file and runs no CLI at all.
  */
-export const syncFleetConfig = (config: FleetConfig): Promise<FleetSyncReport> => {
+export const syncFleetConfig = (
+  config: FleetConfig
+): Promise<FleetSyncReport> => {
   const next = queue.then(
     () => converge(config),
     () => converge(config)
@@ -1588,69 +1887,93 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
   const servers = file.ok ? mcpServersOf(file.root) : {};
   for (const name of managed.mcp) {
     report.mcp[name] = servers[name]
-      ? { state: 'applied' }
-      : { state: 'failed', detail: file.ok ? 'not in ~/.claude.json' : file.detail };
+      ? { state: "applied" }
+      : {
+          state: "failed",
+          detail: file.ok ? "not in ~/.claude.json" : file.detail,
+        };
   }
   for (const { name, linkedAs } of managed.marketplaces) {
     report.marketplaces[name] = (await isLinked(linkedAs))
-      ? { state: 'applied' }
-      : { state: 'failed', detail: `${linkedAs} is not in known_marketplaces.json` };
+      ? { state: "applied" }
+      : {
+          state: "failed",
+          detail: `${linkedAs} is not in known_marketplaces.json`,
+        };
   }
   for (const id of managed.plugins) {
     report.plugins[id] = (await isInstalled(id))
-      ? { state: 'applied' }
-      : { state: 'failed', detail: 'not in installed_plugins.json' };
+      ? { state: "applied" }
+      : { state: "failed", detail: "not in installed_plugins.json" };
   }
   for (const name of Object.keys(managed.skills)) {
     skills[name] = (await dirExists(join(SKILLS_DIR, name)))
-      ? { state: 'applied' }
-      : { state: 'failed', detail: 'not on disk' };
+      ? { state: "applied" }
+      : { state: "failed", detail: "not on disk" };
   }
   if (managed.memory !== undefined) {
     const fileHash = await memoryFileHash();
     report.memory =
       fileHash === managed.memory
-        ? { state: 'applied' }
-        : { state: 'failed', detail: fileHash === null ? 'not on disk' : DRIFTED };
+        ? { state: "applied" }
+        : {
+            state: "failed",
+            detail: fileHash === null ? "not on disk" : DRIFTED,
+          };
   }
   for (const [path, hash] of Object.entries(managed.memoryDocs)) {
     const fileHash = await fileHashAt(join(MEMORIES_DIR, path));
     memoryDocs[path] =
       fileHash === hash
-        ? { state: 'applied' }
-        : { state: 'failed', detail: fileHash === null ? 'not on disk' : DRIFTED };
+        ? { state: "applied" }
+        : {
+            state: "failed",
+            detail: fileHash === null ? "not on disk" : DRIFTED,
+          };
   }
   if (managed.memoryHook !== undefined) {
     report.memoryHook = (await Bun.file(managed.memoryHook).exists())
-      ? { state: 'applied' }
-      : { state: 'failed', detail: 'not on disk' };
+      ? { state: "applied" }
+      : { state: "failed", detail: "not on disk" };
   }
   for (const [id, record] of Object.entries(managed.hooks)) {
     if (record.command.startsWith(HOOKS_DIR)) {
       const fileHash = await fileHashAt(record.command);
       hooks[id] =
         fileHash === record.hash
-          ? { state: 'applied' }
-          : { state: 'failed', detail: fileHash === null ? 'not on disk' : DRIFTED };
+          ? { state: "applied" }
+          : {
+              state: "failed",
+              detail: fileHash === null ? "not on disk" : DRIFTED,
+            };
       continue;
     }
     // No script of whiffle's to check: the only question is whether the
     // entry it registered is still in the settings.json it registered it in.
     const settingsPath = settingsPathFor(record);
     const stored = await readJson<Record<string, unknown>>(settingsPath);
-    const entries = ((stored?.hooks as Record<string, HookMatcher[]> | undefined)?.[record.event]) ?? [];
+    const entries =
+      (stored?.hooks as Record<string, HookMatcher[]> | undefined)?.[
+        record.event
+      ] ?? [];
     const present = entries.some((entry) =>
       (entry.hooks ?? []).some((one) =>
-        one.command !== undefined ? one.command === record.command : JSON.stringify(one) === record.command
+        one.command === undefined
+          ? JSON.stringify(one) === record.command
+          : one.command === record.command
       )
     );
-    hooks[id] = present ? { state: 'applied' } : { state: 'failed', detail: `not in ${settingsPath}` };
+    hooks[id] = present
+      ? { state: "applied" }
+      : { state: "failed", detail: `not in ${settingsPath}` };
   }
   // Claimed here too, and for the reason `have` above is: a status overwrites
   // the stored report, so a status that left the toolchain out would retract
   // the attribution the last sync established.
   const toolchain = await machineToolchain(false);
-  if (toolchain.claude) report.toolchain = toolchain;
+  if (toolchain.claude) {
+    report.toolchain = toolchain;
+  }
   return report;
 };
 
@@ -1669,7 +1992,9 @@ export const readMemoryFile = async (): Promise<MachineMemorySet | null> => {
   }
   // A machine with documents but no main file still has a set worth adopting,
   // and an empty main file is what the fleet's own row would have been anyway.
-  if (!(await file.exists())) return docs.length > 0 ? { content: '', hash: hashText(''), docs } : null;
+  if (!(await file.exists())) {
+    return docs.length > 0 ? { content: "", hash: hashText(""), docs } : null;
+  }
 
   const content = await file.text();
   return { content, hash: hashText(content), docs };
@@ -1694,17 +2019,22 @@ interface McpScope {
  * local > project > user, so a name defined twice is reported twice — the
  * nearer one plainly, the further one saying which scope took it.
  */
-export function mergeMcp(scopes: McpScope[], managed: readonly string[]): DiscoveredMcp[] {
+export function mergeMcp(
+  scopes: McpScope[],
+  managed: readonly string[]
+): DiscoveredMcp[] {
   const found: DiscoveredMcp[] = [];
   for (const [index, { scope, servers }] of scopes.entries()) {
     for (const [name, config] of Object.entries(servers)) {
-      const nearer = scopes.slice(0, index).find((other) => other.servers[name] !== undefined);
+      const nearer = scopes
+        .slice(0, index)
+        .find((other) => other.servers[name] !== undefined);
       found.push({
         name,
         scope,
         config: config as FleetMcpConfig,
         // Whiffle only ever writes the user scope, so only that one can be ours.
-        managed: scope === 'user' && managed.includes(name),
+        managed: scope === "user" && managed.includes(name),
         ...(nearer ? { shadowedBy: nearer.scope } : {}),
       });
     }
@@ -1719,33 +2049,48 @@ export function mergeMcp(scopes: McpScope[], managed: readonly string[]): Discov
  * marker instead of a sentence.
  */
 export function skillDescription(source: string): string | undefined {
-  if (!source.startsWith('---')) return undefined;
-  const end = source.indexOf('\n---', 3);
-  const front = (end === -1 ? source : source.slice(0, end)).split('\n');
-  const at = front.findIndex((row) => row.startsWith('description:'));
-  if (at === -1) return undefined;
+  if (!source.startsWith("---")) {
+    return undefined;
+  }
+  const end = source.indexOf("\n---", 3);
+  const front = (end === -1 ? source : source.slice(0, end)).split("\n");
+  const at = front.findIndex((row) => row.startsWith("description:"));
+  if (at === -1) {
+    return undefined;
+  }
 
-  const value = front[at].slice('description:'.length).trim();
-  if (!/^[|>][-+]?$/.test(value)) return value.replace(/^["']|["']$/g, '') || undefined;
+  const value = front[at].slice("description:".length).trim();
+  if (!/^[|>][-+]?$/.test(value)) {
+    return value.replace(/^["']|["']$/g, "") || undefined;
+  }
 
   const block: string[] = [];
   for (const row of front.slice(at + 1)) {
-    if (row.trim() !== '' && !/^\s/.test(row)) break;
+    if (row.trim() !== "" && !/^\s/.test(row)) {
+      break;
+    }
     block.push(row.trim());
   }
-  return block.join(' ').trim() || undefined;
+  return block.join(" ").trim() || undefined;
 }
 
 /** Where an installed plugin's skills live, by the name a session calls them. */
-export function pluginSkillRoots(installed: InstalledPlugins): { plugin: string; root: string }[] {
+export function pluginSkillRoots(
+  installed: InstalledPlugins
+): { plugin: string; root: string }[] {
   const roots: { plugin: string; root: string }[] = [];
   for (const [id, entries] of Object.entries(installed.plugins ?? {})) {
     for (const entry of entries) {
       // The CLI keeps the unpacked copy's path per install; a plugin's skills
       // are a `skills/` directory inside it, which is what `/` lists as
       // `<plugin>:<skill>`.
-      if (!entry.installPath) continue;
-      roots.push({ plugin: id.split('@')[0], root: join(entry.installPath, 'skills') });
+      if (!entry.installPath) {
+        continue;
+      }
+      roots.push({
+        plugin: id.split("@")[0],
+        root: join(entry.installPath, "skills"),
+      });
     }
   }
   return roots;
@@ -1763,16 +2108,18 @@ export function pluginSkillRoots(installed: InstalledPlugins): { plugin: string;
  */
 export async function skillsIn(
   root: string,
-  scope: DiscoveredSkill['scope'],
-  prefix = '',
+  scope: DiscoveredSkill["scope"],
+  prefix = "",
   depth = 2
 ): Promise<DiscoveredSkill[]> {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   const found: DiscoveredSkill[] = [];
   for (const entry of entries) {
-    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    if (!(entry.isDirectory() || entry.isSymbolicLink())) {
+      continue;
+    }
     const path = join(root, entry.name);
-    const file = Bun.file(join(path, 'SKILL.md'));
+    const file = Bun.file(join(path, "SKILL.md"));
     if (await file.exists()) {
       const description = skillDescription(await file.text());
       found.push({
@@ -1784,22 +2131,34 @@ export async function skillsIn(
       });
       continue;
     }
-    if (depth > 1) found.push(...(await skillsIn(path, scope, prefix, depth - 1)));
+    if (depth > 1) {
+      found.push(...(await skillsIn(path, scope, prefix, depth - 1)));
+    }
   }
   return found;
 }
 
 /** Every skill on this machine, in the order Claude Code would resolve them. */
-const discoverSkills = async (cwd: string | undefined, managed: Sidecar): Promise<DiscoveredSkill[]> => {
+const discoverSkills = async (
+  cwd: string | undefined,
+  managed: Sidecar
+): Promise<DiscoveredSkill[]> => {
   const installed = (await readJson<InstalledPlugins>(INSTALLED_PLUGINS)) ?? {};
   const plugins = await Promise.all(
-    pluginSkillRoots(installed).map(({ plugin, root }) => skillsIn(root, 'plugin', `${plugin}:`))
+    pluginSkillRoots(installed).map(({ plugin, root }) =>
+      skillsIn(root, "plugin", `${plugin}:`)
+    )
   );
-  const project = cwd ? await skillsIn(join(cwd, '.claude', 'skills'), 'project') : [];
-  const user = await skillsIn(SKILLS_DIR, 'user');
+  const project = cwd
+    ? await skillsIn(join(cwd, ".claude", "skills"), "project")
+    : [];
+  const user = await skillsIn(SKILLS_DIR, "user");
   return [
     ...project,
-    ...user.map((skill) => ({ ...skill, managed: managed.skills[skill.name] !== undefined })),
+    ...user.map((skill) => ({
+      ...skill,
+      managed: managed.skills[skill.name] !== undefined,
+    })),
     ...plugins.flat(),
   ];
 };
@@ -1809,47 +2168,67 @@ const discoverSkills = async (cwd: string | undefined, managed: Sidecar): Promis
  * Nothing is written and nothing is compared against the fleet: the hub reads
  * its own rows, and this is the other half — the machine's own word.
  */
-export const inspectConfig = async (cwd?: string): Promise<ConfigInspection> => {
+export const inspectConfig = async (
+  cwd?: string
+): Promise<ConfigInspection> => {
   const managed = await readSidecar();
   const file = await readClaudeJson();
   const root = file.ok ? file.root : {};
 
-  const projects = (root.projects as Record<string, { mcpServers?: Record<string, unknown> }>) ?? {};
+  const projects =
+    (root.projects as Record<
+      string,
+      { mcpServers?: Record<string, unknown> }
+    >) ?? {};
   const local = cwd ? (projects[cwd]?.mcpServers ?? {}) : {};
   const project = cwd
-    ? ((await readJson<{ mcpServers?: Record<string, unknown> }>(join(cwd, '.mcp.json')))
-        ?.mcpServers ?? {})
+    ? ((
+        await readJson<{ mcpServers?: Record<string, unknown> }>(
+          join(cwd, ".mcp.json")
+        )
+      )?.mcpServers ?? {})
     : {};
 
   const installed = (await readJson<InstalledPlugins>(INSTALLED_PLUGINS)) ?? {};
-  const linked = (await readJson<Record<string, unknown>>(KNOWN_MARKETPLACES)) ?? {};
+  const linked =
+    (await readJson<Record<string, unknown>>(KNOWN_MARKETPLACES)) ?? {};
 
   const memoryHash = await memoryFileHash();
   const memoryFile = Bun.file(MEMORY_PATH);
-  const docs: NonNullable<ConfigInspection['memory']>['docs'] = [];
+  const docs: NonNullable<ConfigInspection["memory"]>["docs"] = [];
   for (const path of await memoryDocPaths()) {
     const doc = Bun.file(join(MEMORIES_DIR, path));
     const hash = hashText(await doc.text());
-    docs.push({ path, hash, bytes: doc.size, managed: managed.memoryDocs[path] === hash });
+    docs.push({
+      path,
+      hash,
+      bytes: doc.size,
+      managed: managed.memoryDocs[path] === hash,
+    });
   }
 
   return {
     ...(cwd ? { cwd } : {}),
     mcp: mergeMcp(
       [
-        { scope: 'local', servers: local },
-        { scope: 'project', servers: project },
-        { scope: 'user', servers: mcpServersOf(root) },
+        { scope: "local", servers: local },
+        { scope: "project", servers: project },
+        { scope: "user", servers: mcpServersOf(root) },
       ],
       managed.mcp
     ),
     skills: await discoverSkills(cwd, managed),
     plugins: Object.entries(installed.plugins ?? {})
-      .filter(([, entries]) => entries.some((entry) => entry.scope === 'user'))
+      .filter(([, entries]) => entries.some((entry) => entry.scope === "user"))
       .map(([id]) => id),
     marketplaces: Object.keys(linked),
     memory: memoryHash
-      ? { hash: memoryHash, bytes: memoryFile.size, managed: managed.memory === memoryHash, docs }
+      ? {
+          hash: memoryHash,
+          bytes: memoryFile.size,
+          managed: managed.memory === memoryHash,
+          docs,
+        }
       : null,
     at: Date.now(),
   };
@@ -1859,13 +2238,16 @@ export const inspectConfig = async (cwd?: string): Promise<ConfigInspection> => 
 const SKILL_BYTES_CAP = 2 * 1024 * 1024;
 
 /** Every file under a directory, relative to it. Symlinks are not followed. */
-const filesUnder = async (root: string, prefix = ''): Promise<string[]> => {
+const filesUnder = async (root: string, prefix = ""): Promise<string[]> => {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   const paths: string[] = [];
   for (const entry of entries) {
     const relative = `${prefix}${entry.name}`;
-    if (entry.isDirectory()) paths.push(...(await filesUnder(join(root, entry.name), `${relative}/`)));
-    else if (entry.isFile()) paths.push(relative);
+    if (entry.isDirectory()) {
+      paths.push(...(await filesUnder(join(root, entry.name), `${relative}/`)));
+    } else if (entry.isFile()) {
+      paths.push(relative);
+    }
   }
   return paths;
 };
@@ -1875,21 +2257,33 @@ const filesUnder = async (root: string, prefix = ''): Promise<string[]> => {
  * into the fleet and hand it to every other machine. Named as
  * {@link inspectConfig} named it, plugin skills included.
  */
-export const readSkillFiles = async (name: string, cwd?: string): Promise<SkillFile[]> => {
-  const skill = (await discoverSkills(cwd, await readSidecar())).find((one) => one.name === name);
-  if (!skill) throw new Error(`no skill ${name} on this machine`);
+export const readSkillFiles = async (
+  name: string,
+  cwd?: string
+): Promise<SkillFile[]> => {
+  const skill = (await discoverSkills(cwd, await readSidecar())).find(
+    (one) => one.name === name
+  );
+  if (!skill) {
+    throw new Error(`no skill ${name} on this machine`);
+  }
 
   const files: SkillFile[] = [];
   let bytes = 0;
   for (const path of await filesUnder(skill.path)) {
-    const content = new Uint8Array(await Bun.file(join(skill.path, path)).arrayBuffer());
+    const content = new Uint8Array(
+      await Bun.file(join(skill.path, path)).arrayBuffer()
+    );
     bytes += content.byteLength;
     if (bytes > SKILL_BYTES_CAP) {
       throw new Error(
         `${name} is over ${SKILL_BYTES_CAP / 1024 / 1024} MB — too big to carry to every machine`
       );
     }
-    files.push({ path, contentBase64: Buffer.from(content).toString('base64') });
+    files.push({
+      path,
+      contentBase64: Buffer.from(content).toString("base64"),
+    });
   }
   return files;
 };
@@ -1904,15 +2298,21 @@ interface MarketplaceManifest {
  * dashboard browses installable plugins with it, so a name must come back with
  * whatever the marketplace says about itself.
  */
-export const marketplaceCatalog = async (name: string): Promise<MarketplacePluginInfo[]> => {
+export const marketplaceCatalog = async (
+  name: string
+): Promise<MarketplacePluginInfo[]> => {
   const manifest = await readJson<MarketplaceManifest>(
-    join(MARKETPLACES_DIR, name, '.claude-plugin', 'marketplace.json')
+    join(MARKETPLACES_DIR, name, ".claude-plugin", "marketplace.json")
   );
-  if (!manifest) throw new Error(`no marketplace ${name} is linked on this machine`);
-  return (manifest.plugins ?? []).map(({ name: plugin, description, version, category }) => ({
-    name: plugin,
-    description,
-    version,
-    category,
-  }));
+  if (!manifest) {
+    throw new Error(`no marketplace ${name} is linked on this machine`);
+  }
+  return (manifest.plugins ?? []).map(
+    ({ name: plugin, description, version, category }) => ({
+      name: plugin,
+      description,
+      version,
+      category,
+    })
+  );
 };

@@ -1,28 +1,28 @@
 <script lang="ts">
-  import { newId } from '$lib/whiffle/id';
-  import { untrack } from 'svelte';
-  import { goto } from '$app/navigation';
-  import { toast } from 'svelte-sonner';
-  import { hookSentence } from '@whiffle/core';
-  import { IconAlert, IconHook, IconPlus, IconTrash } from '$lib/icons';
-  import { Button } from '$lib/components/ui/button';
-  import * as Card from '$lib/components/ui/card';
-  import * as Alert from '$lib/components/ui/alert';
-  import { Badge } from '$lib/components/ui/badge';
-  import { Toggle } from '$lib/components/ui/toggle';
-  import * as Tooltip from '$lib/components/ui/tooltip';
-  import { confirm } from '$lib/whiffle/confirm.svelte';
-  import { whiffle } from '$lib/whiffle/client.svelte';
+  import { hookSentence } from "@whiffle/core";
+  import { untrack } from "svelte";
+  import { toast } from "svelte-sonner";
+  import { goto } from "$app/navigation";
+  import * as Alert from "$lib/components/ui/alert";
+  import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
+  import * as Card from "$lib/components/ui/card";
+  import { Toggle } from "$lib/components/ui/toggle";
+  import * as Tooltip from "$lib/components/ui/tooltip";
+  import { IconAlert, IconHook, IconPlus, IconTrash } from "$lib/icons";
+  import { whiffle } from "$lib/whiffle/client.svelte";
+  import { confirm } from "$lib/whiffle/confirm.svelte";
   import {
     draftOf,
+    type FleetHook,
     HOOK_TEMPLATES,
     hooksOf,
     message,
     removeHook,
     saveHook,
-    type FleetHook,
-  } from '$lib/whiffle/hooks';
-  import type { PageData } from './$types';
+  } from "$lib/whiffle/hooks";
+  import { newId } from "$lib/whiffle/id";
+  import type { PageData } from "./$types";
 
   /**
    * The hook library. Each row reads as the sentence the hook actually is,
@@ -43,25 +43,35 @@
     const ok = await confirm({
       title: `Delete ${row.name}?`,
       body: "This hook stops running and is removed from every machine that had it. You can always write it again, but there's no undo.",
-      confirmLabel: 'Delete hook',
+      confirmLabel: "Delete hook",
       destructive: true,
     });
-    if (ok) await remove(row);
+    if (ok) {
+      await remove(row);
+    }
   }
 
   // Re-seed when SvelteKit hands the route a fresh load (a return from the
   // editor), without clobbering the optimistic edits made since.
   let latch = $state.raw(untrack(() => data));
   $effect(() => {
-    if (latch === data) return;
+    if (latch === data) {
+      return;
+    }
     latch = data;
     hooks = data.hooks;
   });
 
   const enabledTotal = $derived(hooks.filter((hook) => hook.enabled).length);
-  const eventsCovered = $derived(new Set(hooks.filter((hook) => hook.enabled).map((hook) => hook.event)).size);
+  const eventsCovered = $derived(
+    new Set(hooks.filter((hook) => hook.enabled).map((hook) => hook.event)).size
+  );
   const machinesApplied = $derived(
-    whiffle.machines.filter((machine) => Object.values(hooksOf(machine) ?? {}).some((state) => state.state === 'applied')).length
+    whiffle.machines.filter((machine) =>
+      Object.values(hooksOf(machine) ?? {}).some(
+        (state) => state.state === "applied"
+      )
+    ).length
   );
 
   async function toggle(row: FleetHook, enabled: boolean) {
@@ -90,15 +100,15 @@
 
   /* Quiet Ledger dressing for shadcn primitives — see routes/rules/+page.svelte. */
   const panelClass =
-    'gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--space-5)] shadow-[var(--shadow-lifted)] ring-0';
+    "gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--space-5)] shadow-[var(--shadow-lifted)] ring-0";
   const tileClass =
-    'h-full gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--c-card-pad)] shadow-[var(--shadow-lifted)] ring-0';
+    "h-full gap-0 overflow-visible rounded-[var(--radius-panel)] bg-[var(--surface-raised)] p-[var(--c-card-pad)] shadow-[var(--shadow-lifted)] ring-0";
   const btnPrimary =
-    'h-[var(--c-btn-h)] gap-[var(--c-btn-gap)] rounded-[var(--radius-control)] border-transparent bg-[var(--brand-solid)] bg-[image:var(--gradient-action)] px-[var(--c-btn-pad)] text-[length:var(--c-btn-fs)] font-medium !text-[color:var(--on-brand)] shadow-[var(--shadow-action)] hover:brightness-110';
+    "h-[var(--c-btn-h)] gap-[var(--c-btn-gap)] rounded-[var(--radius-control)] border-transparent bg-[var(--brand-solid)] bg-[image:var(--gradient-action)] px-[var(--c-btn-pad)] text-[length:var(--c-btn-fs)] font-medium !text-[color:var(--on-brand)] shadow-[var(--shadow-action)] hover:brightness-110";
   const btnQuiet =
-    'h-[var(--c-btn-h)] gap-[var(--c-btn-gap)] rounded-[var(--radius-control)] border border-[var(--border-control)] bg-[var(--surface-raised)] px-[var(--c-btn-pad)] text-[length:var(--c-btn-fs)] font-medium !text-[color:var(--ink-strong)] shadow-none hover:bg-[var(--surface-hover)]';
+    "h-[var(--c-btn-h)] gap-[var(--c-btn-gap)] rounded-[var(--radius-control)] border border-[var(--border-control)] bg-[var(--surface-raised)] px-[var(--c-btn-pad)] text-[length:var(--c-btn-fs)] font-medium !text-[color:var(--ink-strong)] shadow-none hover:bg-[var(--surface-hover)]";
   const alertDanger =
-    'rounded-[var(--radius-control)] border-[var(--error-9)] bg-[var(--error-3)] !text-[color:var(--error-11)]';
+    "rounded-[var(--radius-control)] border-[var(--error-9)] bg-[var(--error-3)] !text-[color:var(--error-11)]";
 
   async function useTemplate(template: (typeof HOOK_TEMPLATES)[number]) {
     seeding = template.title;
@@ -115,12 +125,22 @@
   }
 
   const appliedLine = (row: FleetHook): string | null => {
-    if (!row.enabled) return null;
+    if (!row.enabled) {
+      return null;
+    }
     const total = whiffle.machines.length;
-    if (total === 0) return null;
-    const applied = whiffle.machines.filter((machine) => hooksOf(machine)?.[row.id]?.state === 'applied').length;
-    const failed = whiffle.machines.filter((machine) => hooksOf(machine)?.[row.id]?.state === 'failed').length;
-    if (failed > 0) return `Applied on ${applied} of ${total} machines — ${failed} failed.`;
+    if (total === 0) {
+      return null;
+    }
+    const applied = whiffle.machines.filter(
+      (machine) => hooksOf(machine)?.[row.id]?.state === "applied"
+    ).length;
+    const failed = whiffle.machines.filter(
+      (machine) => hooksOf(machine)?.[row.id]?.state === "failed"
+    ).length;
+    if (failed > 0) {
+      return `Applied on ${applied} of ${total} machines — ${failed} failed.`;
+    }
     return `Applied on ${applied} of ${total} machines.`;
   };
 </script>
@@ -132,139 +152,146 @@
     <div class="well">
       <span class="k">{label}</span>
       <span class="v">{value}</span>
-      {#if unit}<span class="u">{unit}</span>{/if}
+      {#if unit}
+        <span class="u">{unit}</span>
+      {/if}
     </div>
   </Card.Root>
 {/snippet}
 <Tooltip.Provider>
-<div class="page">
-  <div class="col">
-    <header class="head">
-      <p class="sub">
-        Scripts and calls the fleet runs on a session's own lifecycle — before a tool call, after
-        a turn ends, when a session starts. Whiffle writes each one to every machine and keeps it
-        converged; a session is never told Whiffle is the one running it.
-      </p>
-      <Button class={btnPrimary} onclick={() => goto('/hooks/new')}>
-        <IconPlus class="shrink-0" />
-        New hook
-      </Button>
-    </header>
+  <div class="page">
+    <div class="col">
+      <header class="head">
+        <p class="sub">
+          Scripts and calls the fleet runs on a session's own lifecycle — before
+          a tool call, after a turn ends, when a session starts. Whiffle writes
+          each one to every machine and keeps it converged; a session is never
+          told Whiffle is the one running it.
+        </p>
+        <Button class={btnPrimary} onclick={() => goto('/hooks/new')}>
+          <IconPlus class="shrink-0" />
+          New hook
+        </Button>
+      </header>
 
-    <section class="stats" aria-label="Hook library at a glance">
-      {@render stat('Hooks', hooks.length)}
-      {@render stat('Enabled', enabledTotal, `of ${hooks.length}`)}
-      {@render stat('Events covered', eventsCovered, 'of 31')}
-      {@render stat('Machines applied', machinesApplied, `of ${whiffle.machines.length}`)}
-    </section>
+      <section aria-label="Hook library at a glance" class="stats">
+        {@render stat('Hooks', hooks.length)}
+        {@render stat('Enabled', enabledTotal, `of ${hooks.length}`)}
+        {@render stat('Events covered', eventsCovered, 'of 31')}
+        {@render stat('Machines applied', machinesApplied, `of ${whiffle.machines.length}`)}
+      </section>
 
-    {#if data.error}
-      <Alert.Root class={alertDanger}>
-        <Alert.Description
-          class="text-[length:var(--text-sm)] leading-[var(--leading-body)] text-[color:var(--error-11)]"
-        >
-          {data.error}
-        </Alert.Description>
-      </Alert.Root>
-    {:else if hooks.length === 0}
-      <Card.Root class={panelClass}>
-        <header class="phead">
-          <h2>Nothing runs yet</h2>
-          <span class="psub">
-            Start from one of these — they are ordinary hooks once added, and you can change every
-            part of them.
-          </span>
-        </header>
-        <div class="pbody">
-          <ul class="rows">
-            {#each HOOK_TEMPLATES as template (template.title)}
-              <li class="row">
-                <div class="rowtext">
-                  <span class="name">{template.title}</span>
-                  <span class="line">{template.blurb}</span>
-                  <span class="line">{hookSentence(template.draft)}</span>
-                </div>
-                <div class="rowactions">
-                  <Button
-                    class={btnQuiet}
-                    disabled={seeding !== null}
-                    onclick={() => useTemplate(template)}
-                  >
-                    {seeding === template.title ? 'Adding…' : 'Add'}
-                  </Button>
-                </div>
-              </li>
-            {/each}
-          </ul>
-          <div>
-            <Button class={btnQuiet} onclick={() => goto('/hooks/new')}>
-              Or write one from scratch
-            </Button>
-          </div>
-        </div>
-      </Card.Root>
-    {:else}
-      <Card.Root class={panelClass}>
-        <header class="phead">
-          <h2>Hook library</h2>
-          <span class="psub">Every hook the fleet keeps, and where it has landed</span>
-        </header>
-        <div class="pbody">
-          <ul class="rows">
-            {#each hooks as row (row.id)}
-              {@const applied = appliedLine(row)}
-              <li class="row group">
-                <div class="rowtext" class:off={!row.enabled}>
-                  <span class="name">
-                    <a href="/hooks/{row.id}">{row.name}</a>
-                    <Badge
-                      variant="outline"
-                      class="gap-[var(--space-1)] rounded-[var(--radius-pill)] px-[var(--space-2)] font-mono text-[length:var(--text-xs)] font-medium"
+      {#if data.error}
+        <Alert.Root class={alertDanger}>
+          <Alert.Description
+            class="text-[length:var(--text-sm)] leading-[var(--leading-body)] text-[color:var(--error-11)]"
+          >
+            {data.error}
+          </Alert.Description>
+        </Alert.Root>
+      {:else if hooks.length === 0}
+        <Card.Root class={panelClass}>
+          <header class="phead">
+            <h2>Nothing runs yet</h2>
+            <span class="psub">
+              Start from one of these — they are ordinary hooks once added, and
+              you can change every part of them.
+            </span>
+          </header>
+          <div class="pbody">
+            <ul class="rows">
+              {#each HOOK_TEMPLATES as template (template.title)}
+                <li class="row">
+                  <div class="rowtext">
+                    <span class="name">{template.title}</span>
+                    <span class="line">{template.blurb}</span>
+                    <span class="line">{hookSentence(template.draft)}</span>
+                  </div>
+                  <div class="rowactions">
+                    <Button
+                      class={btnQuiet}
+                      disabled={seeding !== null}
+                      onclick={() => useTemplate(template)}
                     >
-                      <IconHook class="size-3 shrink-0" />
-                      {row.event}
-                    </Badge>
-                  </span>
-                  <span class="line">{hookSentence(row)}</span>
-                  {#if applied}<span class="line">{applied}</span>{/if}
-                </div>
-                <div class="rowactions">
-                  <Toggle
-                    variant="outline"
-                    size="sm"
-                    pressed={row.enabled}
-                    disabled={busy[row.id] === true}
-                    onPressedChange={(next) => toggle(row, next)}
-                  >
-                    {row.enabled ? 'Enabled' : 'Disabled'}
-                  </Toggle>
-                  <Tooltip.Root>
-                    <Tooltip.Trigger>
-                      {#snippet child({ props })}
-                        <Button
-                          {...props}
-                          variant="ghost"
-                          size="icon"
-                          class="text-muted-foreground hover:text-destructive"
-                          disabled={busy[row.id] === true}
-                          aria-label="Delete {row.name}"
-                          onclick={() => askRemove(row)}
-                        >
-                          <IconTrash class="size-4" />
-                        </Button>
-                      {/snippet}
-                    </Tooltip.Trigger>
-                    <Tooltip.Content>Delete {row.name}</Tooltip.Content>
-                  </Tooltip.Root>
-                </div>
-              </li>
-            {/each}
-          </ul>
-        </div>
-      </Card.Root>
-    {/if}
+                      {seeding === template.title ? 'Adding…' : 'Add'}
+                    </Button>
+                  </div>
+                </li>
+              {/each}
+            </ul>
+            <div>
+              <Button class={btnQuiet} onclick={() => goto('/hooks/new')}>
+                Or write one from scratch
+              </Button>
+            </div>
+          </div>
+        </Card.Root>
+      {:else}
+        <Card.Root class={panelClass}>
+          <header class="phead">
+            <h2>Hook library</h2>
+            <span class="psub"
+              >Every hook the fleet keeps, and where it has landed</span
+            >
+          </header>
+          <div class="pbody">
+            <ul class="rows">
+              {#each hooks as row (row.id)}
+                {@const applied = appliedLine(row)}
+                <li class="row group">
+                  <div class="rowtext" class:off={!row.enabled}>
+                    <span class="name">
+                      <a href="/hooks/{row.id}">{row.name}</a>
+                      <Badge
+                        class="gap-[var(--space-1)] rounded-[var(--radius-pill)] px-[var(--space-2)] font-mono text-[length:var(--text-xs)] font-medium"
+                        variant="outline"
+                      >
+                        <IconHook class="size-3 shrink-0" />
+                        {row.event}
+                      </Badge>
+                    </span>
+                    <span class="line">{hookSentence(row)}</span>
+                    {#if applied}
+                      <span class="line">{applied}</span>
+                    {/if}
+                  </div>
+                  <div class="rowactions">
+                    <Toggle
+                      disabled={busy[row.id] === true}
+                      onPressedChange={(next) => toggle(row, next)}
+                      pressed={row.enabled}
+                      size="sm"
+                      variant="outline"
+                    >
+                      {row.enabled ? 'Enabled' : 'Disabled'}
+                    </Toggle>
+                    <Tooltip.Root>
+                      <Tooltip.Trigger>
+                        {#snippet child({ props })}
+                          <Button
+                            {...props}
+                            aria-label="Delete {row.name}"
+                            class="text-muted-foreground hover:text-destructive"
+                            disabled={busy[row.id] === true}
+                            onclick={() => askRemove(row)}
+                            size="icon"
+                            variant="ghost"
+                          >
+                            <IconTrash class="size-4" />
+                          </Button>
+                        {/snippet}
+                      </Tooltip.Trigger>
+                      <Tooltip.Content>Delete {row.name}</Tooltip.Content>
+                    </Tooltip.Root>
+                  </div>
+                </li>
+              {/each}
+            </ul>
+          </div>
+        </Card.Root>
+      {/if}
+    </div>
   </div>
-</div>
 </Tooltip.Provider>
 
 <style>
@@ -391,7 +418,7 @@
     text-decoration: none;
   }
   .name a::after {
-    content: '';
+    content: "";
     position: absolute;
     inset: 0;
   }

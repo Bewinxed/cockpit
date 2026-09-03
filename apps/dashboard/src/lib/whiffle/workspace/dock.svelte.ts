@@ -13,7 +13,7 @@
  * only the scroll offsets need carrying across, because a scrolling box is
  * destroyed with the layout box and comes back at zero.
  */
-import { SvelteMap } from 'svelte/reactivity';
+import { SvelteMap } from "svelte/reactivity";
 
 export interface Slot {
   el: HTMLElement;
@@ -24,7 +24,7 @@ export interface Slot {
 export const slots = new SvelteMap<string, Slot>();
 
 /** Which view each conversation is in. A session's, not a group's. */
-export const paneViews = $state<Record<string, 'chat' | 'flow'>>({});
+export const paneViews = $state<Record<string, "chat" | "flow">>({});
 
 /** A group's slot for one tab. Registered while the group keeps it mounted. */
 export function slot(node: HTMLElement, param: { id: string; shown: boolean }) {
@@ -32,12 +32,16 @@ export function slot(node: HTMLElement, param: { id: string; shown: boolean }) {
   slots.set(id, { el: node, shown: param.shown });
   return {
     update(next: { id: string; shown: boolean }) {
-      if (next.id !== id && slots.get(id)?.el === node) slots.delete(id);
+      if (next.id !== id && slots.get(id)?.el === node) {
+        slots.delete(id);
+      }
       id = next.id;
       slots.set(id, { el: node, shown: next.shown });
     },
     destroy() {
-      if (slots.get(id)?.el === node) slots.delete(id);
+      if (slots.get(id)?.el === node) {
+        slots.delete(id);
+      }
     },
   };
 }
@@ -55,12 +59,17 @@ const TAIL = 120;
  * slot may be a different width.
  */
 export function dock(node: HTMLElement, id: string) {
-  const scrolled = new Map<HTMLElement, { top: number; left: number; tail: boolean }>();
+  const scrolled = new Map<
+    HTMLElement,
+    { top: number; left: number; tail: boolean }
+  >();
   let focused: HTMLElement | null = null;
 
   const onscroll = (event: Event) => {
     const el = event.target;
-    if (!(el instanceof HTMLElement)) return;
+    if (!(el instanceof HTMLElement)) {
+      return;
+    }
     scrolled.set(el, {
       top: el.scrollTop,
       left: el.scrollLeft,
@@ -71,15 +80,22 @@ export function dock(node: HTMLElement, id: string) {
     focused = event.target instanceof HTMLElement ? event.target : null;
   };
   const onfocusout = (event: FocusEvent) => {
-    if (event.relatedTarget instanceof Node && !node.contains(event.relatedTarget)) focused = null;
+    if (
+      event.relatedTarget instanceof Node &&
+      !node.contains(event.relatedTarget)
+    ) {
+      focused = null;
+    }
   };
-  node.addEventListener('scroll', onscroll, { capture: true, passive: true });
-  node.addEventListener('focusin', onfocusin);
-  node.addEventListener('focusout', onfocusout);
+  node.addEventListener("scroll", onscroll, { capture: true, passive: true });
+  node.addEventListener("focusin", onfocusin);
+  node.addEventListener("focusout", onfocusout);
 
   $effect(() => {
     const into = slots.get(id)?.el;
-    if (!into || into === node.parentElement) return;
+    if (!into || into === node.parentElement) {
+      return;
+    }
     into.appendChild(node);
     for (const [el, at] of scrolled) {
       if (!el.isConnected) {
@@ -96,9 +112,9 @@ export function dock(node: HTMLElement, id: string) {
 
   return {
     destroy() {
-      node.removeEventListener('scroll', onscroll, true);
-      node.removeEventListener('focusin', onfocusin);
-      node.removeEventListener('focusout', onfocusout);
+      node.removeEventListener("scroll", onscroll, true);
+      node.removeEventListener("focusin", onfocusin);
+      node.removeEventListener("focusout", onfocusout);
     },
   };
 }

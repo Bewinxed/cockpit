@@ -1,15 +1,15 @@
 <script lang="ts">
+  import * as Collapsible from "$lib/components/ui/collapsible";
+  import { IconChevronRight, IconInfo, IconStop } from "$lib/icons";
   /**
    * The quiet ledger's non-turn lines: a command's output in a recessed well, a
    * system note folded on the rail, and a failure or refusal as a named card
    * with its handoff. Everything the transcript carries that is neither a turn
    * nor a tool call lands here.
    */
-  import type { Message } from '../types';
-  import type { HarnessNote } from './rows';
-  import * as Collapsible from '$lib/components/ui/collapsible';
-  import { IconInfo, IconChevronRight, IconStop } from '$lib/icons';
-  import MessageBody from './MessageBody.svelte';
+  import type { Message } from "../types";
+  import MessageBody from "./MessageBody.svelte";
+  import type { HarnessNote } from "./rows";
 
   let {
     message,
@@ -22,25 +22,29 @@
   }: { message?: Message; harness?: HarnessNote } = $props();
 
   const type = $derived(message?.type);
-  const isOutput = $derived(type === 'ui.command_output');
+  const isOutput = $derived(type === "ui.command_output");
   const isFail = $derived(
-    type === 'ui.error' || type === 'ui.session_error' || type === 'result.error'
+    type === "ui.error" ||
+      type === "ui.session_error" ||
+      type === "result.error"
   );
-  const isDelegateAsk = $derived(type === 'user.delegate_ask');
+  const isDelegateAsk = $derived(type === "user.delegate_ask");
   /** The operator's own stop, acknowledged — never a failure card. */
-  const isInterrupted = $derived(type === 'ui.interrupted');
+  const isInterrupted = $derived(type === "ui.interrupted");
   const title = $derived(
-    message?.metadata?.errorTitle ?? message?.metadata?.noteTitle ?? 'Note'
+    message?.metadata?.errorTitle ?? message?.metadata?.noteTitle ?? "Note"
   );
   /** A failure card's heading is never the meaningless "Note". */
-  const failTitle = $derived(message?.metadata?.errorTitle ?? 'Turn failed');
+  const failTitle = $derived(message?.metadata?.errorTitle ?? "Turn failed");
   /**
    * What the folded line SAYS. A note that carries a real title (a compaction
    * summary, a local command's name) shows that title — its content is the
    * payload, which is exactly what must never be flattened into the trigger
    * line. Only a note with no title at all falls back to its content.
    */
-  const named = $derived(!!(message?.metadata?.noteTitle || message?.metadata?.errorTitle));
+  const named = $derived(
+    !!(message?.metadata?.noteTitle || message?.metadata?.errorTitle)
+  );
   const foldTitle = $derived(named ? title : message?.content || title);
   /**
    * What opens under it. A command echo keeps its mono well; a titled note's
@@ -49,7 +53,10 @@
    */
   const foldCommand = $derived(message?.metadata?.command);
   const foldBody = $derived(
-    !foldCommand && named && message?.content && message.content.trim() !== foldTitle
+    !foldCommand &&
+      named &&
+      message?.content &&
+      message.content.trim() !== foldTitle
       ? message.content
       : undefined
   );
@@ -67,7 +74,9 @@
           <IconInfo />
           <span class="ftitle">{harness.title}</span>
           {#if harness.status}
-            <span class="hstatus" class:bad={harness.status === 'failed'}>{harness.status}</span>
+            <span class="hstatus" class:bad={harness.status === 'failed'}
+              >{harness.status}</span
+            >
           {/if}
           <span class="hchev" class:open><IconChevronRight /></span>
         </Collapsible.Trigger>
@@ -82,7 +91,9 @@
         <IconInfo />
         <span class="ftitle">{harness.title}</span>
         {#if harness.status}
-          <span class="hstatus" class:bad={harness.status === 'failed'}>{harness.status}</span>
+          <span class="hstatus" class:bad={harness.status === 'failed'}
+            >{harness.status}</span
+          >
         {/if}
       </span>
     {/if}
@@ -93,7 +104,9 @@
   <div class="note fold">
     <span class="hline">
       <IconInfo />
-      <span class="tverb" class:bad={message?.content === 'task failed'}>{message?.content}</span>
+      <span class="tverb" class:bad={message?.content === 'task failed'}
+        >{message?.content}</span
+      >
       {#if message?.metadata?.result}
         <span class="tsum">{message.metadata.result}</span>
       {/if}
@@ -117,7 +130,9 @@
   </div>
 {:else if isDelegateAsk}
   <div class="note">
-    <span class="tag"><IconInfo /> {message?.metadata?.askLabel ?? 'delegate'}</span>
+    <span class="tag"
+      ><IconInfo /> {message?.metadata?.askLabel ?? 'delegate'}</span
+    >
     <span class="body">{message?.content}</span>
   </div>
 {:else if foldCommand || foldBody}
@@ -277,13 +292,13 @@
 
   /* Same reveal as the tool rows: one 200ms collapsible vocabulary for the
      whole rail — entry on --e-in, exit on --e-out. */
-  .note :global([data-slot='collapsible-content']) {
+  .note :global([data-slot="collapsible-content"]) {
     overflow: hidden;
   }
-  .note :global([data-slot='collapsible-content'][data-state='open']) {
+  .note :global([data-slot="collapsible-content"][data-state="open"]) {
     animation: note-down calc(var(--c-100) * 2) var(--e-in);
   }
-  .note :global([data-slot='collapsible-content'][data-state='closed']) {
+  .note :global([data-slot="collapsible-content"][data-state="closed"]) {
     animation: note-up calc(var(--c-100) * 2) var(--e-out);
   }
   @keyframes note-down {
@@ -303,8 +318,8 @@
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .note :global([data-slot='collapsible-content'][data-state='open']),
-    .note :global([data-slot='collapsible-content'][data-state='closed']) {
+    .note :global([data-slot="collapsible-content"][data-state="open"]),
+    .note :global([data-slot="collapsible-content"][data-state="closed"]) {
       animation: none;
     }
   }

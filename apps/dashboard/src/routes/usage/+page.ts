@@ -1,17 +1,17 @@
-import type { PageLoad } from './$types';
 import type {
   UsageBlocksResponse,
   UsageLimitsResponse,
   UsageSummary,
-} from '$lib/whiffle/usage';
+} from "$lib/whiffle/usage";
+import type { PageLoad } from "./$types";
 
 /** The combined payload from `/api/usage/overview`. */
 interface UsageOverview {
-  limits: UsageLimitsResponse;
+  blocksClaude: UsageBlocksResponse["blocks"];
+  blocksOpenCode: UsageBlocksResponse["blocks"];
   claude: UsageSummary;
+  limits: UsageLimitsResponse;
   opencode: UsageSummary;
-  blocksClaude: UsageBlocksResponse['blocks'];
-  blocksOpenCode: UsageBlocksResponse['blocks'];
 }
 
 /**
@@ -22,13 +22,17 @@ export const load: PageLoad = async ({ fetch }) => {
   const read = async <T>(path: string): Promise<T | Error> =>
     fetch(path)
       .then(async (response) => {
-        if (!response.ok) throw new Error(`the hub answered ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`the hub answered ${response.status}`);
+        }
         return (await response.json()) as T;
       })
       .catch((error: unknown) => error as Error);
 
   // Try the combined endpoint first.
-  const overview = await read<UsageOverview>('/api/usage/overview?recentDays=3');
+  const overview = await read<UsageOverview>(
+    "/api/usage/overview?recentDays=3"
+  );
   if (!(overview instanceof Error)) {
     return {
       limits: overview.limits ?? null,
@@ -41,22 +45,28 @@ export const load: PageLoad = async ({ fetch }) => {
   }
 
   // Fallback: hub too old for /overview — five parallel calls.
-  const [limits, claude, opencode, blocksClaude, blocksOpenCode] = await Promise.all([
-    read<UsageLimitsResponse>('/api/usage/limits'),
-    read<UsageSummary>('/api/usage/summary?harness=claude&groupBy=model'),
-    read<UsageSummary>('/api/usage/summary?harness=opencode&groupBy=model'),
-    read<UsageBlocksResponse>('/api/usage/blocks?harness=claude&recentDays=3'),
-    read<UsageBlocksResponse>('/api/usage/blocks?harness=opencode&recentDays=3'),
-  ]);
+  const [limits, claude, opencode, blocksClaude, blocksOpenCode] =
+    await Promise.all([
+      read<UsageLimitsResponse>("/api/usage/limits"),
+      read<UsageSummary>("/api/usage/summary?harness=claude&groupBy=model"),
+      read<UsageSummary>("/api/usage/summary?harness=opencode&groupBy=model"),
+      read<UsageBlocksResponse>(
+        "/api/usage/blocks?harness=claude&recentDays=3"
+      ),
+      read<UsageBlocksResponse>(
+        "/api/usage/blocks?harness=opencode&recentDays=3"
+      ),
+    ]);
 
   return {
     limits: limits instanceof Error ? null : limits,
     claude: claude instanceof Error ? null : claude,
     opencode: opencode instanceof Error ? null : opencode,
     blocksClaude: blocksClaude instanceof Error ? [] : blocksClaude.blocks,
-    blocksOpenCode: blocksOpenCode instanceof Error ? [] : blocksOpenCode.blocks,
+    blocksOpenCode:
+      blocksOpenCode instanceof Error ? [] : blocksOpenCode.blocks,
     error: [limits, claude, opencode].every((r) => r instanceof Error)
-      ? 'Could not reach the hub for usage data. Check that it is running, then try again.'
+      ? "Could not reach the hub for usage data. Check that it is running, then try again."
       : null,
   };
 };

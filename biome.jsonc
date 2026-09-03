@@ -1,0 +1,76 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "extends": ["ultracite/biome/core", "ultracite/biome/svelte"],
+  "javascript": {
+    "globals": ["Bun"]
+  },
+  // Both sorters can change what the code does: JS object key order is
+  // observable through Object.keys/entries and JSON output, and a CSS
+  // longhand moved after its logical shorthand (margin-left after
+  // margin-inline) wins where it used to lose. Left off so a fix pass is
+  // formatting and safe lint fixes, never a reorder.
+  "assist": {
+    "actions": {
+      "source": {
+        "useSortedKeys": "off",
+        "useSortedProperties": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.svelte"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useFilenamingConvention": {
+              "level": "error",
+              "options": {
+                "requireAscii": true,
+                "filenameCases": ["PascalCase", "kebab-case"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // Secure-context APIs may not be reached raw from dashboard code. The
+      // dashboard is routinely served over plain http from a tailnet/LAN
+      // address, where these properties are simply absent and every raw reach
+      // throws. Each banned API has one audited wrapper that works everywhere;
+      // new secure-context APIs join this list with a wrapper of their own,
+      // never as raw call sites. Matched by property name on any object, so
+      // `globalThis.crypto.randomUUID()` and `window.navigator.clipboard` are
+      // caught the same as the bare forms.
+      "includes": [
+        "apps/dashboard/src/**",
+        "!apps/dashboard/src/lib/whiffle/id.ts",
+        "!apps/dashboard/src/lib/whiffle/copy.ts",
+        "!apps/dashboard/src/lib/hooks/use-clipboard.svelte.ts",
+        "!apps/dashboard/src/**/*.test.ts"
+      ],
+      "linter": {
+        "rules": {
+          "nursery": {
+            "noJsRestrictedProperties": {
+              "level": "error",
+              "options": {
+                "entries": [
+                  {
+                    "property": "randomUUID",
+                    "message": "Secure-context only — absent over plain http off localhost. Use newId() from $lib/whiffle/id."
+                  },
+                  {
+                    "property": "clipboard",
+                    "message": "Secure-context only. Use copyToClipboard() from $lib/whiffle/copy, or the use-clipboard hook."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

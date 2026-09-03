@@ -5,30 +5,31 @@
  * as rows of its own so it scrolls with the conversation rather than sitting in
  * fixed chrome.
  */
-import type { Message } from '../types';
-import type { SessionState } from '../client.svelte';
-import type { ToolGlance } from '../frames';
-import type { SubagentState } from '$lib/utils/flow-types';
-import type { QueuedMessage } from '@whiffle/core';
-import { ASK_USER_QUESTION } from '@whiffle/core';
+
+import type { QueuedMessage } from "@whiffle/core";
+import { ASK_USER_QUESTION } from "@whiffle/core";
+import type { SubagentState } from "$lib/utils/flow-types";
+import type { SessionState } from "../client.svelte";
+import type { ToolGlance } from "../frames";
+import type { Message } from "../types";
 
 export type Row =
-  | { kind: 'single'; key: string; message: Message }
-  | { kind: 'tools'; key: string; messages: Message[] }
-  | { kind: 'question'; key: string; message: Message }
-  | { kind: 'subagent'; key: string; branch: SubagentState; spawn: Message }
+  | { kind: "single"; key: string; message: Message }
+  | { kind: "tools"; key: string; messages: Message[] }
+  | { kind: "question"; key: string; message: Message }
+  | { kind: "subagent"; key: string; branch: SubagentState; spawn: Message }
   /** A `delegate` / `start_session` call: the fleet session it spawned, as a fold. */
-  | { kind: 'delegate'; key: string; message: Message }
-  | { kind: 'stream'; key: string; text: string }
-  | { kind: 'thinking'; key: string; text: string; live: boolean }
-  | { kind: 'livetool'; key: string; glance: ToolGlance }
+  | { kind: "delegate"; key: string; message: Message }
+  | { kind: "stream"; key: string; text: string }
+  | { kind: "thinking"; key: string; text: string; live: boolean }
+  | { kind: "livetool"; key: string; glance: ToolGlance }
   /**
    * A message the session is holding but has not started. Not a turn — it has
    * not happened — so it sits after the live tail, in the reader's own turn
    * anatomy at reduced presence, and carries no time at all.
    */
-  | { kind: 'queued'; key: string; queued: QueuedMessage }
-  | { kind: 'harness'; key: string; note: HarnessNote };
+  | { kind: "queued"; key: string; queued: QueuedMessage }
+  | { kind: "harness"; key: string; note: HarnessNote };
 
 /**
  * A harness-injected notification, parsed.
@@ -57,14 +58,14 @@ export type Row =
  * ```
  */
 export interface HarnessNote {
-  /** The `<summary>` line — what the fold says while it is closed. */
-  title: string;
-  /** `completed` / `failed` / `stopped`, or '' where the block carried none. */
-  status: string;
   /** The report itself, as markdown. Empty means there is nothing to expand. */
   body: string;
+  /** `completed` / `failed` / `stopped`, or '' where the block carried none. */
+  status: string;
   /** The `<task-id>` this notification echoes, when it named one. */
   taskId?: string;
+  /** The `<summary>` line — what the fold says while it is closed. */
+  title: string;
 }
 
 /** The inner text of the first `<tag>…</tag>`, or undefined. */
@@ -72,7 +73,8 @@ const inner = (tag: string, text: string): string | undefined =>
   new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(text)?.[1];
 
 const isReminder = (trimmed: string): boolean =>
-  trimmed.startsWith('<system-reminder>') && trimmed.endsWith('</system-reminder>');
+  trimmed.startsWith("<system-reminder>") &&
+  trimmed.endsWith("</system-reminder>");
 
 /**
  * Whether a message is harness plumbing wearing the operator's role.
@@ -85,14 +87,20 @@ const isReminder = (trimmed: string): boolean =>
  * keep the line they already had.
  */
 export function isHarnessNote(m: Message): boolean {
-  if (m.type !== 'user' && m.type !== 'ui.system_note') return false;
+  if (m.type !== "user" && m.type !== "ui.system_note") {
+    return false;
+  }
   const head = m.content.trimStart();
   // TOP-LEVEL only. `frames.ts` tests `includes` over the first 200 characters,
   // which also swallows an operator who merely WRITES the tag ("fix the
   // <task-notification> renderer") and buries their message in a fold. The
   // block either opens the message or it is prose about the block.
-  if (head.startsWith('[SYSTEM NOTIFICATION')) return true;
-  if (head.startsWith('<task-notification>')) return true;
+  if (head.startsWith("[SYSTEM NOTIFICATION")) {
+    return true;
+  }
+  if (head.startsWith("<task-notification>")) {
+    return true;
+  }
   return isReminder(m.content.trim());
 }
 
@@ -105,21 +113,28 @@ export function isHarnessNote(m: Message): boolean {
 export function parseHarnessNote(text: string): HarnessNote {
   const whole = text.trim();
   if (isReminder(whole)) {
-    return { title: 'System reminder', status: '', body: (inner('system-reminder', whole) ?? '').trim() };
+    return {
+      title: "System reminder",
+      status: "",
+      body: (inner("system-reminder", whole) ?? "").trim(),
+    };
   }
-  const title = inner('summary', text)?.trim();
-  const body = (inner('result', text) ?? '').trim();
-  if (!title && !body) return { title: 'Harness notification', status: '', body: whole };
-  const taskId = inner('task-id', text)?.trim();
+  const title = inner("summary", text)?.trim();
+  const body = (inner("result", text) ?? "").trim();
+  if (!(title || body)) {
+    return { title: "Harness notification", status: "", body: whole };
+  }
+  const taskId = inner("task-id", text)?.trim();
   return {
-    title: title || 'Harness notification',
-    status: inner('status', text)?.trim() ?? '',
+    title: title || "Harness notification",
+    status: inner("status", text)?.trim() ?? "",
     body,
     ...(taskId ? { taskId } : {}),
   };
 }
 
-const isToolMsg = (m: Message): boolean => m.type === 'tool.use' || m.type === 'tool.handoff';
+const isToolMsg = (m: Message): boolean =>
+  m.type === "tool.use" || m.type === "tool.handoff";
 
 /** A question the agent asked, rendered as its own card rather than a tool row. */
 const isQuestionMsg = (m: Message): boolean =>
@@ -131,16 +146,21 @@ const isQuestionMsg = (m: Message): boolean =>
  * instance the card follows.
  */
 const isDelegateMsg = (m: Message): boolean =>
-  m.type === 'tool.handoff' &&
-  (m.metadata?.handoffKind === 'delegate' || m.metadata?.handoffKind === 'start');
+  m.type === "tool.handoff" &&
+  (m.metadata?.handoffKind === "delegate" ||
+    m.metadata?.handoffKind === "start");
 
 /** The branch a tool.use spawned, when it opened one — a real subagent fold. */
-const branchOf = (m: Message, subagents: Record<string, SubagentState>): SubagentState | null => {
+const branchOf = (
+  m: Message,
+  subagents: Record<string, SubagentState>
+): SubagentState | null => {
   const id = m.metadata?.toolId;
   return id ? (subagents[id] ?? null) : null;
 };
 
-const keyOf = (m: Message, index: number): string => m.id ?? m.sdkUuid ?? `${m.type}:${index}`;
+const keyOf = (m: Message, index: number): string =>
+  m.id ?? m.sdkUuid ?? `${m.type}:${index}`;
 
 /**
  * The row grammar itself: a list of messages folded into rows, with no live tail
@@ -168,7 +188,9 @@ function notedTasks(messages: Message[]): Set<string> {
   const noted = new Set<string>();
   for (const m of messages) {
     const tid = notedTask(m);
-    if (tid) noted.add(tid);
+    if (tid) {
+      noted.add(tid);
+    }
   }
   return noted;
 }
@@ -196,7 +218,7 @@ function foldRange(
     const m = messages[i];
 
     if (
-      m.type === 'system.task' &&
+      m.type === "system.task" &&
       m.metadata?.taskId &&
       noted.has(m.metadata.taskId)
     ) {
@@ -208,26 +230,30 @@ function foldRange(
     // Before anything else: harness plumbing is never a turn, so it never
     // reaches the `single` row that would give it a Who header and user styling.
     if (isHarnessNote(m)) {
-      rows.push({ kind: 'harness', key: `hn:${keyOf(m, i)}`, note: parseHarnessNote(m.content) });
+      rows.push({
+        kind: "harness",
+        key: `hn:${keyOf(m, i)}`,
+        note: parseHarnessNote(m.content),
+      });
       i++;
       continue;
     }
 
     const branch = isToolMsg(m) ? branchOf(m, subagents) : null;
     if (branch) {
-      rows.push({ kind: 'subagent', key: keyOf(m, i), branch, spawn: m });
+      rows.push({ kind: "subagent", key: keyOf(m, i), branch, spawn: m });
       i++;
       continue;
     }
 
     if (isQuestionMsg(m)) {
-      rows.push({ kind: 'question', key: `q:${keyOf(m, i)}`, message: m });
+      rows.push({ kind: "question", key: `q:${keyOf(m, i)}`, message: m });
       i++;
       continue;
     }
 
     if (isDelegateMsg(m)) {
-      rows.push({ kind: 'delegate', key: `d:${keyOf(m, i)}`, message: m });
+      rows.push({ kind: "delegate", key: `d:${keyOf(m, i)}`, message: m });
       i++;
       continue;
     }
@@ -245,11 +271,15 @@ function foldRange(
         run.push(messages[i]);
         i++;
       }
-      rows.push({ kind: 'tools', key: `tools:${keyOf(run[0], start)}`, messages: run });
+      rows.push({
+        kind: "tools",
+        key: `tools:${keyOf(run[0], start)}`,
+        messages: run,
+      });
       continue;
     }
 
-    rows.push({ kind: 'single', key: keyOf(m, i), message: m });
+    rows.push({ kind: "single", key: keyOf(m, i), message: m });
     i++;
   }
 
@@ -264,13 +294,16 @@ function foldRange(
 export function branchRows(branch: SubagentState): Row[] {
   const rows = foldMessages(branch.messages, {});
   if (branch.streaming) {
-    rows.push({ kind: 'stream', key: 'branch:stream', text: branch.streaming });
+    rows.push({ kind: "stream", key: "branch:stream", text: branch.streaming });
   }
   return rows;
 }
 
 export function buildRows(session: SessionState): Row[] {
-  return [...foldMessages(session.messages, session.subagents), ...liveTail(session)];
+  return [
+    ...foldMessages(session.messages, session.subagents),
+    ...liveTail(session),
+  ];
 }
 
 /**
@@ -278,16 +311,16 @@ export function buildRows(session: SessionState): Row[] {
  * looking at the same transcript grown at the end or at a different one.
  */
 export interface FoldMemo {
-  /** The settled rows — everything before the live tail — and where each begins. */
-  rows: Row[];
-  starts: number[];
+  /** How many subagent branches were known: a new one can re-type an old row. */
+  branches: number;
   /** How many messages those rows cover, and the first and last of them. */
   count: number;
   first: Message | undefined;
   last: Message | undefined;
-  /** How many subagent branches were known: a new one can re-type an old row. */
-  branches: number;
   noted: Set<string>;
+  /** The settled rows — everything before the live tail — and where each begins. */
+  rows: Row[];
+  starts: number[];
 }
 
 /**
@@ -307,7 +340,8 @@ const sameMessage = (a: Message | undefined, b: Message | undefined): boolean =>
  * messages of their own — `mapTranscript` attaches them to the call — so
  * there is no dangling pair for a cut to split.
  */
-const opensTurn = (m: Message): boolean => m.type === 'user' && !m.parentToolUseId && !isHarnessNote(m);
+const opensTurn = (m: Message): boolean =>
+  m.type === "user" && !m.parentToolUseId && !isHarnessNote(m);
 
 /**
  * Where a fold of `messages` may restart given what `memo` was folded from,
@@ -328,10 +362,14 @@ function cutFor(messages: Message[], memo: FoldMemo, branches: number): number {
     return -1;
   }
   for (let i = memo.count; i < messages.length; i += 1) {
-    if (notedTask(messages[i])) return -1;
+    if (notedTask(messages[i])) {
+      return -1;
+    }
   }
   let cut = Math.min(memo.count, messages.length - 1);
-  while (cut > 0 && !opensTurn(messages[cut])) cut -= 1;
+  while (cut > 0 && !opensTurn(messages[cut])) {
+    cut -= 1;
+  }
   // No opener anywhere before the end is a transcript of a few lines: folded
   // whole rather than proving the cut is safe.
   return cut > 0 ? cut : -1;
@@ -367,7 +405,15 @@ export function buildRowsFrom(
     const { rows, starts } = foldRange(messages, session.subagents, 0, noted);
     return {
       rows: [...rows, ...liveTail(session)],
-      memo: { rows, starts, count: messages.length, first: messages[0], last: messages[messages.length - 1], branches, noted },
+      memo: {
+        rows,
+        starts,
+        count: messages.length,
+        first: messages[0],
+        last: messages[messages.length - 1],
+        branches,
+        noted,
+      },
       appended: false,
     };
   }
@@ -375,13 +421,19 @@ export function buildRowsFrom(
   const kept = memo;
   // Nothing new: the settled rows are the last fold's, untouched.
   if (messages.length === kept.count) {
-    return { rows: [...kept.rows, ...liveTail(session)], memo: kept, appended: true };
+    return {
+      rows: [...kept.rows, ...liveTail(session)],
+      memo: kept,
+      appended: true,
+    };
   }
   // The first row at or past the cut: an opener always begins a row, so the
   // rows before it cover exactly the messages before it.
   let keep = kept.starts.length;
   for (let r = kept.starts.length - 1; r >= 0; r -= 1) {
-    if (kept.starts[r] < cut) break;
+    if (kept.starts[r] < cut) {
+      break;
+    }
     keep = r;
   }
   const tail = foldRange(messages, session.subagents, cut, kept.noted);
@@ -389,7 +441,15 @@ export function buildRowsFrom(
   const starts = kept.starts.slice(0, keep).concat(tail.starts);
   return {
     rows: [...rows, ...liveTail(session)],
-    memo: { rows, starts, count: messages.length, first: messages[0], last: messages[messages.length - 1], branches, noted: kept.noted },
+    memo: {
+      rows,
+      starts,
+      count: messages.length,
+      first: messages[0],
+      last: messages[messages.length - 1],
+      branches,
+      noted: kept.noted,
+    },
     appended: true,
   };
 }
@@ -406,19 +466,23 @@ function liveTail(session: SessionState): Row[] {
   // (see frames.ts), so gating on thinkingStream meant "reasoning, silently,
   // with no indicator". The row itself is the indicator; the text fills in if
   // and when it arrives.
-  if (session.openBlock === 'thinking') {
+  if (session.openBlock === "thinking") {
     rows.push({
-      kind: 'thinking',
-      key: 'stream:thinking',
+      kind: "thinking",
+      key: "stream:thinking",
       text: session.thinkingStream,
       live: !session.thinkingClosing,
     });
   }
   if (session.streaming) {
-    rows.push({ kind: 'stream', key: 'stream:text', text: session.streaming });
+    rows.push({ kind: "stream", key: "stream:text", text: session.streaming });
   }
   if (session.currentTool) {
-    rows.push({ kind: 'livetool', key: 'stream:tool', glance: session.currentTool });
+    rows.push({
+      kind: "livetool",
+      key: "stream:tool",
+      glance: session.currentTool,
+    });
   }
 
   // The pending register: what the session has been handed and not started,
@@ -429,7 +493,7 @@ function liveTail(session: SessionState): Row[] {
   // Read defensively: a session shape built before this field existed — a
   // server render's stand-in, a stub — must fold to a transcript, not throw.
   for (const queued of session.queued ?? []) {
-    rows.push({ kind: 'queued', key: `qd:${queued.queueId}`, queued });
+    rows.push({ kind: "queued", key: `qd:${queued.queueId}`, queued });
   }
 
   return rows;

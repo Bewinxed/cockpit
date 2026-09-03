@@ -5,8 +5,10 @@
    * offers depends on whether the directory is registered: an ad-hoc cwd is
    * only somewhere work happens, and there is nothing to pin or to forget.
    */
-  import type { Snippet } from 'svelte';
-  import { goto } from '$app/navigation';
+  import type { Snippet } from "svelte";
+  import { goto } from "$app/navigation";
+  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import * as ContextMenu from "$lib/components/ui/context-menu";
   import {
     IconAlignLeft,
     IconChevronUp,
@@ -16,28 +18,26 @@
     IconPinFilled,
     IconPlus,
     IconTrash,
-  } from '$lib/icons';
-  import * as AlertDialog from '$lib/components/ui/alert-dialog';
-  import * as ContextMenu from '$lib/components/ui/context-menu';
-  import { deleteProject, type ProjectRow } from './client.svelte';
-  import { folderPrefs } from './folder-prefs.svelte';
-  import { HUES } from './identity';
-  import { rail } from './rail.svelte';
+  } from "$lib/icons";
+  import { deleteProject, type ProjectRow } from "./client.svelte";
+  import { folderPrefs } from "./folder-prefs.svelte";
+  import { HUES } from "./identity";
+  import { rail } from "./rail.svelte";
 
   interface Props {
-    /** What the reader calls this directory — the folder's own heading. */
-    name: string;
+    children: Snippet;
     /** The directory itself: what every preference here is keyed by. */
     cwd: string;
-    /** Set when the directory is registered; an ad-hoc cwd has none. */
-    project?: ProjectRow | null;
+    /** What the reader calls this directory — the folder's own heading. */
+    name: string;
+    /** Shut every other folder. Only the rail has folders to shut. */
+    oncollapseothers?: () => void;
     /** Start a session here, prefilled with this directory. */
     onnew: () => void;
     /** Flatten this folder's sessions into plain rows. Rail only. */
     onungroup?: () => void;
-    /** Shut every other folder. Only the rail has folders to shut. */
-    oncollapseothers?: () => void;
-    children: Snippet;
+    /** Set when the directory is registered; an ad-hoc cwd has none. */
+    project?: ProjectRow | null;
   }
 
   let {
@@ -55,13 +55,17 @@
   /** A swatch shows the colour it would apply, at the ink lightness it lands on. */
   const swatch = (hue: number) => `background: oklch(0.58 0.12 ${hue})`;
 
-  const pinned = $derived(project ? rail.isPinned('project', project.id) : false);
+  const pinned = $derived(
+    project ? rail.isPinned("project", project.id) : false
+  );
 
   let confirmingForget = $state(false);
   let busy = $state(false);
 
   async function forget() {
-    if (!project) return;
+    if (!project) {
+      return;
+    }
     busy = true;
     try {
       await deleteProject(project.id);
@@ -113,15 +117,19 @@
         <IconPalette class="size-4" />
         Customize
       </ContextMenu.SubTrigger>
-      <ContextMenu.SubContent class="w-64 rounded-[var(--radius-panel)] p-3 shadow-xl">
+      <ContextMenu.SubContent
+        class="w-64 rounded-[var(--radius-panel)] p-3 shadow-xl"
+      >
         <div class="flex items-center justify-between pb-2 pl-1">
-          <span class="text-micro font-medium text-muted-foreground">Colour</span>
+          <span class="text-micro font-medium text-muted-foreground"
+            >Colour</span
+          >
           {#if pickedHue !== undefined}
             <button
-              type="button"
               class="rounded-full px-2 py-0.5 text-micro text-muted-foreground
                      transition-colors duration-150 hover:bg-accent hover:text-foreground"
               onclick={() => folderPrefs.setHue(cwd, undefined)}
+              type="button"
             >
               Auto
             </button>
@@ -131,12 +139,12 @@
           {#each HUES as hue (hue)}
             {@const on = folderPrefs.hue(cwd) === hue}
             <button
-              type="button"
+              aria-pressed={on}
               class="flex size-8 items-center justify-center rounded-full transition-colors
                      duration-150 hover:bg-accent"
-              title="Hue {hue}{pickedHue === undefined && on ? ' (automatic)' : ''}"
-              aria-pressed={on}
               onclick={() => folderPrefs.setHue(cwd, hue)}
+              title="Hue {hue}{pickedHue === undefined && on ? ' (automatic)' : ''}"
+              type="button"
             >
               <span
                 class="size-5 rounded-full {on ? 'ring-2 ring-ring ring-offset-2 ring-offset-popover' : ''}"
@@ -157,7 +165,10 @@
 
     {#if project}
       <ContextMenu.Separator />
-      <ContextMenu.Item variant="destructive" onSelect={() => (confirmingForget = true)}>
+      <ContextMenu.Item
+        onSelect={() => (confirmingForget = true)}
+        variant="destructive"
+      >
         <IconTrash />
         Forget project…
       </ContextMenu.Item>
@@ -175,7 +186,9 @@
     </AlertDialog.Header>
     <AlertDialog.Footer>
       <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action disabled={busy} onclick={forget}>Forget</AlertDialog.Action>
+      <AlertDialog.Action disabled={busy} onclick={forget}
+        >Forget</AlertDialog.Action
+      >
     </AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>

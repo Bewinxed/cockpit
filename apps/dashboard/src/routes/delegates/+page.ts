@@ -1,5 +1,5 @@
-import type { DelegateTypesPayload } from '$lib/whiffle/delegate-types';
-import type { PageLoad } from './$types';
+import type { DelegateTypesPayload } from "$lib/whiffle/delegate-types";
+import type { PageLoad } from "./$types";
 
 /**
  * Delegate types are the hub's, so they are read through the proxy rather
@@ -8,15 +8,20 @@ import type { PageLoad } from './$types';
  * `/rules` and `/hooks` make.
  */
 export const load: PageLoad = async ({ fetch }) => {
-  const payload = await fetch('/api/delegate-types')
+  const payload = await fetch("/api/delegate-types")
     .then(async (response) => {
-      if (!response.ok) throw new Error(`the hub answered ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`the hub answered ${response.status}`);
+      }
       return (await response.json()) as DelegateTypesPayload;
     })
     .catch((error: unknown) => error as Error);
 
   return {
     types: payload instanceof Error ? [] : (payload.types ?? []),
-    error: payload instanceof Error ? `Could not read the delegate types — ${payload.message}.` : null,
+    error:
+      payload instanceof Error
+        ? `Could not read the delegate types — ${payload.message}.`
+        : null,
   };
 };

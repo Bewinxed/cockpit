@@ -18,7 +18,7 @@
  */
 
 /** Capability string a stream-speaking hub advertises in its handshake. */
-export const STREAM_V1 = 'stream.v1';
+export const STREAM_V1 = "stream.v1";
 
 /**
  * One event on a session's canonical stream. `seq` is hub-assigned, monotonic
@@ -27,11 +27,11 @@ export const STREAM_V1 = 'stream.v1';
  * of applying the delta.
  */
 export interface SessionStreamEvent {
+  /** The existing relay frame payload, verbatim. The stream orders; it does not reshape. */
+  frame: unknown;
   seq: number;
   /** The instance id — what the dashboard calls a viewId. */
   sessionId: string;
-  /** The existing relay frame payload, verbatim. The stream orders; it does not reshape. */
-  frame: unknown;
 }
 
 /**
@@ -40,9 +40,9 @@ export interface SessionStreamEvent {
  * the existing read paths as today).
  */
 export interface StreamSubscribe {
-  type: 'stream.subscribe';
-  sessionId: string;
   afterSeq?: number;
+  sessionId: string;
+  type: "stream.subscribe";
 }
 
 /**
@@ -51,9 +51,9 @@ export interface StreamSubscribe {
  * follows live deltas.
  */
 export interface StreamBacklog {
-  type: 'stream.backlog';
-  sessionId: string;
   events: SessionStreamEvent[];
+  sessionId: string;
+  type: "stream.backlog";
 }
 
 /**
@@ -62,25 +62,25 @@ export interface StreamBacklog {
  * through the existing paths, then follows from `nextSeq`.
  */
 export interface StreamReset {
-  type: 'stream.reset';
-  sessionId: string;
   nextSeq: number;
+  sessionId: string;
+  type: "stream.reset";
 }
 
 /** Hub → client, live fan-out of one sequenced event. */
 export interface StreamDelta {
-  type: 'stream.event';
   event: SessionStreamEvent;
+  type: "stream.event";
 }
 
 /** The operations a command envelope can carry — 1:1 with existing relay ops. */
 export type CommandKind =
-  | 'send'
-  | 'permission.answer'
-  | 'interrupt'
-  | 'set-model'
-  | 'set-permission-mode'
-  | 'set-effort';
+  | "send"
+  | "permission.answer"
+  | "interrupt"
+  | "set-model"
+  | "set-permission-mode"
+  | "set-effort";
 
 /**
  * Client → hub: an operator action as a durable, trackable object rather than
@@ -89,12 +89,12 @@ export type CommandKind =
  * operation takes today.
  */
 export interface CommandEnvelope {
-  type: 'command';
   commandId: string;
-  sessionId: string;
-  machineId: string;
   kind: CommandKind;
+  machineId: string;
   payload: unknown;
+  sessionId: string;
+  type: "command";
 }
 
 /**
@@ -106,14 +106,18 @@ export interface CommandEnvelope {
  * - `failed`   — terminal, with the reason a human can read.
  */
 export interface CommandAck {
-  type: 'command.ack';
   commandId: string;
-  stage: 'accepted' | 'applied' | 'failed';
   reason?: string;
+  stage: "accepted" | "applied" | "failed";
+  type: "command.ack";
 }
 
 /** Everything the stream protocol can put on the dashboard socket. */
-export type StreamServerMessage = StreamBacklog | StreamReset | StreamDelta | CommandAck;
+export type StreamServerMessage =
+  | StreamBacklog
+  | StreamReset
+  | StreamDelta
+  | CommandAck;
 export type StreamClientMessage = StreamSubscribe | CommandEnvelope;
 
 // ---------------------------------------------------------------------------
@@ -149,7 +153,6 @@ export interface IngestMark {
 
 /** `register`'s ack, with the ledger the returning agent reattaches against. */
 export interface RegisterAckPayload {
-  ok: true;
   /**
    * Per instance id. ABSENT from a hub that predates this — which is not an
    * empty ledger: the difference is what stops an agent replaying a backlog
@@ -158,10 +161,13 @@ export interface RegisterAckPayload {
    * anyway.
    */
   ingested?: Record<string, IngestMark>;
+  ok: true;
 }
 
 const record = (value: unknown): Record<string, unknown> | undefined =>
-  typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
+  typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
 
 /**
  * A frame's provenance, read from either the envelope or its payload.
@@ -172,15 +178,25 @@ const record = (value: unknown): Record<string, unknown> | undefined =>
  * thing. Anything malformed reads as absent, never as seq 0: an invented mark
  * is the one outcome the ledger exists to forbid.
  */
-export const readProvenance = (message: unknown): FrameProvenance | undefined => {
+export const readProvenance = (
+  message: unknown
+): FrameProvenance | undefined => {
   const outer = record(message);
-  if (!outer) return undefined;
+  if (!outer) {
+    return undefined;
+  }
   for (const source of [outer, record(outer.payload)]) {
-    if (!source) continue;
+    if (!source) {
+      continue;
+    }
     const srcEpoch = source.srcEpoch;
     const srcSeq = source.srcSeq;
-    if (typeof srcEpoch !== 'string' || srcEpoch.length === 0) continue;
-    if (typeof srcSeq !== 'number' || !Number.isInteger(srcSeq) || srcSeq < 1) continue;
+    if (typeof srcEpoch !== "string" || srcEpoch.length === 0) {
+      continue;
+    }
+    if (typeof srcSeq !== "number" || !Number.isInteger(srcSeq) || srcSeq < 1) {
+      continue;
+    }
     return { srcEpoch, srcSeq };
   }
   return undefined;
@@ -191,16 +207,24 @@ export const readProvenance = (message: unknown): FrameProvenance | undefined =>
  * old-shape ack is tolerated, never fatal, and leaves every instance following
  * from head (design §7's honest-loss rule).
  */
-export const readIngested = (payload: unknown): Record<string, IngestMark> | undefined => {
+export const readIngested = (
+  payload: unknown
+): Record<string, IngestMark> | undefined => {
   const marks = record(record(payload)?.ingested);
-  if (!marks) return undefined;
+  if (!marks) {
+    return undefined;
+  }
   const read: Record<string, IngestMark> = {};
   for (const [instanceId, value] of Object.entries(marks)) {
     const mark = record(value);
     const epoch = mark?.epoch;
     const srcSeq = mark?.srcSeq;
-    if (typeof epoch !== 'string' || epoch.length === 0) continue;
-    if (typeof srcSeq !== 'number' || !Number.isInteger(srcSeq) || srcSeq < 0) continue;
+    if (typeof epoch !== "string" || epoch.length === 0) {
+      continue;
+    }
+    if (typeof srcSeq !== "number" || !Number.isInteger(srcSeq) || srcSeq < 0) {
+      continue;
+    }
     read[instanceId] = { epoch, srcSeq };
   }
   return read;
@@ -222,7 +246,9 @@ export const resumeCursor = (
   epoch: string | undefined,
   mark: IngestMark | undefined
 ): number | undefined =>
-  mark !== undefined && epoch !== undefined && mark.epoch === epoch ? mark.srcSeq : undefined;
+  mark !== undefined && epoch !== undefined && mark.epoch === epoch
+    ? mark.srcSeq
+    : undefined;
 
 /**
  * AT MOST ONCE, per (instanceId, epoch, srcSeq): whether this line has already

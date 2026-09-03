@@ -26,8 +26,8 @@
  * integrated once and handed to the compositor as keyframes. When it lands
  * the inline transforms are cleared and the parking places take over.
  */
-import { flushSync } from 'svelte';
-import { workspace } from './workspace.svelte';
+import { flushSync } from "svelte";
+import { workspace } from "./workspace.svelte";
 
 /** Travel before a drag is anything at all. */
 const SLOP = 10;
@@ -44,13 +44,13 @@ const RESIST_MAX = 0.25;
 const SETTLE = 0.4;
 const BOUNCE = 0;
 const MASS = 1;
-const STIFFNESS = (2 * Math.PI / SETTLE) ** 2;
+const STIFFNESS = ((2 * Math.PI) / SETTLE) ** 2;
 const DAMPING = (4 * Math.PI * (1 - BOUNCE)) / SETTLE;
 const STEP = 1 / 120;
 const MAX_SETTLE = 1.5;
 const KEYFRAME_MS = 8;
 
-type Phase = 'idle' | 'tracking' | 'decided';
+type Phase = "idle" | "tracking" | "decided";
 /** One point of the integrated settle: seconds since release, px, px/s. */
 type Sample = { t: number; x: number; v: number };
 /** A pane in view: its element and its distance from the active tab. */
@@ -61,8 +61,12 @@ type Pane = { el: HTMLElement; delta: number };
  * does. Asked once, at the start, against the element the finger landed on.
  */
 function fenced(target: EventTarget | null, fence: HTMLElement): boolean {
-  if (!(target instanceof HTMLElement)) return true;
-  if (!fence.contains(target)) return true;
+  if (!(target instanceof HTMLElement)) {
+    return true;
+  }
+  if (!fence.contains(target)) {
+    return true;
+  }
   if (
     target.closest(
       'button, a, input, textarea, select, [contenteditable="true"], ' +
@@ -79,7 +83,7 @@ function fenced(target: EventTarget | null, fence: HTMLElement): boolean {
   while (node && node !== fence) {
     const overflowX = getComputedStyle(node).overflowX;
     if (
-      (overflowX === 'auto' || overflowX === 'scroll') &&
+      (overflowX === "auto" || overflowX === "scroll") &&
       node.scrollWidth - node.clientWidth > 4
     ) {
       return true;
@@ -94,8 +98,10 @@ function fenced(target: EventTarget | null, fence: HTMLElement): boolean {
  * and capturing it once would bind the gesture to whichever group this
  * component happened to render first.
  */
-export function createSwipe(leafOf: () => string | undefined = () => undefined) {
-  let phase = $state<Phase>('idle');
+export function createSwipe(
+  leafOf: () => string | undefined = () => undefined
+) {
+  let phase = $state<Phase>("idle");
   /** The neighbour the finger is uncovering, and whether it is past the commit point. */
   let targetId = $state<string | null>(null);
   let past = $state(false);
@@ -121,8 +127,8 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
   let held: number | null = null;
 
   const reduced = () =>
-    typeof window !== 'undefined' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /** The tabs either side of the active one, in strip order and without wrapping. */
   const neighbours = () => {
@@ -137,11 +143,15 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
   };
 
   const gather = (): Pane[] => {
-    if (!root) return [];
+    if (!root) {
+      return [];
+    }
     const found: Pane[] = [];
-    for (const el of root.querySelectorAll<HTMLElement>('[data-pane]')) {
+    for (const el of root.querySelectorAll<HTMLElement>("[data-pane]")) {
       const delta = Number(el.dataset.delta);
-      if (Math.abs(delta) <= 1) found.push({ el, delta });
+      if (Math.abs(delta) <= 1) {
+        found.push({ el, delta });
+      }
     }
     return found;
   };
@@ -150,18 +160,24 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
   const rest = (delta: number) => delta * width;
 
   const paint = (x: number) => {
-    for (const { el, delta } of panes) el.style.transform = `translate3d(${rest(delta) + x}px, 0, 0)`;
+    for (const { el, delta } of panes) {
+      el.style.transform = `translate3d(${rest(delta) + x}px, 0, 0)`;
+    }
   };
 
   const clear = () => {
-    for (const { el } of panes) el.style.transform = '';
+    for (const { el } of panes) {
+      el.style.transform = "";
+    }
   };
 
   const resist = (d: number) =>
     Math.sign(d) * Math.min(Math.abs(d) * RESIST, width * RESIST_MAX);
 
   const stopSettle = () => {
-    for (const animation of animations) animation.cancel();
+    for (const animation of animations) {
+      animation.cancel();
+    }
     animations = [];
   };
 
@@ -176,11 +192,17 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
   const progress = (): Sample | null => {
     const animation = animations[panes.findIndex((pane) => pane.delta === 0)];
     const at = animation?.currentTime;
-    if (typeof at !== 'number' || path.length === 0) return null;
+    if (typeof at !== "number" || path.length === 0) {
+      return null;
+    }
     const now = at / 1000;
     const i = path.findIndex((sample) => sample.t >= now);
-    if (i < 0) return path[path.length - 1];
-    if (i === 0) return path[0];
+    if (i < 0) {
+      return path[path.length - 1];
+    }
+    if (i === 0) {
+      return path[0];
+    }
     const a = path[i - 1];
     const b = path[i];
     const f = (now - a.t) / (b.t - a.t);
@@ -200,7 +222,9 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
       t += STEP;
       const done = (Math.abs(x) < 0.5 && Math.abs(v) < 20) || t >= MAX_SETTLE;
       out.push(done ? { t, x: 0, v: 0 } : { t, x, v });
-      if (done) return out;
+      if (done) {
+        return out;
+      }
     }
   };
 
@@ -212,7 +236,9 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
 
     const kept: Sample[] = [path[0]];
     for (let i = 1; i < path.length - 1; i++) {
-      if ((path[i].t - kept[kept.length - 1].t) * 1000 >= KEYFRAME_MS) kept.push(path[i]);
+      if ((path[i].t - kept[kept.length - 1].t) * 1000 >= KEYFRAME_MS) {
+        kept.push(path[i]);
+      }
     }
     kept.push(path[path.length - 1]);
 
@@ -222,7 +248,7 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
           transform: `translate3d(${rest(delta) + sample.x}px, 0, 0)`,
           offset: sample.t / duration,
         })),
-        { duration: duration * 1000, easing: 'linear', fill: 'forwards' }
+        { duration: duration * 1000, easing: "linear", fill: "forwards" }
       )
     );
     const active = animations[panes.findIndex((pane) => pane.delta === 0)];
@@ -236,7 +262,9 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
     const mine = animations;
     active.finished.then(
       () => {
-        if (animations === mine) land();
+        if (animations === mine) {
+          land();
+        }
       },
       () => {}
     );
@@ -244,7 +272,9 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
 
   /** A finger landing on a settling pane stops it where it is. */
   function hold() {
-    if (animations.length === 0) return;
+    if (animations.length === 0) {
+      return;
+    }
     const at = progress();
     stopSettle();
     if (!at) {
@@ -258,7 +288,9 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
 
   /** The finger that stopped the settle left without moving it: let it go on. */
   function resume() {
-    if (held === null) return;
+    if (held === null) {
+      return;
+    }
     const velocity = held;
     held = null;
     spring(velocity);
@@ -266,7 +298,9 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
 
   /** Release velocity in px/ms, from the last few samples. */
   const releaseVelocity = () => {
-    if (samples.length < 2) return 0;
+    if (samples.length < 2) {
+      return 0;
+    }
     const first = samples[0];
     const last = samples[samples.length - 1];
     const dt = last.t - first.t;
@@ -281,7 +315,7 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
     const far = width > 0 && Math.abs(offset) / width > COMMIT;
     const flicked = left ? velocity < -FLICK : velocity > FLICK;
 
-    phase = 'idle';
+    phase = "idle";
     targetId = null;
     past = false;
     if (allowed && target && (far || flicked)) {
@@ -322,7 +356,9 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
      * showing something the settle is about to contradict.
      */
     get previewId(): string | null {
-      if (phase === 'idle' || !targetId) return null;
+      if (phase === "idle" || !targetId) {
+        return null;
+      }
       return past ? targetId : null;
     },
 
@@ -334,37 +370,48 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
      * a directive cannot be applied conditionally — and detaching listeners
      * mid-gesture would strand the state machine part-way through a drag.
      */
-    action(node: HTMLElement, enabled: boolean = true) {
+    action(node: HTMLElement, enabled = true) {
       let live = enabled;
       root = node;
 
       /** Stand down: whatever was under the finger goes back to its place. */
       const standDown = () => {
-        if (phase === 'decided') release(false);
-        else if (phase === 'tracking') resume();
-        phase = 'idle';
+        if (phase === "decided") {
+          release(false);
+        } else if (phase === "tracking") {
+          resume();
+        }
+        phase = "idle";
       };
 
       const onStart = (event: TouchEvent) => {
-        if (!live) return;
+        if (!live) {
+          return;
+        }
         // A second finger means the deck's gesture, not this one: stand down
         // and put the pane back before the pair is claimed.
         if (event.touches.length > 1) {
           standDown();
           return;
         }
-        if (phase !== 'idle' || event.touches.length !== 1) return;
-        if (fenced(event.target, node)) return;
+        if (phase !== "idle" || event.touches.length !== 1) {
+          return;
+        }
+        if (fenced(event.target, node)) {
+          return;
+        }
         const touch = event.touches[0];
         startX = touch.clientX;
         startY = touch.clientY;
         samples = [{ x: touch.clientX, t: performance.now() }];
-        phase = 'tracking';
+        phase = "tracking";
         hold();
       };
 
       const onMove = (event: TouchEvent) => {
-        if (phase !== 'tracking' && phase !== 'decided') return;
+        if (phase !== "tracking" && phase !== "decided") {
+          return;
+        }
         if (event.touches.length !== 1) {
           standDown();
           return;
@@ -374,19 +421,23 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
         const dy = touch.clientY - startY;
 
         samples.push({ x: touch.clientX, t: performance.now() });
-        if (samples.length > 5) samples.shift();
+        if (samples.length > 5) {
+          samples.shift();
+        }
 
         const { prev, next } = neighbours();
-        if (phase === 'tracking') {
-          if (Math.abs(dx) < SLOP && Math.abs(dy) < SLOP) return;
+        if (phase === "tracking") {
+          if (Math.abs(dx) < SLOP && Math.abs(dy) < SLOP) {
+            return;
+          }
           if (Math.abs(dy) > Math.abs(dx) * SLOPE) {
             // A scroll. Stand down for the rest of this touch.
             resume();
-            phase = 'idle';
+            phase = "idle";
             return;
           }
-          if (!prev && !next) {
-            phase = 'idle';
+          if (!(prev || next)) {
+            phase = "idle";
             return;
           }
           // Taking hold mid-settle picks the pane up where the finger
@@ -395,35 +446,40 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
           base = offset;
           width = node.clientWidth;
           panes = gather();
-          phase = 'decided';
+          phase = "decided";
         }
 
         // Claimed: the page owns this gesture now, so the browser must not
         // also scroll with it.
         event.preventDefault();
         const open = base + dx < 0 ? next : prev;
-        offset = open ? Math.max(-width, Math.min(width, base + dx)) : base + resist(dx);
+        offset = open
+          ? Math.max(-width, Math.min(width, base + dx))
+          : base + resist(dx);
         paint(offset);
         targetId = offset < 0 ? next : offset > 0 ? prev : null;
         past = width > 0 && Math.abs(offset) / width > COMMIT;
       };
 
       const onEnd = () => {
-        if (phase === 'decided') release(true);
-        else if (phase === 'tracking') resume();
-        phase = 'idle';
+        if (phase === "decided") {
+          release(true);
+        } else if (phase === "tracking") {
+          resume();
+        }
+        phase = "idle";
       };
 
-      node.addEventListener('touchstart', onStart, { passive: true });
-      node.addEventListener('touchmove', onMove, { passive: false });
-      node.addEventListener('touchend', onEnd, { passive: true });
-      node.addEventListener('touchcancel', standDown, { passive: true });
+      node.addEventListener("touchstart", onStart, { passive: true });
+      node.addEventListener("touchmove", onMove, { passive: false });
+      node.addEventListener("touchend", onEnd, { passive: true });
+      node.addEventListener("touchcancel", standDown, { passive: true });
 
       return {
         update(next: boolean) {
           live = next;
-          if (!next && phase !== 'idle') {
-            phase = 'idle';
+          if (!next && phase !== "idle") {
+            phase = "idle";
             targetId = null;
             past = false;
             held = null;
@@ -433,10 +489,10 @@ export function createSwipe(leafOf: () => string | undefined = () => undefined) 
         destroy() {
           stopSettle();
           root = null;
-          node.removeEventListener('touchstart', onStart);
-          node.removeEventListener('touchmove', onMove);
-          node.removeEventListener('touchend', onEnd);
-          node.removeEventListener('touchcancel', standDown);
+          node.removeEventListener("touchstart", onStart);
+          node.removeEventListener("touchmove", onMove);
+          node.removeEventListener("touchend", onEnd);
+          node.removeEventListener("touchcancel", standDown);
         },
       };
     },

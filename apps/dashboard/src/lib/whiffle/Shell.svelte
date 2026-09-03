@@ -7,31 +7,32 @@
    * On a phone the rail is a sheet the bar's burger opens; on a desktop it is a
    * resizable column whose width is this browser's, not the fleet's.
    */
-  import { onMount } from 'svelte';
-  import { browser } from '$app/environment';
-  import { afterNavigate } from '$app/navigation';
-  import { page } from '$app/state';
-  import * as Sheet from '$lib/components/ui/sheet';
-  import ThemeSwitcher from '$lib/components/ui/ThemeSwitcher.svelte';
-  import { Button } from '$lib/components/ui/button';
-  import { IconSearch, IconShield, IconSidebar } from '$lib/icons';
-  import { isTyping } from '$lib/utils/typing';
-  import { TextMorph } from 'torph/svelte';
-  import { whiffle, hubSocketUrl, reconnectNow } from './client.svelte';
-  import JumpPalette from './JumpPalette.svelte';
-  import ConfirmDialog from './ConfirmDialog.svelte';
-  import Sidebar from './Sidebar.svelte';
-  import { workspace } from './workspace/workspace.svelte';
-  import UsageMeter from './UsageMeter.svelte';
-  import AssistantOrb from './assistant/AssistantOrb.svelte';
-  import AssistantPanel from './assistant/AssistantPanel.svelte';
+  import { onMount } from "svelte";
+  import { TextMorph } from "torph/svelte";
+  import { browser } from "$app/environment";
+  import { afterNavigate } from "$app/navigation";
+  import { page } from "$app/state";
+  import { Button } from "$lib/components/ui/button";
+  import * as Sheet from "$lib/components/ui/sheet";
+  import ThemeSwitcher from "$lib/components/ui/ThemeSwitcher.svelte";
+  import { IconSearch, IconShield, IconSidebar } from "$lib/icons";
+  import { isTyping } from "$lib/utils/typing";
+  import AssistantOrb from "./assistant/AssistantOrb.svelte";
+  import AssistantPanel from "./assistant/AssistantPanel.svelte";
+  import ConfirmDialog from "./ConfirmDialog.svelte";
+  import { hubSocketUrl, reconnectNow, whiffle } from "./client.svelte";
+  import JumpPalette from "./JumpPalette.svelte";
+  import Sidebar from "./Sidebar.svelte";
+  import UsageMeter from "./UsageMeter.svelte";
+  import { workspace } from "./workspace/workspace.svelte";
 
-  const RAIL_KEY = 'whiffle-rail-width';
+  const RAIL_KEY = "whiffle-rail-width";
   const RAIL_MIN = 216;
   const RAIL_MAX = 520;
   const RAIL_DEFAULT = 340;
 
-  const clamp = (px: number) => Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(px || RAIL_DEFAULT)));
+  const clamp = (px: number) =>
+    Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(px || RAIL_DEFAULT)));
 
   let {
     children,
@@ -39,7 +40,7 @@
      *  +layout.server.ts) so the first paint is already the resolved width —
      *  the rail no longer renders the default and jumps on hydration. */
     railWidth: initialRailWidth = RAIL_DEFAULT,
-  }: { children: import('svelte').Snippet; railWidth?: number } = $props();
+  }: { children: import("svelte").Snippet; railWidth?: number } = $props();
 
   let railWidth = $state(clamp(initialRailWidth));
   let jumpOpen = $state(false);
@@ -71,7 +72,7 @@
     // The one place the width is applied. `--sidebar-width` resolves through it
     // (see the shell's inline style), so the value the inline script established
     // is replaced rather than fought with.
-    document.documentElement.style.setProperty('--rail-w', `${railWidth}px`);
+    document.documentElement.style.setProperty("--rail-w", `${railWidth}px`);
     try {
       localStorage.setItem(RAIL_KEY, String(railWidth));
       document.cookie = `${RAIL_KEY}=${railWidth};path=/;max-age=31536000;samesite=lax`;
@@ -85,28 +86,28 @@
     handle.setPointerCapture(event.pointerId);
     const move = (e: PointerEvent) => setRail(e.clientX);
     const stop = () => {
-      handle.removeEventListener('pointermove', move);
-      handle.removeEventListener('pointerup', stop);
-      handle.removeEventListener('pointercancel', stop);
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", stop);
+      handle.removeEventListener("pointercancel", stop);
     };
-    handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', stop);
-    handle.addEventListener('pointercancel', stop);
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", stop);
+    handle.addEventListener("pointercancel", stop);
   }
 
   function resizeKey(event: KeyboardEvent) {
     const step = event.shiftKey ? 32 : 8;
     switch (event.key) {
-      case 'ArrowLeft':
+      case "ArrowLeft":
         setRail(railWidth - step);
         break;
-      case 'ArrowRight':
+      case "ArrowRight":
         setRail(railWidth + step);
         break;
-      case 'Home':
+      case "Home":
         setRail(RAIL_MIN);
         break;
-      case 'End':
+      case "End":
         setRail(RAIL_MAX);
         break;
       default:
@@ -121,10 +122,14 @@
   });
 
   function shortcut(event: KeyboardEvent) {
-    if (!(event.metaKey || event.ctrlKey)) return;
-    if (isTyping()) return;
+    if (!(event.metaKey || event.ctrlKey)) {
+      return;
+    }
+    if (isTyping()) {
+      return;
+    }
     const key = event.key.toLowerCase();
-    if (key === 'k') {
+    if (key === "k") {
       event.preventDefault();
       jumpOpen = !jumpOpen;
       return;
@@ -133,26 +138,32 @@
     // half. `mod+\` is the binding VS Code uses for exactly this, and this is
     // a straight copy of that model — borrowing the gesture's name too costs
     // nothing and saves the reader learning a second one.
-    if (key === '\\' && onSession) {
+    if (key === "\\" && onSession) {
       const here = workspace.activeSessionId;
-      if (!here || workspace.openIds.length < 2) return;
+      if (!here || workspace.openIds.length < 2) {
+        return;
+      }
       event.preventDefault();
-      workspace.split(workspace.focusedLeafId, event.shiftKey ? 'bottom' : 'right', here);
+      workspace.split(
+        workspace.focusedLeafId,
+        event.shiftKey ? "bottom" : "right",
+        here
+      );
     }
   }
 
   const limits = $derived(whiffle.usageLimitsAny());
-  const onSession = $derived(page.url.pathname.startsWith('/session'));
+  const onSession = $derived(page.url.pathname.startsWith("/session"));
 
   /** Which section the bar names, for the readers who arrived by URL. */
   const crumb = $derived.by(() => {
-    const [section] = page.url.pathname.split('/').filter(Boolean);
+    const [section] = page.url.pathname.split("/").filter(Boolean);
     switch (section) {
       case undefined:
-      case 'session':
-        return 'Fleet';
-      case 'project':
-        return 'Project';
+      case "session":
+        return "Fleet";
+      case "project":
+        return "Project";
       default:
         return section[0].toUpperCase() + section.slice(1);
     }
@@ -165,7 +176,9 @@
    */
   let everConnected = $state(false);
   $effect(() => {
-    if (whiffle.status === 'connected') everConnected = true;
+    if (whiffle.status === "connected") {
+      everConnected = true;
+    }
   });
 
   /**
@@ -194,11 +207,15 @@
   });
   const showBanner = $derived.by(() => {
     const s = whiffle.status;
-    if (s === 'connected') return false;
+    if (s === "connected") {
+      return false;
+    }
     // A socket that errored or was declared disconnected is a known fault —
     // show the banner once the grace has elapsed or the attempt has failed,
     // without requiring a prior successful connection.
-    if (s === 'disconnected' || s === 'error') return whiffle.connectFailed || graceOver;
+    if (s === "disconnected" || s === "error") {
+      return whiffle.connectFailed || graceOver;
+    }
     // `connecting` is the transient every cold load passes through. Show the
     // banner only when a prior connection has been lost and the grace elapsed.
     return everConnected && graceOver;
@@ -208,7 +225,9 @@
   // never looks stuck and slow enough to cost nothing.
   let now = $state(Date.now());
   $effect(() => {
-    if (whiffle.status === 'connected') return;
+    if (whiffle.status === "connected") {
+      return;
+    }
     const timer = setInterval(() => (now = Date.now()), 250);
     return () => clearInterval(timer);
   });
@@ -229,21 +248,21 @@
   <aside class="rail hidden min-[900px]:flex">
     <Sidebar />
     <div
-      class="grip"
-      role="slider"
-      aria-orientation="vertical"
       aria-label="Resize sidebar"
-      aria-valuenow={railWidth}
-      aria-valuemin={RAIL_MIN}
+      aria-orientation="vertical"
       aria-valuemax={RAIL_MAX}
-      tabindex="0"
-      onpointerdown={startDrag}
+      aria-valuemin={RAIL_MIN}
+      aria-valuenow={railWidth}
+      class="grip"
       onkeydown={resizeKey}
+      onpointerdown={startDrag}
+      role="slider"
+      tabindex="0"
     ></div>
   </aside>
 
   <Sheet.Root bind:open={railOpen}>
-    <Sheet.Content side="left" class="w-[284px] p-0 min-[900px]:hidden">
+    <Sheet.Content class="w-[284px] p-0 min-[900px]:hidden" side="left">
       <Sheet.Header class="sr-only">
         <Sheet.Title>Navigation</Sheet.Title>
       </Sheet.Header>
@@ -254,26 +273,31 @@
   <div class="main">
     <header class="top">
       <button
-        type="button"
-        class="burger min-[900px]:hidden"
         aria-label="Open navigation"
+        class="burger min-[900px]:hidden"
         onclick={() => (railOpen = true)}
+        type="button"
       >
         <IconSidebar />
       </button>
       <!-- The one "where am I" label, now visible at every width — the brand
            lives in the rail, and the crumb is what the top bar owes a reader
            who arrived by URL. -->
-      <TextMorph text={crumb} class="crumb" as="span" duration={150} />
+      <TextMorph as="span" class="crumb" duration={150} text={crumb} />
 
       <div class="right">
         <!-- Desktop budget and fleet status — phone shows UsageMeter instead. -->
         {#if limits && whiffle.status === 'connected'}
-          <span class="desk-budget hidden min-[900px]:flex" title="Today's spend vs. limit">
+          <span
+            class="desk-budget hidden min-[900px]:flex"
+            title="Today's spend vs. limit"
+          >
             <span class="desk-budget-text">
               Today ${(limits.spendUsed ?? 0).toFixed(2)}
               {#if limits.spendLimit !== null}
-                <span class="desk-budget-cap">/ ${limits.spendLimit.toFixed(0)}</span>
+                <span class="desk-budget-cap"
+                  >/ ${limits.spendLimit.toFixed(0)}</span
+                >
               {/if}
             </span>
             {#if limits.spendLimit !== null && limits.spendLimit > 0}
@@ -281,9 +305,9 @@
               <span class="desk-budget-bar">
                 <span
                   class="desk-budget-fill"
-                  class:warn={pct >= 70 && pct < 90}
-                  class:critical={pct >= 90}
                   style="width: {pct}%"
+                  class:critical={pct >= 90}
+                  class:warn={pct >= 70 && pct < 90}
                 ></span>
               </span>
             {/if}
@@ -292,33 +316,38 @@
 
         {#if whiffle.status === 'connected' && whiffle.machines.length > 0}
           <span class="desk-machines hidden min-[900px]:inline">
-            {whiffle.onlineMachines.length} machine{whiffle.onlineMachines.length === 1 ? '' : 's'}
+            {whiffle.onlineMachines.length}
+            machine{whiffle.onlineMachines.length === 1 ? '' : 's'}
           </span>
         {/if}
 
         <!-- Jump is a single entry: the one command surface the top bar opens.
              The old phone thumb bar duplicated it; that bar is gone. -->
         <Button
-          variant="outline"
-          size="sm"
           class="jump"
           onclick={() => (jumpOpen = true)}
+          size="sm"
           title="Jump to session (⌘K)"
+          variant="outline"
         >
           <IconSearch />
           <span class="hidden sm:inline">Jump</span>
         </Button>
         <span class="min-[900px]:hidden"><UsageMeter /></span>
         {#if whiffle.blockedCount > 0}
-          <a class="icobtn" href="/session" title="{whiffle.blockedCount} waiting on you">
+          <a
+            class="icobtn"
+            href="/session"
+            title="{whiffle.blockedCount} waiting on you"
+          >
             <IconShield />
             <span class="badge">{whiffle.blockedCount}</span>
           </a>
         {/if}
         <AssistantOrb
-          bind:ref={orbEl}
-          open={assistantOpen}
           onclick={() => (assistantOpen = !assistantOpen)}
+          open={assistantOpen}
+          bind:ref={orbEl}
         />
         <!-- No always-on hub dot: a green light that is green 99% of the time
              says nothing. Connection health folds into the banner below, which
@@ -333,10 +362,14 @@
       <div class="banner {everConnected ? 'warn' : 'bad'}" role="status">
         {#if everConnected}
           <span>Hub connection lost — retrying in {retryIn}s</span>
-          <Button variant="outline" size="sm" onclick={reconnectNow}>Reconnect</Button>
+          <Button onclick={reconnectNow} size="sm" variant="outline"
+            >Reconnect</Button
+          >
         {:else}
           <span>Can't reach the hub at <code>{hubSocketUrl()}</code></span>
-          <Button variant="outline" size="sm" onclick={reconnectNow}>Retry</Button>
+          <Button onclick={reconnectNow} size="sm" variant="outline"
+            >Retry</Button
+          >
         {/if}
       </div>
     {/if}
@@ -345,7 +378,7 @@
          session route the composer owns its own bottom inset; everywhere else
          the scroll region pads the home-indicator safe area itself so the last
          row is never tucked under it. -->
-    <main id="main-content" class="content" class:safe={!onSession}>
+    <main class="content" id="main-content" class:safe={!onSession}>
       {@render children()}
     </main>
   </div>
@@ -355,7 +388,7 @@
 <!-- One dialog for every destructive confirm in the app (see confirm.svelte.ts). -->
 <ConfirmDialog />
 
-<AssistantPanel bind:open={assistantOpen} {orbEl} />
+<AssistantPanel {orbEl} bind:open={assistantOpen} />
 
 <style>
   .skip {

@@ -10,11 +10,12 @@
  *
  * Run with `bun sandbox-proof.ts`.
  */
-import { claudeHarness } from './src/harnesses/claude';
-import type { HarnessContext, HarnessSession } from './src/harness';
-import type { NeutralMessage } from '@whiffle/core';
 
-const PROOF_DIR = '/tmp/sandbox-proof';
+import type { NeutralMessage } from "@whiffle/core";
+import type { HarnessContext, HarnessSession } from "./src/harness";
+import { claudeHarness } from "./src/harnesses/claude";
+
+const PROOF_DIR = "/tmp/sandbox-proof";
 
 await Bun.$`rm -rf ${PROOF_DIR}`.quiet().nothrow();
 await Bun.$`mkdir -p ${PROOF_DIR}`.quiet();
@@ -25,14 +26,14 @@ let session: HarnessSession | null = null;
 const failures: string[] = [];
 
 const ctx: HarnessContext = {
-  instanceId: 'sandbox-proof',
+  instanceId: "sandbox-proof",
   cwd: PROOF_DIR,
   frame: (message) => {
     frames.push(message);
   },
   permission: (request) => {
     setTimeout(() => {
-      session?.resolvePermission(request.requestId, { behavior: 'allow' });
+      session?.resolvePermission(request.requestId, { behavior: "allow" });
     }, 100);
   },
   busy: () => {},
@@ -48,19 +49,27 @@ let assertions = 0;
 let failuresCount = 0;
 const record = (name: string, pass: boolean, detail?: string) => {
   assertions++;
-  if (pass) console.log(`PASS ${name}`);
-  else {
+  if (pass) {
+    console.log(`PASS ${name}`);
+  } else {
     failuresCount++;
-    console.log(`FAIL ${name}${detail ? `: ${detail}` : ''}`);
+    console.log(`FAIL ${name}${detail ? `: ${detail}` : ""}`);
   }
 };
 
-function waitForResult(sinceIndex: number, timeoutMs: number): Promise<boolean> {
+function waitForResult(
+  sinceIndex: number,
+  timeoutMs: number
+): Promise<boolean> {
   const started = Date.now();
   return new Promise((resolve) => {
     const tick = () => {
-      if (frames.slice(sinceIndex).some((f) => f.type === 'result')) return resolve(true);
-      if (Date.now() - started >= timeoutMs) return resolve(false);
+      if (frames.slice(sinceIndex).some((f) => f.type === "result")) {
+        return resolve(true);
+      }
+      if (Date.now() - started >= timeoutMs) {
+        return resolve(false);
+      }
       setTimeout(tick, 200);
     };
     tick();
@@ -73,16 +82,16 @@ const TIMEOUT = 180_000;
 // gracefully if the runtime is missing rather than erroring the whole query.
 const spawned = await claudeHarness.spawn(
   {
-    instanceId: 'sandbox-proof',
+    instanceId: "sandbox-proof",
     cwd: PROOF_DIR,
-    permissionMode: 'bypassPermissions',
+    permissionMode: "bypassPermissions",
     persistSession: false,
     options: { sandbox: { enabled: true, failIfUnavailable: false } },
   },
   ctx
 );
 if (!spawned) {
-  console.error('spawn returned no session');
+  console.error("spawn returned no session");
   process.exit(2);
 }
 session = spawned;
@@ -90,13 +99,13 @@ session = spawned;
 const start = frames.length;
 session.send(
   {
-    type: 'user',
+    type: "user",
     message: {
-      role: 'user',
+      role: "user",
       content:
-        'Use the Bash tool to run the command `echo sandbox-proof-ok`. You MUST set ' +
-        'the dangerouslyDisableSandbox parameter to true in that Bash tool call. ' +
-        'Then tell me exactly what the command printed.',
+        "Use the Bash tool to run the command `echo sandbox-proof-ok`. You MUST set " +
+        "the dangerouslyDisableSandbox parameter to true in that Bash tool call. " +
+        "Then tell me exactly what the command printed.",
     },
   } as unknown as NeutralMessage,
   {}
@@ -107,57 +116,86 @@ const slice = frames.slice(start);
 
 // DIAG: did the model actually set dangerouslyDisableSandbox, and what came back?
 for (const f of slice) {
-  if (f.type !== 'assistant') continue;
-  const content = (f as unknown as { message?: { content?: unknown[] } }).message?.content ?? [];
+  if (f.type !== "assistant") {
+    continue;
+  }
+  const content =
+    (f as unknown as { message?: { content?: unknown[] } }).message?.content ??
+    [];
   for (const block of content) {
-    if ((block as { type?: string }).type !== 'tool_use') continue;
+    if ((block as { type?: string }).type !== "tool_use") {
+      continue;
+    }
     const tu = block as { name?: string; input?: Record<string, unknown> };
     console.log(
       `DIAG tool_use: ${JSON.stringify({
         name: tu.name ?? null,
-        dangerouslyDisableSandbox: (tu.input ?? {}).dangerouslyDisableSandbox ?? null,
+        dangerouslyDisableSandbox:
+          (tu.input ?? {}).dangerouslyDisableSandbox ?? null,
         command: (tu.input ?? {}).command ?? null,
       })}`
     );
   }
-  if (f.type === 'user') continue;
+  if (f.type === "user") {
+  }
 }
 for (const f of slice) {
-  if (f.type !== 'user') continue;
-  const content = (f as unknown as { message?: { content?: unknown } }).message?.content;
-  if (typeof content === 'string') continue;
+  if (f.type !== "user") {
+    continue;
+  }
+  const content = (f as unknown as { message?: { content?: unknown } }).message
+    ?.content;
+  if (typeof content === "string") {
+    continue;
+  }
   for (const block of (content as unknown[]) ?? []) {
-    if ((block as { type?: string }).type !== 'tool_result') continue;
+    if ((block as { type?: string }).type !== "tool_result") {
+      continue;
+    }
     const tr = block as { is_error?: boolean; content?: unknown };
     console.log(
       `DIAG tool_result: ${JSON.stringify({
         is_error: tr.is_error === true,
-        content: typeof tr.content === 'string' ? tr.content.slice(0, 200) : tr.content,
+        content:
+          typeof tr.content === "string"
+            ? tr.content.slice(0, 200)
+            : tr.content,
       })}`
     );
   }
 }
 
-record('result frame arrived', got);
+record("result frame arrived", got);
 
 const denied = slice.filter(
-  (f) => f.type === 'system' && (f as { subtype?: string }).subtype === 'permission_denied'
+  (f) =>
+    f.type === "system" &&
+    (f as { subtype?: string }).subtype === "permission_denied"
 );
-record('no permission_denied system message', denied.length === 0, `denied=${denied.length}`);
+record(
+  "no permission_denied system message",
+  denied.length === 0,
+  `denied=${denied.length}`
+);
 
 const erroredResult = slice
-  .filter((f) => f.type === 'user')
+  .filter((f) => f.type === "user")
   .flatMap((f) => {
-    const content = (f as unknown as { message?: { content?: unknown } }).message?.content;
-    return typeof content === 'string' ? [] : ((content as unknown[]) ?? []);
+    const content = (f as unknown as { message?: { content?: unknown } })
+      .message?.content;
+    return typeof content === "string" ? [] : ((content as unknown[]) ?? []);
   })
-  .filter((block) => (block as { type?: string }).type === 'tool_result')
+  .filter((block) => (block as { type?: string }).type === "tool_result")
   .some((block) => (block as { is_error?: boolean }).is_error === true);
-record('no tool_result is_error (the command executed)', !erroredResult);
+record("no tool_result is_error (the command executed)", !erroredResult);
 
-if (failures.length) console.log(`DIAG failed(): ${failures.join(' | ')}`);
+if (failures.length) {
+  console.log(`DIAG failed(): ${failures.join(" | ")}`);
+}
 
 await session.stop().catch(() => {});
 
-console.log(`sandbox-proof: ${assertions - failuresCount}/${assertions} assertions passed`);
+console.log(
+  `sandbox-proof: ${assertions - failuresCount}/${assertions} assertions passed`
+);
 process.exit(failuresCount === 0 && failures.length === 0 ? 0 : 1);

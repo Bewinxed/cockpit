@@ -20,10 +20,10 @@ export const HUES = [55, 85, 115, 145, 175, 205, 235, 265, 295, 330] as const;
 
 /** FNV-1a — tiny, stable, good spread on short path strings. */
 function hash(key: string): number {
-  let h = 0x811c9dc5;
+  let h = 0x81_1c_9d_c5;
   for (let i = 0; i < key.length; i++) {
     h ^= key.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
+    h = Math.imul(h, 0x01_00_01_93);
   }
   return h >>> 0;
 }

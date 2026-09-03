@@ -25,24 +25,24 @@
  * is the claude adapter's business (`harnesses/claude.ts`).
  */
 
-import { spawn as spawnProcess } from 'node:child_process';
-import { EventEmitter } from 'node:events';
-import { Socket } from 'node:net';
-import { dirname, join } from 'node:path';
-import { Readable, Writable } from 'node:stream';
-import { fileURLToPath } from 'node:url';
+import { spawn as spawnProcess } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { Socket } from "node:net";
+import { dirname, join } from "node:path";
+import { Readable, Writable } from "node:stream";
+import { fileURLToPath } from "node:url";
 // The protocol lives behind its own subpath on purpose: `sessiond.ts` reaches
 // for `node:os`, and the core barrel is imported by the browser bundle.
 import {
-  SESSIOND_V1,
-  sessiondEndpoint,
   type ProcSpec,
+  SESSIOND_V1,
   type SessiondAck,
   type SessiondClientMessage,
   type SessiondLine,
   type SessiondProcInfo,
   type SessiondServerMessage,
-} from '@whiffle/core/sessiond';
+  sessiondEndpoint,
+} from "@whiffle/core/sessiond";
 
 /**
  * How long a dial or a `welcome` may take before the agent calls the endpoint
@@ -50,7 +50,7 @@ import {
  * so anything past a couple of seconds is a wedged daemon, not a slow one, and
  * the ad-hoc path needs a bound before it decides to spawn a replacement.
  */
-export const DIAL_TIMEOUT_MS = 2_000;
+export const DIAL_TIMEOUT_MS = 2000;
 
 /**
  * How long the ad-hoc path waits for a freshly spawned sessiond to bind before
@@ -74,11 +74,17 @@ export const ADHOC_START_TIMEOUT_MS = 10_000;
  *   (`cli/src/service.ts:45`, `MODE_ENV`); honoured here so a dev-mode unit is
  *   still recognised as service-managed.
  */
-export const serviceManaged = (env: NodeJS.ProcessEnv = process.env): boolean => {
-  if (env.INVOCATION_ID) return true;
-  if (env.WHIFFLE_SERVICE_MODE) return true;
+export const serviceManaged = (
+  env: NodeJS.ProcessEnv = process.env
+): boolean => {
+  if (env.INVOCATION_ID) {
+    return true;
+  }
+  if (env.WHIFFLE_SERVICE_MODE) {
+    return true;
+  }
   const xpc = env.XPC_SERVICE_NAME;
-  return xpc !== undefined && xpc !== '' && xpc !== '0';
+  return xpc !== undefined && xpc !== "" && xpc !== "0";
 };
 
 /**
@@ -90,16 +96,19 @@ export class SessiondUnavailableError extends Error {
   constructor(readonly endpoint: string) {
     super(
       `[sessiond] nothing is listening on ${endpoint}, and this agent is service-managed — ` +
-        'refusing to ad-hoc spawn one (its children would land in the agent cgroup and die ' +
-        'with the next agent restart). Install and start the unit: `whiffle service install` ' +
-        'then `systemctl --user start whiffle-sessiond`.'
+        "refusing to ad-hoc spawn one (its children would land in the agent cgroup and die " +
+        "with the next agent restart). Install and start the unit: `whiffle service install` " +
+        "then `systemctl --user start whiffle-sessiond`."
     );
-    this.name = 'SessiondUnavailableError';
+    this.name = "SessiondUnavailableError";
   }
 }
 
 /** Does something answer on this endpoint? The dial half of the §9 probe. */
-export const probeEndpoint = (endpoint: string, timeoutMs = DIAL_TIMEOUT_MS): Promise<boolean> =>
+export const probeEndpoint = (
+  endpoint: string,
+  timeoutMs = DIAL_TIMEOUT_MS
+): Promise<boolean> =>
   new Promise((resolve) => {
     // Constructed unconnected, listeners first, THEN dialled: an `ENOENT` on a
     // socket with no `error` listener yet is an uncaught exception, and the
@@ -111,15 +120,24 @@ export const probeEndpoint = (endpoint: string, timeoutMs = DIAL_TIMEOUT_MS): Pr
       resolve(answer);
     };
     const timer = setTimeout(() => settle(false), timeoutMs);
-    socket.once('connect', () => settle(true));
-    socket.once('error', () => settle(false));
+    socket.once("connect", () => settle(true));
+    socket.once("error", () => settle(false));
     socket.connect(endpoint);
   });
 
 /** The ad-hoc sessiond command: this repo's own entry point, run under bun. */
 const adhocCommand = (): { command: string; args: string[] } => ({
   command: process.execPath,
-  args: [join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'sessiond', 'src', 'main.ts')],
+  args: [
+    join(
+      dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "..",
+      "sessiond",
+      "src",
+      "main.ts"
+    ),
+  ],
 });
 
 /**
@@ -135,29 +153,37 @@ export const ensureSessiond = async (
   endpoint: string = sessiondEndpoint(),
   env: NodeJS.ProcessEnv = process.env
 ): Promise<void> => {
-  if (await probeEndpoint(endpoint)) return;
-  if (serviceManaged(env)) throw new SessiondUnavailableError(endpoint);
+  if (await probeEndpoint(endpoint)) {
+    return;
+  }
+  if (serviceManaged(env)) {
+    throw new SessiondUnavailableError(endpoint);
+  }
 
   const { command, args } = adhocCommand();
   const child = spawnProcess(command, args, {
     detached: true,
-    stdio: 'ignore',
+    stdio: "ignore",
     env: { ...env, WHIFFLE_SESSIOND_ENDPOINT: endpoint },
   });
   child.unref();
 
   const deadline = Date.now() + ADHOC_START_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    if (await probeEndpoint(endpoint, 250)) return;
+    if (await probeEndpoint(endpoint, 250)) {
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  throw new Error(`[sessiond] spawned ${command} ${args.join(' ')} but it never bound ${endpoint}`);
+  throw new Error(
+    `[sessiond] spawned ${command} ${args.join(" ")} but it never bound ${endpoint}`
+  );
 };
 
 /** What the agent learns the moment it attaches (design §7's epoch and heads). */
 export interface SessiondWelcomeInfo {
-  epoch: string;
   capabilities: readonly string[];
+  epoch: string;
   procs: SessiondProcInfo[];
 }
 
@@ -176,7 +202,7 @@ type ProcListener = {
  */
 export class SessiondClient {
   #socket: Socket;
-  #buffer = '';
+  #buffer = "";
   #welcome: SessiondWelcomeInfo | undefined;
   readonly #acks = new Map<string, (ack: SessiondAck) => void>();
   /** Sent but not yet settled — re-sent once at reconnect under the same id (§8). */
@@ -187,13 +213,13 @@ export class SessiondClient {
 
   private constructor(socket: Socket) {
     this.#socket = socket;
-    socket.setEncoding('utf8');
-    socket.on('data', (chunk: string) => this.#onData(chunk));
-    socket.on('close', () => {
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk: string) => this.#onData(chunk));
+    socket.on("close", () => {
       this.#closed = true;
-      this.onClose.emit('close');
+      this.onClose.emit("close");
     });
-    socket.on('error', () => {
+    socket.on("error", () => {
       /* a dropped sessiond is handled by the close path, never thrown here */
     });
   }
@@ -207,9 +233,13 @@ export class SessiondClient {
       const socket = new Socket();
       const timer = setTimeout(() => {
         socket.destroy();
-        reject(new Error(`[sessiond] no welcome from ${endpoint} within ${timeoutMs}ms`));
+        reject(
+          new Error(
+            `[sessiond] no welcome from ${endpoint} within ${timeoutMs}ms`
+          )
+        );
       }, timeoutMs);
-      socket.once('error', (error) => {
+      socket.once("error", (error) => {
         clearTimeout(timer);
         reject(error);
       });
@@ -222,7 +252,7 @@ export class SessiondClient {
           socket.destroy();
           reject(
             new Error(
-              `[sessiond] speaks ${welcome.capabilities.join(', ') || '(nothing)'}; this agent needs ${SESSIOND_V1}`
+              `[sessiond] speaks ${welcome.capabilities.join(", ") || "(nothing)"}; this agent needs ${SESSIOND_V1}`
             )
           );
           return;
@@ -250,12 +280,14 @@ export class SessiondClient {
 
   #onData(chunk: string): void {
     this.#buffer += chunk;
-    let nl = this.#buffer.indexOf('\n');
+    let nl = this.#buffer.indexOf("\n");
     while (nl >= 0) {
       const line = this.#buffer.slice(0, nl);
       this.#buffer = this.#buffer.slice(nl + 1);
-      if (line.trim()) this.#onMessage(line);
-      nl = this.#buffer.indexOf('\n');
+      if (line.trim()) {
+        this.#onMessage(line);
+      }
+      nl = this.#buffer.indexOf("\n");
     }
   }
 
@@ -267,7 +299,7 @@ export class SessiondClient {
       return; // sessiond does not emit malformed frames; a partial one is not fatal
     }
     switch (message.type) {
-      case 'welcome': {
+      case "welcome": {
         this.#welcome = {
           epoch: message.epoch,
           capabilities: message.capabilities,
@@ -276,29 +308,35 @@ export class SessiondClient {
         this.#onWelcome(this.#welcome);
         return;
       }
-      case 'ack': {
+      case "ack": {
         this.#unacked.delete(message.commandId);
         this.#acks.get(message.commandId)?.(message);
         this.#acks.delete(message.commandId);
         return;
       }
-      case 'proc.line':
+      case "proc.line":
         this.#listeners.get(message.event.procId)?.line?.(message.event);
         return;
-      case 'proc.backlog':
-        for (const event of message.events) this.#listeners.get(message.procId)?.line?.(event);
+      case "proc.backlog":
+        for (const event of message.events) {
+          this.#listeners.get(message.procId)?.line?.(event);
+        }
         return;
-      case 'proc.reset':
+      case "proc.reset":
         this.#listeners.get(message.procId)?.reset?.(message.nextSeq);
         return;
-      case 'proc.exit':
-        this.#listeners.get(message.procId)?.exit?.(message.exitCode, message.signal);
+      case "proc.exit":
+        this.#listeners
+          .get(message.procId)
+          ?.exit?.(message.exitCode, message.signal);
         return;
     }
   }
 
   #send(message: SessiondClientMessage): void {
-    if (this.#closed) throw new Error('[sessiond] connection is closed');
+    if (this.#closed) {
+      throw new Error("[sessiond] connection is closed");
+    }
     this.#socket.write(`${JSON.stringify(message)}\n`);
   }
 
@@ -308,7 +346,9 @@ export class SessiondClient {
    * the *same* command — sessiond re-acks it instead of, in `spawn`'s case,
    * killing and replacing a perfectly healthy child (§8).
    */
-  #command(message: SessiondClientMessage & { commandId: string }): Promise<SessiondAck> {
+  #command(
+    message: SessiondClientMessage & { commandId: string }
+  ): Promise<SessiondAck> {
     return new Promise((resolve, reject) => {
       this.#acks.set(message.commandId, resolve);
       this.#unacked.set(message.commandId, message);
@@ -324,17 +364,33 @@ export class SessiondClient {
 
   /** Re-send everything unsettled, unchanged, after a reconnect (§8). */
   resendUnacked(): void {
-    for (const message of this.#unacked.values()) this.#send(message);
+    for (const message of this.#unacked.values()) {
+      this.#send(message);
+    }
   }
 
   // -------------------------------------------------------------------- verbs
 
-  async spawnProc(procId: string, spec: ProcSpec, commandId = crypto.randomUUID()): Promise<void> {
-    assertApplied(await this.#command({ type: 'spawn', commandId, procId, spec }), 'spawn');
+  async spawnProc(
+    procId: string,
+    spec: ProcSpec,
+    commandId = crypto.randomUUID()
+  ): Promise<void> {
+    assertApplied(
+      await this.#command({ type: "spawn", commandId, procId, spec }),
+      "spawn"
+    );
   }
 
-  async write(procId: string, data: string, commandId = crypto.randomUUID()): Promise<void> {
-    assertApplied(await this.#command({ type: 'write', commandId, procId, data }), 'write');
+  async write(
+    procId: string,
+    data: string,
+    commandId = crypto.randomUUID()
+  ): Promise<void> {
+    assertApplied(
+      await this.#command({ type: "write", commandId, procId, data }),
+      "write"
+    );
   }
 
   async signal(
@@ -342,11 +398,20 @@ export class SessiondClient {
     sig: NodeJS.Signals,
     commandId = crypto.randomUUID()
   ): Promise<void> {
-    assertApplied(await this.#command({ type: 'signal', commandId, procId, sig }), 'signal');
+    assertApplied(
+      await this.#command({ type: "signal", commandId, procId, sig }),
+      "signal"
+    );
   }
 
-  async stdinEnd(procId: string, commandId = crypto.randomUUID()): Promise<void> {
-    assertApplied(await this.#command({ type: 'stdin_end', commandId, procId }), 'stdin_end');
+  async stdinEnd(
+    procId: string,
+    commandId = crypto.randomUUID()
+  ): Promise<void> {
+    assertApplied(
+      await this.#command({ type: "stdin_end", commandId, procId }),
+      "stdin_end"
+    );
   }
 
   /**
@@ -356,7 +421,11 @@ export class SessiondClient {
    */
   subscribe(procId: string, listener: ProcListener, afterSeq?: number): void {
     this.#listeners.set(procId, listener);
-    this.#send({ type: 'subscribe', procId, ...(afterSeq === undefined ? {} : { afterSeq }) });
+    this.#send({
+      type: "subscribe",
+      procId,
+      ...(afterSeq === undefined ? {} : { afterSeq }),
+    });
   }
 
   unsubscribe(procId: string): void {
@@ -367,7 +436,7 @@ export class SessiondClient {
   list(): Promise<SessiondWelcomeInfo> {
     return new Promise((resolve) => {
       this.#onWelcome = (welcome) => resolve(welcome);
-      this.#send({ type: 'list' });
+      this.#send({ type: "list" });
     });
   }
 
@@ -378,7 +447,11 @@ export class SessiondClient {
 }
 
 const assertApplied = (ack: SessiondAck, verb: string): void => {
-  if (ack.stage === 'failed') throw new Error(`[sessiond] ${verb} failed: ${ack.reason ?? 'no reason given'}`);
+  if (ack.stage === "failed") {
+    throw new Error(
+      `[sessiond] ${verb} failed: ${ack.reason ?? "no reason given"}`
+    );
+  }
 };
 
 /**
@@ -400,7 +473,7 @@ export const sessiondBridge = (
     env: Record<string, string | undefined>;
     signal?: AbortSignal;
   }
-): import('@anthropic-ai/claude-agent-sdk').SpawnedProcess => {
+): import("@anthropic-ai/claude-agent-sdk").SpawnedProcess => {
   const events = new EventEmitter();
   let killed = false;
   let exitCode: number | null = null;
@@ -414,7 +487,10 @@ export const sessiondBridge = (
   const stdin = new Writable({
     write(chunk: Buffer | string, _encoding, callback) {
       client
-        .write(procId, typeof chunk === 'string' ? chunk : chunk.toString('utf8'))
+        .write(
+          procId,
+          typeof chunk === "string" ? chunk : chunk.toString("utf8")
+        )
         .then(() => callback())
         // A write to a child that already died is the child's death, not a
         // stream error the SDK should throw on: the exit event is the truth.
@@ -447,7 +523,7 @@ export const sessiondBridge = (
       exitCode = code;
       signalCode = sig;
       stdout.push(null);
-      events.emit('exit', code, sig);
+      events.emit("exit", code, sig);
     },
     // An overflowed ring is an honest refusal, not a silent splice: the SDK
     // is told the stream broke rather than handed a transcript with a hole.
@@ -456,9 +532,11 @@ export const sessiondBridge = (
     // line, so it is not that. Only an announcement that jumps past the next
     // sequence this wrapper expects is a real hole, and that one throws.
     reset: (nextSeq) => {
-      if (nextSeq <= consumed + 1) return;
+      if (nextSeq <= consumed + 1) {
+        return;
+      }
       events.emit(
-        'error',
+        "error",
         new Error(
           `[sessiond] ${procId}: replay window lost, stream resumes at ${nextSeq} (consumed ${consumed})`
         )
@@ -469,7 +547,11 @@ export const sessiondBridge = (
   // Env entries the SDK left undefined are absent, not empty: `ProcSpec.env`
   // is a string map, and sessiond merges it over its own `process.env`.
   const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(options.env)) if (value !== undefined) env[key] = value;
+  for (const [key, value] of Object.entries(options.env)) {
+    if (value !== undefined) {
+      env[key] = value;
+    }
+  }
 
   const started = client
     .spawnProc(procId, {
@@ -480,7 +562,10 @@ export const sessiondBridge = (
     })
     .then(() => client.subscribe(procId, listener, 0))
     .catch((error: unknown) => {
-      events.emit('error', error instanceof Error ? error : new Error(String(error)));
+      events.emit(
+        "error",
+        error instanceof Error ? error : new Error(String(error))
+      );
     });
 
   const kill = (sig: NodeJS.Signals): boolean => {
@@ -488,7 +573,9 @@ export const sessiondBridge = (
     void started.then(() => client.signal(procId, sig).catch(() => {}));
     return true;
   };
-  options.signal?.addEventListener('abort', () => kill('SIGTERM'), { once: true });
+  options.signal?.addEventListener("abort", () => kill("SIGTERM"), {
+    once: true,
+  });
 
   return {
     stdin,
@@ -503,14 +590,14 @@ export const sessiondBridge = (
       return signalCode;
     },
     kill,
-    on: (event: 'exit' | 'error', listener: (...args: never[]) => void) => {
+    on: (event: "exit" | "error", listener: (...args: never[]) => void) => {
       events.on(event, listener as (...args: unknown[]) => void);
     },
-    once: (event: 'exit' | 'error', listener: (...args: never[]) => void) => {
+    once: (event: "exit" | "error", listener: (...args: never[]) => void) => {
       events.once(event, listener as (...args: unknown[]) => void);
     },
-    off: (event: 'exit' | 'error', listener: (...args: never[]) => void) => {
+    off: (event: "exit" | "error", listener: (...args: never[]) => void) => {
       events.off(event, listener as (...args: unknown[]) => void);
     },
-  } as import('@anthropic-ai/claude-agent-sdk').SpawnedProcess;
+  } as import("@anthropic-ai/claude-agent-sdk").SpawnedProcess;
 };

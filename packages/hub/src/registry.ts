@@ -1,5 +1,5 @@
-import type { Envelope } from '@whiffle/core';
-import { Context, Effect, Layer } from 'effect';
+import type { Envelope } from "@whiffle/core";
+import { Context, Effect, Layer } from "effect";
 
 /**
  * The slice of Elysia's WebSocket handle the registry needs — structural so the
@@ -12,13 +12,8 @@ export interface HubSocket {
 }
 
 export interface RegistryShape {
-  readonly registerAgent: (machineId: string, socket: HubSocket) => void;
-  /** Returns the machine the socket was registered as, if it was an agent. */
-  readonly dropAgent: (socketId: string) => string | undefined;
-  readonly agent: (machineId: string) => HubSocket | undefined;
-  readonly machineIds: () => string[];
   readonly addDashboard: (socket: HubSocket) => void;
-  readonly dropDashboard: (socket: HubSocket) => void;
+  readonly agent: (machineId: string) => HubSocket | undefined;
   readonly broadcast: (envelope: Envelope) => void;
   /**
    * Fans an instance-scoped frame out only to dashboards subscribed to
@@ -26,18 +21,23 @@ export interface RegistryShape {
    * kind must never be silently dropped, so the relay fails open.
    */
   readonly broadcastFrame: (envelope: Envelope, instanceId: string) => void;
-  /** Replaces a dashboard's subscription set whole — one verb, no add/remove bookkeeping. */
-  readonly setSubscriptions: (socket: HubSocket, instanceIds: string[]) => void;
+  /** The most recent usable dashboard origin, or nothing if none has connected. */
+  readonly dashboardOrigin: () => string | undefined;
+  /** Returns the machine the socket was registered as, if it was an agent. */
+  readonly dropAgent: (socketId: string) => string | undefined;
+  readonly dropDashboard: (socket: HubSocket) => void;
+  readonly machineIds: () => string[];
   /**
    * Remembers the origin a dashboard just connected from, if it is one worth
    * linking to. Junk is dropped rather than rejected loudly — a client is free
    * to send whatever `Origin` it likes.
    */
   readonly noteDashboardOrigin: (origin: string | undefined) => void;
-  /** The most recent usable dashboard origin, or nothing if none has connected. */
-  readonly dashboardOrigin: () => string | undefined;
+  readonly registerAgent: (machineId: string, socket: HubSocket) => void;
   /** Routes the reply to a forwarded `control` back to the dashboard that asked. */
   readonly rememberRequester: (requestId: string, socket: HubSocket) => void;
+  /** Replaces a dashboard's subscription set whole — one verb, no add/remove bookkeeping. */
+  readonly setSubscriptions: (socket: HubSocket, instanceIds: string[]) => void;
   /** Consumes the route — a `requestId` is answered once. */
   readonly takeRequester: (requestId: string) => HubSocket | undefined;
 }
@@ -46,7 +46,13 @@ export interface RegistryShape {
  * Hosts a link is pointless with. A message goes to a phone, and loopback names
  * resolve on the phone, not on the machine the dashboard is running on.
  */
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '[::]']);
+const LOOPBACK_HOSTS = new Set([
+  "localhost",
+  "127.0.0.1",
+  "0.0.0.0",
+  "[::1]",
+  "[::]",
+]);
 
 /**
  * The origin as something safe to put in a link, or nothing.
@@ -57,15 +63,21 @@ const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '[
  * host and port and nothing else: no path, no query, no credentials.
  */
 const usableOrigin = (origin: string | undefined): string | undefined => {
-  if (!origin) return undefined;
+  if (!origin) {
+    return undefined;
+  }
   let url: URL;
   try {
     url = new URL(origin);
   } catch {
     return undefined;
   }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
-  if (LOOPBACK_HOSTS.has(url.hostname)) return undefined;
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return undefined;
+  }
+  if (LOOPBACK_HOSTS.has(url.hostname)) {
+    return undefined;
+  }
   return url.origin;
 };
 
@@ -73,12 +85,17 @@ const usableOrigin = (origin: string | undefined): string | undefined => {
 const REQUESTER_TTL_MS = 5 * 60_000;
 const SWEEP_INTERVAL_MS = 60_000;
 
-export class Registry extends Context.Service<Registry, RegistryShape>()('Registry') {}
+export class Registry extends Context.Service<Registry, RegistryShape>()(
+  "Registry"
+) {}
 
 const make = (): RegistryShape => {
   const agents = new Map<string, HubSocket>();
   /** One entry per dashboard socket, with the instances it subscribes to. */
-  const dashboards = new Map<string, { socket: HubSocket; subscriptions: Set<string> }>();
+  const dashboards = new Map<
+    string,
+    { socket: HubSocket; subscriptions: Set<string> }
+  >();
   const requesters = new Map<string, { socket: HubSocket; at: number }>();
   /**
    * The last origin a dashboard reached this hub from. Kept rather than derived
@@ -90,8 +107,11 @@ const make = (): RegistryShape => {
 
   const sweep = setInterval(() => {
     const cutoff = Date.now() - REQUESTER_TTL_MS;
-    for (const [requestId, entry] of requesters)
-      if (entry.at < cutoff) requesters.delete(requestId);
+    for (const [requestId, entry] of requesters) {
+      if (entry.at < cutoff) {
+        requesters.delete(requestId);
+      }
+    }
   }, SWEEP_INTERVAL_MS);
   sweep.unref();
 
@@ -100,12 +120,12 @@ const make = (): RegistryShape => {
       agents.set(machineId, socket);
     },
     dropAgent: (socketId) => {
-      for (const [machineId, socket] of agents)
+      for (const [machineId, socket] of agents) {
         if (socket.id === socketId) {
           agents.delete(machineId);
           return machineId;
         }
-      return undefined;
+      }
     },
     agent: (machineId) => agents.get(machineId),
     machineIds: () => [...agents.keys()],
@@ -114,23 +134,35 @@ const make = (): RegistryShape => {
     },
     dropDashboard: (socket) => {
       dashboards.delete(socket.id);
-      for (const [requestId, entry] of requesters)
-        if (entry.socket.id === socket.id) requesters.delete(requestId);
+      for (const [requestId, entry] of requesters) {
+        if (entry.socket.id === socket.id) {
+          requesters.delete(requestId);
+        }
+      }
     },
     broadcast: (envelope) => {
-      for (const { socket } of dashboards.values()) socket.send(envelope);
+      for (const { socket } of dashboards.values()) {
+        socket.send(envelope);
+      }
     },
     broadcastFrame: (envelope, instanceId) => {
-      for (const { socket, subscriptions } of dashboards.values())
-        if (subscriptions.has(instanceId)) socket.send(envelope);
+      for (const { socket, subscriptions } of dashboards.values()) {
+        if (subscriptions.has(instanceId)) {
+          socket.send(envelope);
+        }
+      }
     },
     setSubscriptions: (socket, instanceIds) => {
       const entry = dashboards.get(socket.id);
-      if (entry) entry.subscriptions = new Set(instanceIds);
+      if (entry) {
+        entry.subscriptions = new Set(instanceIds);
+      }
     },
     noteDashboardOrigin: (origin) => {
       const usable = usableOrigin(origin);
-      if (usable) lastDashboardOrigin = usable;
+      if (usable) {
+        lastDashboardOrigin = usable;
+      }
     },
     dashboardOrigin: () => lastDashboardOrigin,
     rememberRequester: (requestId, socket) => {

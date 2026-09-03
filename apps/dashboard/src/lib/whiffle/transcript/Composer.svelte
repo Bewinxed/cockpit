@@ -1,14 +1,15 @@
-<script module lang="ts">
+<script lang="ts" module>
   /** Something `@` can name: another session, or a machine. */
   export interface Mention {
+    detail?: string;
     /** What gets inserted, without the `@`. */
     handle: string;
     label: string;
-    detail?: string;
   }
 </script>
 
 <script lang="ts">
+  import type { AvailableCommand } from "@whiffle/core";
   /**
    * The floating composer — a lifted shell holding the text input, the attach
    * and send controls, and any inline permission / question prompts stacked
@@ -27,14 +28,13 @@
    * driven from the textarea's own keyboard so focus never leaves the message
    * being written.
    */
-  import type { Snippet } from 'svelte';
-  import type { AvailableCommand } from '@whiffle/core';
-  import { IconSend, IconStop, IconPlus, IconClose } from '$lib/icons';
-  import * as Command from '$lib/components/ui/command';
-  import type { SendExtras } from '../client.svelte';
+  import type { Snippet } from "svelte";
+  import * as Command from "$lib/components/ui/command";
+  import { IconClose, IconPlus, IconSend, IconStop } from "$lib/icons";
+  import type { SendExtras } from "../client.svelte";
 
   let {
-    value = $bindable(''),
+    value = $bindable(""),
     height = $bindable(0),
     busy = false,
     sending = false,
@@ -80,7 +80,7 @@
   } = $props();
 
   type PendingImage = { mediaType: string; data: string; name: string };
-  type PendingText = { kind: 'text'; name: string; content: string };
+  type PendingText = { kind: "text"; name: string; content: string };
 
   let images = $state<PendingImage[]>([]);
   let texts = $state<PendingText[]>([]);
@@ -98,23 +98,23 @@
 
   /** One row of the menu, whichever sigil opened it. */
   interface Entry {
+    detail?: string;
     /** Command.Item's value, and what the highlight is tracked by. */
     id: string;
     /** What replaces the typed token, sigil included. */
     insert: string;
-    label: string;
-    detail?: string;
     /** Which `/` family it belongs to — the menu is sectioned by this. */
-    kind?: AvailableCommand['type'];
+    kind?: AvailableCommand["type"];
+    label: string;
     /** The plugin or MCP server it came from, shown as a quiet origin tag. */
     source?: string;
   }
 
   /** One titled section of the menu. */
   interface Section {
-    key: string;
-    heading: string;
     entries: Entry[];
+    heading: string;
+    key: string;
   }
 
   /**
@@ -128,15 +128,36 @@
    * `rank` orders the sections: skills first, then plugins (by name), then the
    * built-ins, then MCP servers (by name).
    */
-  function sectionMeta(entry: Entry): { key: string; heading: string; rank: number; sub: string } {
-    if (entry.kind === 'skill') return { key: 'skills', heading: 'Skills', rank: 0, sub: '' };
-    if (entry.kind === 'mcp') {
-      const server = entry.source ?? '';
-      return { key: `mcp:${server}`, heading: server || 'MCP', rank: 3, sub: server };
+  function sectionMeta(entry: Entry): {
+    key: string;
+    heading: string;
+    rank: number;
+    sub: string;
+  } {
+    if (entry.kind === "skill") {
+      return { key: "skills", heading: "Skills", rank: 0, sub: "" };
     }
-    if (entry.source) return { key: `src:${entry.source}`, heading: entry.source, rank: 1, sub: entry.source };
-    if (entry.kind === 'builtin') return { key: 'builtin', heading: 'Built-in', rank: 2, sub: '' };
-    return { key: 'commands', heading: 'Commands', rank: 1, sub: '' };
+    if (entry.kind === "mcp") {
+      const server = entry.source ?? "";
+      return {
+        key: `mcp:${server}`,
+        heading: server || "MCP",
+        rank: 3,
+        sub: server,
+      };
+    }
+    if (entry.source) {
+      return {
+        key: `src:${entry.source}`,
+        heading: entry.source,
+        rank: 1,
+        sub: entry.source,
+      };
+    }
+    if (entry.kind === "builtin") {
+      return { key: "builtin", heading: "Built-in", rank: 2, sub: "" };
+    }
+    return { key: "commands", heading: "Commands", rank: 1, sub: "" };
   }
 
   /**
@@ -146,11 +167,13 @@
    * full name — only the label is shortened.
    */
   function displayLabel(name: string, source?: string): string {
-    if (name.startsWith('mcp__')) {
-      const rest = name.split('__').slice(2).join('__');
+    if (name.startsWith("mcp__")) {
+      const rest = name.split("__").slice(2).join("__");
       return `/${rest || name}`;
     }
-    if (source && name.startsWith(`${source}:`)) return `/${name.slice(source.length + 1)}`;
+    if (source && name.startsWith(`${source}:`)) {
+      return `/${name.slice(source.length + 1)}`;
+    }
     return `/${name}`;
   }
 
@@ -159,10 +182,16 @@
    * parens — `(code-foundations) Execute…` — which is exactly the section heading
    * above the row, so it is stripped here rather than printed twice.
    */
-  function cleanDetail(description?: string, argumentHint?: string, source?: string): string | undefined {
+  function cleanDetail(
+    description?: string,
+    argumentHint?: string,
+    source?: string
+  ): string | undefined {
     const prose = description?.trim();
     if (prose) {
-      if (source && prose.startsWith(`(${source})`)) return prose.slice(source.length + 2).trim();
+      if (source && prose.startsWith(`(${source})`)) {
+        return prose.slice(source.length + 2).trim();
+      }
       return prose;
     }
     return argumentHint || undefined;
@@ -172,7 +201,7 @@
   let caret = $state(0);
   /** Dismissed with Escape: the token is still there, the menu is not. */
   let dismissed = $state(false);
-  let highlight = $state('');
+  let highlight = $state("");
 
   /**
    * The `/…` or `@…` the caret sits in the middle of, or null.
@@ -181,26 +210,37 @@
    * separator or an email, both of which the reader is entitled to type without
    * a menu landing on top of them.
    */
-  const token = $derived.by((): { sigil: '/' | '@'; query: string; from: number } | null => {
-    const at = Math.min(caret, value.length);
-    const before = value.slice(0, at);
-    const start = Math.max(before.lastIndexOf(' '), before.lastIndexOf('\n')) + 1;
-    const word = before.slice(start);
-    if (word.length === 0) return null;
-    const sigil = word[0];
-    if (sigil !== '/' && sigil !== '@') return null;
-    const query = word.slice(1);
-    // A token with whitespace in it is no longer being typed as one.
-    if (/\s/.test(query)) return null;
-    return { sigil, query, from: start };
-  });
+  const token = $derived.by(
+    (): { sigil: "/" | "@"; query: string; from: number } | null => {
+      const at = Math.min(caret, value.length);
+      const before = value.slice(0, at);
+      const start =
+        Math.max(before.lastIndexOf(" "), before.lastIndexOf("\n")) + 1;
+      const word = before.slice(start);
+      if (word.length === 0) {
+        return null;
+      }
+      const sigil = word[0];
+      if (sigil !== "/" && sigil !== "@") {
+        return null;
+      }
+      const query = word.slice(1);
+      // A token with whitespace in it is no longer being typed as one.
+      if (/\s/.test(query)) {
+        return null;
+      }
+      return { sigil, query, from: start };
+    }
+  );
 
   const entries = $derived.by((): Entry[] => {
     const active = token;
-    if (!active) return [];
+    if (!active) {
+      return [];
+    }
     const needle = active.query.toLowerCase();
     const rows: Entry[] =
-      active.sigil === '/'
+      active.sigil === "/"
         ? commands.map((command) => ({
             id: `/${command.name}`,
             insert: `/${command.name}`,
@@ -208,7 +248,11 @@
             // name, then its prose or argument shape — never the word "builtin"
             // as a stand-in description.
             label: displayLabel(command.name, command.source),
-            detail: cleanDetail(command.description, command.argumentHint, command.source),
+            detail: cleanDetail(
+              command.description,
+              command.argumentHint,
+              command.source
+            ),
             kind: command.type,
             source: command.source,
           }))
@@ -218,11 +262,13 @@
             label: mention.label,
             detail: mention.detail,
           }));
-    return rows
-      .filter((row) => !needle || row.id.toLowerCase().includes(needle))
-      // Grouped and scrollable, so the cap only guards a pathological list; a
-      // real session's commands all fit inside it and read under their source.
-      .slice(0, 100);
+    return (
+      rows
+        .filter((row) => !needle || row.id.toLowerCase().includes(needle))
+        // Grouped and scrollable, so the cap only guards a pathological list; a
+        // real session's commands all fit inside it and read under their source.
+        .slice(0, 100)
+    );
   });
 
   /**
@@ -232,18 +278,42 @@
    * "Mentions" section. A section with no rows is never emitted.
    */
   const sections = $derived.by((): Section[] => {
-    if (entries.length === 0) return [];
-    if (token?.sigil !== '/') return [{ key: 'mentions', heading: 'Mentions', entries }];
-    const groups = new Map<string, { heading: string; rank: number; sub: string; entries: Entry[] }>();
+    if (entries.length === 0) {
+      return [];
+    }
+    if (token?.sigil !== "/") {
+      return [{ key: "mentions", heading: "Mentions", entries }];
+    }
+    const groups = new Map<
+      string,
+      { heading: string; rank: number; sub: string; entries: Entry[] }
+    >();
     for (const entry of entries) {
       const meta = sectionMeta(entry);
       const bucket = groups.get(meta.key);
-      if (bucket) bucket.entries.push(entry);
-      else groups.set(meta.key, { heading: meta.heading, rank: meta.rank, sub: meta.sub, entries: [entry] });
+      if (bucket) {
+        bucket.entries.push(entry);
+      } else {
+        groups.set(meta.key, {
+          heading: meta.heading,
+          rank: meta.rank,
+          sub: meta.sub,
+          entries: [entry],
+        });
+      }
     }
     return [...groups.values()]
-      .sort((a, b) => a.rank - b.rank || a.sub.localeCompare(b.sub) || a.heading.localeCompare(b.heading))
-      .map((group) => ({ key: `${group.rank}:${group.heading}`, heading: group.heading, entries: group.entries }));
+      .sort(
+        (a, b) =>
+          a.rank - b.rank ||
+          a.sub.localeCompare(b.sub) ||
+          a.heading.localeCompare(b.heading)
+      )
+      .map((group) => ({
+        key: `${group.rank}:${group.heading}`,
+        heading: group.heading,
+        entries: group.entries,
+      }));
   });
 
   const menuOpen = $derived(!dismissed && entries.length > 0);
@@ -257,15 +327,23 @@
    * safe id token.
    */
   const domIds = $derived(
-    new Map(entries.map((entry, index) => [entry.id, `composer-entry-${index}`]))
+    new Map(
+      entries.map((entry, index) => [entry.id, `composer-entry-${index}`])
+    )
   );
-  const activeDescendant = $derived(menuOpen ? domIds.get(highlight) : undefined);
+  const activeDescendant = $derived(
+    menuOpen ? domIds.get(highlight) : undefined
+  );
 
   // The highlight follows the list: a query that filters the selected row away
   // must not leave Enter pointing at something that is no longer on screen.
   $effect(() => {
-    if (!menuOpen) return;
-    if (!entries.some((entry) => entry.id === highlight)) highlight = entries[0].id;
+    if (!menuOpen) {
+      return;
+    }
+    if (!entries.some((entry) => entry.id === highlight)) {
+      highlight = entries[0].id;
+    }
   });
 
   function noteCaret(event: Event): void {
@@ -276,7 +354,9 @@
   /** Puts the chosen row where the token was, with a space after it. */
   function choose(entry: Entry): void {
     const active = token;
-    if (!active) return;
+    if (!active) {
+      return;
+    }
     const end = Math.min(caret, value.length);
     value = `${value.slice(0, active.from)}${entry.insert} ${value.slice(end)}`;
     const next = active.from + entry.insert.length + 1;
@@ -290,21 +370,34 @@
   }
 
   function step(by: number): void {
-    if (entries.length === 0) return;
+    if (entries.length === 0) {
+      return;
+    }
     const at = entries.findIndex((entry) => entry.id === highlight);
     const next = (at + by + entries.length) % entries.length;
     highlight = entries[next].id;
   }
 
-  function submit(via: (text: string, extras: SendExtras) => void = onsubmit): void {
+  function submit(
+    via: (text: string, extras: SendExtras) => void = onsubmit
+  ): void {
     // Nothing to send, or the last one is still unanswered. The draft is left
     // exactly as it is — a refused send must never eat what was typed.
-    if (!hasContent || sending) return;
+    if (!hasContent || sending) {
+      return;
+    }
     const extras: SendExtras = {};
-    if (texts.length) extras.attachments = texts.map((t) => ({ ...t }));
-    if (images.length) extras.images = images.map((i) => ({ mediaType: i.mediaType, data: i.data }));
+    if (texts.length) {
+      extras.attachments = texts.map((t) => ({ ...t }));
+    }
+    if (images.length) {
+      extras.images = images.map((i) => ({
+        mediaType: i.mediaType,
+        data: i.data,
+      }));
+    }
     const text = value.trim();
-    value = '';
+    value = "";
     images = [];
     texts = [];
     dismissed = true;
@@ -327,7 +420,7 @@
    */
   export function restore(extras: SendExtras = {}): void {
     texts = (extras.attachments ?? []).map((attachment) => ({
-      kind: 'text',
+      kind: "text",
       name: attachment.name,
       content: attachment.content,
     }));
@@ -343,7 +436,7 @@
     // BEFORE the menu: mod+Enter is "interrupt and send" (the shortcut sheet's
     // long-standing promise), and a half-picked menu must not swallow it — the
     // urgency is the point. The menu is dismissed by the submit itself.
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       submit(oninterruptsend ?? onsubmit);
       return;
@@ -351,17 +444,17 @@
     if (menuOpen) {
       // The menu owns these keys while it is up — Enter picks a command rather
       // than sending the half-typed name of one.
-      if (event.key === 'ArrowDown') {
+      if (event.key === "ArrowDown") {
         event.preventDefault();
         step(1);
         return;
       }
-      if (event.key === 'ArrowUp') {
+      if (event.key === "ArrowUp") {
         event.preventDefault();
         step(-1);
         return;
       }
-      if (event.key === 'Enter' || event.key === 'Tab') {
+      if (event.key === "Enter" || event.key === "Tab") {
         const picked = entries.find((entry) => entry.id === highlight);
         if (picked) {
           event.preventDefault();
@@ -369,21 +462,24 @@
           return;
         }
       }
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         event.preventDefault();
         dismissed = true;
         return;
       }
     }
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       submit();
     }
   }
 
   function onaction(): void {
-    if (busy) onstop();
-    else submit();
+    if (busy) {
+      onstop();
+    } else {
+      submit();
+    }
   }
 
   /** base64 without the `data:` prefix — the wire shape images travel in. */
@@ -392,7 +488,11 @@
       const reader = new FileReader();
       reader.onload = () => {
         const result = String(reader.result);
-        resolve({ mediaType: file.type, data: result.slice(result.indexOf(',') + 1), name: file.name });
+        resolve({
+          mediaType: file.type,
+          data: result.slice(result.indexOf(",") + 1),
+          name: file.name,
+        });
       };
       reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(file);
@@ -401,25 +501,32 @@
 
   async function addFiles(files: Iterable<File>): Promise<void> {
     for (const file of files) {
-      if (file.type.startsWith('image/')) {
+      if (file.type.startsWith("image/")) {
         images = [...images, await readImage(file)];
       } else {
-        texts = [...texts, { kind: 'text', name: file.name, content: await file.text() }];
+        texts = [
+          ...texts,
+          { kind: "text", name: file.name, content: await file.text() },
+        ];
       }
     }
   }
 
   function onpick(event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
-    if (input.files?.length) void addFiles(input.files);
-    input.value = '';
+    if (input.files?.length) {
+      void addFiles(input.files);
+    }
+    input.value = "";
   }
 
   function onpaste(event: ClipboardEvent): void {
     const data = event.clipboardData;
-    if (!data) return;
+    if (!data) {
+      return;
+    }
     const files = [...data.items]
-      .filter((item) => item.kind === 'file')
+      .filter((item) => item.kind === "file")
       .map((item) => item.getAsFile())
       .filter((file): file is File => !!file);
     if (files.length) {
@@ -427,14 +534,22 @@
       void addFiles(files);
       return;
     }
-    const text = data.getData('text/plain');
+    const text = data.getData("text/plain");
     if (text.length > LARGE_PASTE) {
       event.preventDefault();
-      texts = [...texts, { kind: 'text', name: `Pasted text · ${text.length.toLocaleString()} chars`, content: text }];
+      texts = [
+        ...texts,
+        {
+          kind: "text",
+          name: `Pasted text · ${text.length.toLocaleString()} chars`,
+          content: text,
+        },
+      ];
     }
   }
 
-  const removeImage = (i: number) => (images = images.filter((_, n) => n !== i));
+  const removeImage = (i: number) =>
+    (images = images.filter((_, n) => n !== i));
   const removeText = (i: number) => (texts = texts.filter((_, n) => n !== i));
 </script>
 
@@ -447,29 +562,45 @@
     <div class="atts">
       {#each images as img, i (img.name + i)}
         <span class="att">
-          <img src="data:{img.mediaType};base64,{img.data}" alt="" />
+          <img alt="" src="data:{img.mediaType};base64,{img.data}">
           {img.name}
-          <button type="button" aria-label="Remove" onclick={() => removeImage(i)}><IconClose /></button>
+          <button
+            aria-label="Remove"
+            onclick={() => removeImage(i)}
+            type="button"
+          >
+            <IconClose />
+          </button>
         </span>
       {/each}
       {#each texts as t, i (t.name + i)}
         <span class="att">
           {t.name}
-          <button type="button" aria-label="Remove" onclick={() => removeText(i)}><IconClose /></button>
+          <button
+            aria-label="Remove"
+            onclick={() => removeText(i)}
+            type="button"
+          >
+            <IconClose />
+          </button>
         </span>
       {/each}
     </div>
   {/if}
 
-  <form class="cin" onsubmit={(e) => e.preventDefault()} aria-label="Message the agent">
+  <form
+    aria-label="Message the agent"
+    class="cin"
+    onsubmit={(e) => e.preventDefault()}
+  >
     <input
-      type="file"
-      class="hidden-file"
       accept="image/*,text/*,.md,.json,.csv,.log"
+      class="hidden-file"
       multiple
-      bind:this={fileInput}
       onchange={onpick}
-    />
+      type="file"
+      bind:this={fileInput}
+    >
 
     {#if menuOpen}
       <!-- Above the input, not over it: the sentence being written stays legible
@@ -482,18 +613,20 @@
         onmousedown={(event) => event.preventDefault()}
         role="presentation"
       >
-        <Command.Root shouldFilter={false} bind:value={highlight} loop>
+        <Command.Root loop shouldFilter={false} bind:value={highlight}>
           <Command.List>
             {#each sections as section (section.key)}
               <Command.Group heading={section.heading}>
                 {#each section.entries as entry (entry.id)}
                   <Command.Item
                     id={domIds.get(entry.id)}
-                    value={entry.id}
                     onSelect={() => choose(entry)}
+                    value={entry.id}
                   >
                     <span class="e-label">{entry.label}</span>
-                    {#if entry.detail}<span class="e-detail">{entry.detail}</span>{/if}
+                    {#if entry.detail}
+                      <span class="e-detail">{entry.detail}</span>
+                    {/if}
                   </Command.Item>
                 {/each}
               </Command.Group>
@@ -504,41 +637,41 @@
     {/if}
 
     <textarea
+      aria-activedescendant={activeDescendant}
+      aria-autocomplete="list"
+      aria-controls="composer-menu"
+      aria-expanded={menuOpen}
+      aria-label="Message the agent"
+      onblur={() => (dismissed = true)}
+      onclick={noteCaret}
+      oninput={noteCaret}
+      {onkeydown}
+      onkeyup={noteCaret}
+      {onpaste}
+      onselect={noteCaret}
+      placeholder="Message the agent…  /  for commands, @ to mention"
+      role="combobox"
       bind:this={field}
       bind:value
-      {onkeydown}
-      onpaste={onpaste}
-      onselect={noteCaret}
-      oninput={noteCaret}
-      onclick={noteCaret}
-      onkeyup={noteCaret}
-      onblur={() => (dismissed = true)}
-      placeholder="Message the agent…  /  for commands, @ to mention"
-      aria-label="Message the agent"
-      aria-expanded={menuOpen}
-      aria-autocomplete="list"
-      role="combobox"
-      aria-controls="composer-menu"
-      aria-activedescendant={activeDescendant}
     ></textarea>
 
     <div class="ctrls">
       {@render leading?.()}
       <button
-        class="att-btn"
-        type="button"
-        onclick={() => fileInput?.click()}
         aria-label="Attach a file or image"
+        class="att-btn"
+        onclick={() => fileInput?.click()}
+        type="button"
       >
         <IconPlus />
       </button>
       <button
-        class="stop"
-        type="button"
-        onclick={onaction}
-        disabled={!busy && !hasContent}
         aria-disabled={!busy && sending ? 'true' : undefined}
         aria-label={busy ? 'Stop the agent' : 'Send message'}
+        class="stop"
+        disabled={!busy && !hasContent}
+        onclick={onaction}
+        type="button"
       >
         <!-- The one control that changes meaning mid-turn. `{#key}` re-creates
              the glyph on every flip, so BOTH directions of the swap animate in;
@@ -546,7 +679,11 @@
              resizes under a thumb already travelling toward it. -->
         {#key busy}
           <span class="swap">
-            {#if busy}<IconStop />{:else}<IconSend />{/if}
+            {#if busy}
+              <IconStop />
+            {:else}
+              <IconSend />
+            {/if}
           </span>
         {/key}
       </button>
@@ -670,10 +807,10 @@
   /* The Command primitive is shadcn's; its parts are addressed by slot so the
      menu wears Quiet Ledger tokens rather than the stock ladder. The list is the
      one thing that scrolls; the shell stays put. */
-  :global(.menu [data-slot='command']) {
+  :global(.menu [data-slot="command"]) {
     background: transparent;
   }
-  :global(.menu [data-slot='command-list']) {
+  :global(.menu [data-slot="command-list"]) {
     max-height: 320px;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -682,13 +819,13 @@
 
   /* Each family is a titled section, ruled off from the one above so "Skills"
      and "Commands" read as two kinds of thing rather than one long list. */
-  :global(.menu [data-slot='command-group']) {
+  :global(.menu [data-slot="command-group"]) {
     padding: var(--space-1) 0;
   }
-  :global(.menu [data-slot='command-group'] + [data-slot='command-group']) {
+  :global(.menu [data-slot="command-group"] + [data-slot="command-group"]) {
     border-top: 1px solid var(--border-hairline);
   }
-  :global(.menu [data-slot='command-group'] [data-command-group-heading]) {
+  :global(.menu [data-slot="command-group"] [data-command-group-heading]) {
     padding: var(--space-1) var(--space-2) var(--space-2);
     font-size: var(--text-xs);
     font-weight: var(--weight-medium);
@@ -700,7 +837,7 @@
   /* One row: the name, its prose, and where it came from — on a single line,
      the selected one carrying fill and stronger ink so the highlight survives
      greyscale (it is never colour alone). */
-  :global(.menu [data-slot='command-item']) {
+  :global(.menu [data-slot="command-item"]) {
     display: flex;
     align-items: baseline;
     gap: var(--space-2);
@@ -713,12 +850,12 @@
       background-color var(--c-100) var(--e-in),
       color var(--c-100) var(--e-in);
   }
-  :global(.menu [data-slot='command-item'][data-selected='true']) {
+  :global(.menu [data-slot="command-item"][data-selected="true"]) {
     background: var(--surface-hover);
     color: var(--ink-strong);
   }
   @media (pointer: coarse) {
-    :global(.menu [data-slot='command-item']) {
+    :global(.menu [data-slot="command-item"]) {
       min-height: 44px;
     }
   }

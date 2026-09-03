@@ -1,8 +1,8 @@
 /** How a machine names itself vs. how the rail should say it out loud. */
-import type { AgentRow } from '@whiffle/core';
+import type { AgentRow } from "@whiffle/core";
 
 /** mDNS and router suffixes: they say "same network", which the rail already implies. */
-const LOCAL_SUFFIXES = ['.local', '.lan', '.home'];
+const LOCAL_SUFFIXES = [".local", ".lan", ".home"];
 
 export function machineLabel(hostname: string): string {
   const name = hostname.trim();
@@ -17,18 +17,18 @@ export function machineLabel(hostname: string): string {
  * is named the same way everywhere.
  */
 export function machineOs(os: string) {
-  const [platform = '', arch = ''] = os.trim().toLowerCase().split('-');
+  const [platform = "", arch = ""] = os.trim().toLowerCase().split("-");
 
   switch (platform) {
-    case 'darwin':
-      return { label: 'macOS', arch };
-    case 'linux':
-      return { label: 'Linux', arch };
-    case 'win32':
-    case 'windows':
-      return { label: 'Windows', arch };
+    case "darwin":
+      return { label: "macOS", arch };
+    case "linux":
+      return { label: "Linux", arch };
+    case "win32":
+    case "windows":
+      return { label: "Windows", arch };
     default:
-      return { label: 'Unknown', arch };
+      return { label: "Unknown", arch };
   }
 }
 
@@ -39,9 +39,9 @@ export function machineOs(os: string) {
  */
 export function signInWarning(machine: AgentRow): string | undefined {
   switch (machine.auth) {
-    case 'unreadable-credentials':
+    case "unreadable-credentials":
       return `${machineLabel(machine.hostname)} has Claude Code credentials it cannot read: they are in the login keychain, and its agent is running outside the desktop session. Signing in again will not help. On that machine, run \`whiffle service install\` — a LaunchAgent can read the keychain — or \`whiffle login\` for a token.`;
-    case 'unauthenticated':
+    case "unauthenticated":
       return `Nobody is signed in to Claude Code on ${machineLabel(machine.hostname)}, so sessions there will answer "Not logged in". Run \`whiffle login\` on that machine.`;
     default:
       return undefined;

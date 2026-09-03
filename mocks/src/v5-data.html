@@ -1,12 +1,23 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Whiffle — Data surfaces (v5, Phase 6)</title>
-<link rel="preload" href="./fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="./fonts/geist.css">
-<link rel="stylesheet" href="./tokens.css">
-<style>
-/* =============================================================================
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+      name="viewport"
+    >
+    <title>Whiffle — Data surfaces (v5, Phase 6)</title>
+    <link
+      as="font"
+      crossorigin
+      href="./fonts/geist-latin-wght-normal.woff2"
+      rel="preload"
+      type="font/woff2"
+    >
+    <link href="./fonts/geist.css" rel="stylesheet">
+    <link href="./tokens.css" rel="stylesheet">
+    <style>
+      /* =============================================================================
    WHIFFLE — PHASE 6 "DATA SURFACES" (table system · stat cards · threshold ink ·
    bar chart · usage/context bullet meters · distribution panel), at BOTH densities.
 
@@ -39,619 +50,1950 @@
        + aria-describedby a data table (DW-6.8).
    ========================================================================== */
 
-:root{
-  /* ---- component dimension ramp — COMFORTABLE (default) ------------------ */
-  --d-stat-h:96px;        /* stat card height */
-  --d-stat-pad:14px;
-  --d-row:44px;           /* table row pitch (the Phase 4 comfortable row) */
-  --d-cell-x:14px;        /* table cell horizontal padding */
-  --d-th-h:32px;
-  --d-pan-pad:18px;
-  --d-tool-h:44px;
-  --d-gap:14px;           /* stat-card gap (--space-4) */
-  --d-input-h:44px;
-  --d-input-fs:16px;      /* >=16px so iOS never zooms */
-  --d-btn-h:40px;
-}
-/* ---- compact dimension ramp — the SAME component tier, size/space only ---- */
-.d-compact{
-  --d-stat-h:80px;
-  --d-stat-pad:11px;
-  --d-row:34px;
-  --d-cell-x:10px;
-  --d-th-h:24px;
-  --d-pan-pad:13px;
-  --d-tool-h:38px;
-  --d-gap:8px;
-  --d-input-h:34px;
-  --d-btn-h:32px;
-}
+      :root {
+        /* ---- component dimension ramp — COMFORTABLE (default) ------------------ */
+        --d-stat-h: 96px; /* stat card height */
+        --d-stat-pad: 14px;
+        --d-row: 44px; /* table row pitch (the Phase 4 comfortable row) */
+        --d-cell-x: 14px; /* table cell horizontal padding */
+        --d-th-h: 32px;
+        --d-pan-pad: 18px;
+        --d-tool-h: 44px;
+        --d-gap: 14px; /* stat-card gap (--space-4) */
+        --d-input-h: 44px;
+        --d-input-fs: 16px; /* >=16px so iOS never zooms */
+        --d-btn-h: 40px;
+      }
+      /* ---- compact dimension ramp — the SAME component tier, size/space only ---- */
+      .d-compact {
+        --d-stat-h: 80px;
+        --d-stat-pad: 11px;
+        --d-row: 34px;
+        --d-cell-x: 10px;
+        --d-th-h: 24px;
+        --d-pan-pad: 13px;
+        --d-tool-h: 38px;
+        --d-gap: 8px;
+        --d-input-h: 34px;
+        --d-btn-h: 32px;
+      }
 
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{
-  font-family:var(--font-body);
-  font-size:var(--text-base);
-  line-height:var(--leading-body);
-  color:var(--ink-strong);
-  background:var(--surface-field);
-  -webkit-font-smoothing:antialiased;
-  display:grid;
-  grid-template-columns:228px minmax(0,1fr);
-  min-height:100vh;
-  width:100%;
-}
-.mono{font-family:var(--font-mono);font-size:var(--text-sm)}
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        color: var(--ink-strong);
+        background: var(--surface-field);
+        -webkit-font-smoothing: antialiased;
+        display: grid;
+        grid-template-columns: 228px minmax(0, 1fr);
+        min-height: 100vh;
+        width: 100%;
+      }
+      .mono {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+      }
 
-/* ============================== SIDEBAR ================================== */
-aside{background:var(--surface-raised);border-right:1px solid var(--border-hairline);
-  display:flex;flex-direction:column;overflow:hidden}
-.brand{height:57px;display:flex;align-items:center;gap:9px;padding:0 14px;flex-shrink:0}
-.logo{width:26px;height:26px;border-radius:var(--radius-tile);background:var(--brand-solid);
-  background-image:var(--gradient-action);box-shadow:var(--shadow-action);color:var(--on-brand);
-  display:grid;place-items:center;font-size:var(--text-base);font-weight:var(--weight-strong)}
-.logo svg{width:15px;height:15px;display:block}
-.brand b{font-size:var(--text-md);font-weight:var(--weight-strong);letter-spacing:var(--track-display)}
-.brand .home{margin-left:auto;width:44px;height:44px;border:1px solid var(--border-control);
-  border-radius:var(--radius-control);background:var(--surface-raised);color:var(--ink-muted);
-  display:grid;place-items:center;cursor:pointer;flex:0 0 auto}
-.brand .home svg{width:18px;height:18px}
-@media (hover:hover) and (pointer:fine){.brand .home:hover{background:var(--surface-hover);color:var(--ink-body)}}
-.brand .home:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      /* ============================== SIDEBAR ================================== */
+      aside {
+        background: var(--surface-raised);
+        border-right: 1px solid var(--border-hairline);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .brand {
+        height: 57px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 14px;
+        flex-shrink: 0;
+      }
+      .logo {
+        width: 26px;
+        height: 26px;
+        border-radius: var(--radius-tile);
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        display: grid;
+        place-items: center;
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+      }
+      .logo svg {
+        width: 15px;
+        height: 15px;
+        display: block;
+      }
+      .brand b {
+        font-size: var(--text-md);
+        font-weight: var(--weight-strong);
+        letter-spacing: var(--track-display);
+      }
+      .brand .home {
+        margin-left: auto;
+        width: 44px;
+        height: 44px;
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-control);
+        background: var(--surface-raised);
+        color: var(--ink-muted);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        flex: 0 0 auto;
+      }
+      .brand .home svg {
+        width: 18px;
+        height: 18px;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .brand .home:hover {
+          background: var(--surface-hover);
+          color: var(--ink-body);
+        }
+      }
+      .brand .home:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-.sec{font-size:var(--text-xs);color:var(--ink-muted);font-weight:var(--weight-strong);
-  text-transform:uppercase;letter-spacing:var(--track-caps);padding:0 20px;margin:16px 0 7px}
-nav{padding:0 10px;display:flex;flex-direction:column;gap:1px}
-.nav-i{height:30px;border-radius:var(--radius-control);display:flex;align-items:center;gap:10px;
-  padding:0 10px;font-size:var(--text-md);color:var(--ink-body);font-weight:var(--weight-medium)}
-.nav-i .ic{width:17px;text-align:center;color:var(--ink-muted);flex:0 0 auto}
-.nav-i .ic svg{width:16px;height:16px;display:block}
-.nav-i.on{background:var(--surface-raised);color:var(--ink-strong);box-shadow:var(--shadow-tile);font-weight:var(--weight-strong)}
-.nav-i.on .ic{color:var(--ink-body)}
-@media (hover:hover) and (pointer:fine){.nav-i:hover{background:var(--surface-hover)}}
-.nav-i:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:var(--radius-control)}
+      .sec {
+        font-size: var(--text-xs);
+        color: var(--ink-muted);
+        font-weight: var(--weight-strong);
+        text-transform: uppercase;
+        letter-spacing: var(--track-caps);
+        padding: 0 20px;
+        margin: 16px 0 7px;
+      }
+      nav {
+        padding: 0 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .nav-i {
+        height: 30px;
+        border-radius: var(--radius-control);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 10px;
+        font-size: var(--text-md);
+        color: var(--ink-body);
+        font-weight: var(--weight-medium);
+      }
+      .nav-i .ic {
+        width: 17px;
+        text-align: center;
+        color: var(--ink-muted);
+        flex: 0 0 auto;
+      }
+      .nav-i .ic svg {
+        width: 16px;
+        height: 16px;
+        display: block;
+      }
+      .nav-i.on {
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        box-shadow: var(--shadow-tile);
+        font-weight: var(--weight-strong);
+      }
+      .nav-i.on .ic {
+        color: var(--ink-body);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .nav-i:hover {
+          background: var(--surface-hover);
+        }
+      }
+      .nav-i:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+        border-radius: var(--radius-control);
+      }
 
-.quota{margin:auto 10px 12px;background:var(--surface-field);border:1px solid var(--border-hairline);
-  border-radius:var(--radius-panel);padding:13px}
-.quota .n{font-size:var(--text-md);font-weight:var(--weight-strong);display:flex;align-items:center;gap:6px}
-.quota .n svg{width:15px;height:15px;flex:0 0 auto;color:var(--status-attn-ink)}
-.quota .s{font-size:var(--text-sm);color:var(--ink-muted);margin:2px 0 8px}
-.quota button{width:100%;height:var(--d-btn-h);border:0;border-radius:var(--radius-control);
-  background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);
-  color:var(--on-brand);font-family:var(--font-body);font-size:var(--text-base);font-weight:var(--weight-strong);cursor:pointer}
-.quota button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      .quota {
+        margin: auto 10px 12px;
+        background: var(--surface-field);
+        border: 1px solid var(--border-hairline);
+        border-radius: var(--radius-panel);
+        padding: 13px;
+      }
+      .quota .n {
+        font-size: var(--text-md);
+        font-weight: var(--weight-strong);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .quota .n svg {
+        width: 15px;
+        height: 15px;
+        flex: 0 0 auto;
+        color: var(--status-attn-ink);
+      }
+      .quota .s {
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        margin: 2px 0 8px;
+      }
+      .quota button {
+        width: 100%;
+        height: var(--d-btn-h);
+        border: 0;
+        border-radius: var(--radius-control);
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+        cursor: pointer;
+      }
+      .quota button:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-/* ============================== MAIN ===================================== */
-main{display:flex;flex-direction:column;min-width:0;overflow:hidden}
-.page{flex:1 1 auto;overflow-y:auto;padding:var(--d-pan-pad) 21px var(--d-pan-pad) 25px;min-width:0}
+      /* ============================== MAIN ===================================== */
+      main {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .page {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding: var(--d-pan-pad) 21px var(--d-pan-pad) 25px;
+        min-width: 0;
+      }
 
-/* page header + connection band */
-.phead{display:flex;align-items:center;gap:12px;margin:0 0 var(--d-pan-pad)}
-.phead h1{font-size:var(--text-xl);font-weight:var(--weight-strong);line-height:var(--leading-tight);letter-spacing:var(--track-display)}
-.phead .conn{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-sm);color:var(--status-done-ink);
-  background:var(--status-done-bg);padding:4px 10px;border-radius:var(--radius-pill);font-weight:var(--weight-strong)}
-.phead .conn svg{width:11px;height:11px}
-.phead .actions{margin-left:auto;display:flex;gap:8px;align-items:center}
-.btn{height:var(--d-btn-h);padding:0 14px;border:1px solid var(--border-control);border-radius:var(--radius-control);
-  background:var(--surface-raised);color:var(--ink-strong);font-family:var(--font-body);font-size:var(--text-base);
-  font-weight:var(--weight-medium);display:inline-flex;align-items:center;gap:7px;cursor:pointer}
-.btn svg{width:14px;height:14px;color:var(--ink-muted)}
-.btn.pri{background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);
-  color:var(--on-brand);border-color:transparent}
-.btn.pri svg{color:var(--on-brand)}
-@media (hover:hover) and (pointer:fine){.btn:hover:not(.pri){background:var(--surface-hover)} .btn.pri:hover{filter:brightness(1.06)}}
-.btn:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      /* page header + connection band */
+      .phead {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0 0 var(--d-pan-pad);
+      }
+      .phead h1 {
+        font-size: var(--text-xl);
+        font-weight: var(--weight-strong);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--track-display);
+      }
+      .phead .conn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: var(--text-sm);
+        color: var(--status-done-ink);
+        background: var(--status-done-bg);
+        padding: 4px 10px;
+        border-radius: var(--radius-pill);
+        font-weight: var(--weight-strong);
+      }
+      .phead .conn svg {
+        width: 11px;
+        height: 11px;
+      }
+      .phead .actions {
+        margin-left: auto;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .btn {
+        height: var(--d-btn-h);
+        padding: 0 14px;
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-control);
+        background: var(--surface-raised);
+        color: var(--ink-strong);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: var(--weight-medium);
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        cursor: pointer;
+      }
+      .btn svg {
+        width: 14px;
+        height: 14px;
+        color: var(--ink-muted);
+      }
+      .btn.pri {
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        border-color: transparent;
+      }
+      .btn.pri svg {
+        color: var(--on-brand);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .btn:hover:not(.pri) {
+          background: var(--surface-hover);
+        }
+        .btn.pri:hover {
+          filter: brightness(1.06);
+        }
+      }
+      .btn:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-/* ============================== STAT CARDS =============================== */
-/* DELIBERATE DEVIATION FROM THE REFERENCE (recorded): the FlowAI comps ship BARE
+      /* ============================== STAT CARDS =============================== */
+      /* DELIBERATE DEVIATION FROM THE REFERENCE (recorded): the FlowAI comps ship BARE
    numbers (28, 98.2%, 08, 842K) with no comparison, direction, or favorability.
    Doctrine (Cairo's "missing baseline" lie — a KPI without context is not
    interpretable) rejects bare numbers, so EVERY card here renders a comparison
    value, a direction of change, and whether the change is favourable (DW-6.2). */
-.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--d-gap);margin:0 0 var(--d-pan-pad)}
-.stat{background:var(--surface-raised);border:1px solid var(--border-hairline);border-radius:var(--radius-card);
-  box-shadow:var(--shadow-hairline);padding:var(--d-stat-pad);display:flex;flex-direction:column;gap:7px;
-  height:var(--d-stat-h)}
-.stat .top{display:flex;align-items:center;gap:8px}
-.stat .ic{width:24px;height:24px;border-radius:var(--radius-tile);background:var(--surface-sunken);color:var(--ink-muted);
-  display:grid;place-items:center;flex:0 0 auto}
-.stat .ic svg{width:13px;height:13px}
-.stat .l{font-size:var(--text-sm);color:var(--ink-muted);font-weight:var(--weight-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.stat .v{font-size:var(--text-3xl);font-weight:var(--weight-strong);line-height:var(--leading-numeric);color:var(--ink-strong)}
-.stat .v small{font-size:var(--text-sm);color:var(--ink-muted);font-weight:var(--weight-medium)}
-.stat .d{display:flex;align-items:center;gap:5px;font-size:var(--text-sm);min-width:0;flex-wrap:nowrap}
-.stat .d .dir{display:inline-flex;align-items:center;gap:2px;font-weight:var(--weight-strong);flex:0 0 auto}
-.stat .d .dir svg{width:11px;height:11px}
-/* Never #3 + Cairo: the delta arrow is NEUTRAL ink. Direction is already encoded
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: var(--d-gap);
+        margin: 0 0 var(--d-pan-pad);
+      }
+      .stat {
+        background: var(--surface-raised);
+        border: 1px solid var(--border-hairline);
+        border-radius: var(--radius-card);
+        box-shadow: var(--shadow-hairline);
+        padding: var(--d-stat-pad);
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        height: var(--d-stat-h);
+      }
+      .stat .top {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .stat .ic {
+        width: 24px;
+        height: 24px;
+        border-radius: var(--radius-tile);
+        background: var(--surface-sunken);
+        color: var(--ink-muted);
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+      }
+      .stat .ic svg {
+        width: 13px;
+        height: 13px;
+      }
+      .stat .l {
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        font-weight: var(--weight-medium);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .stat .v {
+        font-size: var(--text-3xl);
+        font-weight: var(--weight-strong);
+        line-height: var(--leading-numeric);
+        color: var(--ink-strong);
+      }
+      .stat .v small {
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        font-weight: var(--weight-medium);
+      }
+      .stat .d {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: var(--text-sm);
+        min-width: 0;
+        flex-wrap: nowrap;
+      }
+      .stat .d .dir {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        font-weight: var(--weight-strong);
+        flex: 0 0 auto;
+      }
+      .stat .d .dir svg {
+        width: 11px;
+        height: 11px;
+      }
+      /* Never #3 + Cairo: the delta arrow is NEUTRAL ink. Direction is already encoded
    by the glyph and the +/- sign; painting it in --data-ok/--data-bad doubles the
    cue with a hue that can lie (green up on a near-budget card, red down on a
    clearing card). Favorability lives ONLY in the .fav chip. */
-.stat .d .dir.up{color:var(--ink-body)}
-.stat .d .dir.dn{color:var(--ink-body)}
-.stat .d .cmp{color:var(--ink-body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto}
-.stat .d .fav{flex:0 0 auto;font-weight:var(--weight-strong);border-radius:var(--radius-pill);padding:1px 7px;font-size:var(--text-xs);letter-spacing:var(--track-caps);text-transform:uppercase}
-.stat .d .fav.good{background:var(--status-done-bg);color:var(--status-done-ink)}
-.stat .d .fav.atn{background:var(--status-attn-bg);color:var(--status-attn-ink)}
-.stat .d .fav.bad{background:var(--status-fail-bg);color:var(--status-fail-ink)}
+      .stat .d .dir.up {
+        color: var(--ink-body);
+      }
+      .stat .d .dir.dn {
+        color: var(--ink-body);
+      }
+      .stat .d .cmp {
+        color: var(--ink-body);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 0 1 auto;
+      }
+      .stat .d .fav {
+        flex: 0 0 auto;
+        font-weight: var(--weight-strong);
+        border-radius: var(--radius-pill);
+        padding: 1px 7px;
+        font-size: var(--text-xs);
+        letter-spacing: var(--track-caps);
+        text-transform: uppercase;
+      }
+      .stat .d .fav.good {
+        background: var(--status-done-bg);
+        color: var(--status-done-ink);
+      }
+      .stat .d .fav.atn {
+        background: var(--status-attn-bg);
+        color: var(--status-attn-ink);
+      }
+      .stat .d .fav.bad {
+        background: var(--status-fail-bg);
+        color: var(--status-fail-ink);
+      }
 
-/* ============================== PANELS =================================== */
-.panel{background:var(--surface-raised);border:1px solid var(--border-hairline);border-radius:var(--radius-card);
-  box-shadow:var(--shadow-hairline);margin:0 0 var(--d-pan-pad);overflow:hidden}
-.panel .phead{padding:12px 16px;border-bottom:1px solid var(--border-hairline);margin:0}
-.panel .phead h2{font-size:var(--text-md);font-weight:var(--weight-strong)}
-.panel .phead .sub{font-size:var(--text-sm);color:var(--ink-muted);font-weight:var(--weight-medium)}
-.panel .phead .pH{margin-left:auto;display:flex;gap:8px;align-items:center}
-.panel .body{padding:14px 16px}
+      /* ============================== PANELS =================================== */
+      .panel {
+        background: var(--surface-raised);
+        border: 1px solid var(--border-hairline);
+        border-radius: var(--radius-card);
+        box-shadow: var(--shadow-hairline);
+        margin: 0 0 var(--d-pan-pad);
+        overflow: hidden;
+      }
+      .panel .phead {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-hairline);
+        margin: 0;
+      }
+      .panel .phead h2 {
+        font-size: var(--text-md);
+        font-weight: var(--weight-strong);
+      }
+      .panel .phead .sub {
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        font-weight: var(--weight-medium);
+      }
+      .panel .phead .pH {
+        margin-left: auto;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .panel .body {
+        padding: 14px 16px;
+      }
 
-/* ============================== BAR CHART ================================ */
-.chart-legend{display:flex;gap:14px;flex-wrap:wrap;margin:0 0 12px}
-.chart-legend .k{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-sm);color:var(--ink-body);font-weight:var(--weight-medium)}
-.chart-legend .sw{width:11px;height:11px;border-radius:2px;flex:0 0 auto}
-.chart-legend .sw.rhombus{transform:rotate(45deg);border-radius:2px}
-.chart-legend .sw.disc{border-radius:50%}
-.chart-legend .sw.tri{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid}
-.chart-box{position:relative;overflow-x:auto}
-.chart-tbl{width:100%;border-collapse:collapse}
-.chart-tbl th,.chart-tbl td{font-size:var(--text-sm);color:var(--ink-muted);padding:2px 0}
-.chart-tbl td.n, .chart-tbl th.n{font-variant-numeric:tabular-nums}
-.axis-note{font-size:var(--text-xs);color:var(--ink-muted);margin-top:6px}
-.dnote{font-size:var(--text-sm);color:var(--ink-muted);margin-top:2px}
+      /* ============================== BAR CHART ================================ */
+      .chart-legend {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin: 0 0 12px;
+      }
+      .chart-legend .k {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: var(--text-sm);
+        color: var(--ink-body);
+        font-weight: var(--weight-medium);
+      }
+      .chart-legend .sw {
+        width: 11px;
+        height: 11px;
+        border-radius: 2px;
+        flex: 0 0 auto;
+      }
+      .chart-legend .sw.rhombus {
+        transform: rotate(45deg);
+        border-radius: 2px;
+      }
+      .chart-legend .sw.disc {
+        border-radius: 50%;
+      }
+      .chart-legend .sw.tri {
+        width: 0;
+        height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-bottom: 11px solid;
+      }
+      .chart-box {
+        position: relative;
+        overflow-x: auto;
+      }
+      .chart-tbl {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .chart-tbl th,
+      .chart-tbl td {
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        padding: 2px 0;
+      }
+      .chart-tbl td.n,
+      .chart-tbl th.n {
+        font-variant-numeric: tabular-nums;
+      }
+      .axis-note {
+        font-size: var(--text-xs);
+        color: var(--ink-muted);
+        margin-top: 6px;
+      }
+      .dnote {
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        margin-top: 2px;
+      }
 
-/* ============================== BULLET METERS ============================ */
-/* DW-6.3: ZERO gauges / radial meters. The old TaskRing re-forms as a BULLET:
+      /* ============================== BULLET METERS ============================ */
+      /* DW-6.3: ZERO gauges / radial meters. The old TaskRing re-forms as a BULLET:
    a bar + a target reference line + a contextual range band. */
-.meters{display:grid;grid-template-columns:1fr 1fr;gap:var(--d-gap);margin:0 0 var(--d-pan-pad)}
-.meter{display:flex;flex-direction:column;gap:7px}
-.meter .cap{display:flex;align-items:baseline;gap:8px}
-.meter .cap .nm{font-size:var(--text-sm);color:var(--ink-muted);font-weight:var(--weight-medium)}
-.meter .cap .val{font-size:var(--text-md);font-weight:var(--weight-strong);font-variant-numeric:tabular-nums}
-.meter .cap .val .now{color:var(--ink-strong)}
-.meter .cap .val .max{color:var(--ink-muted);font-weight:var(--weight-medium)}
-.meter .cap .st{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:var(--text-sm);font-weight:var(--weight-strong)}
-.meter .cap .st svg{width:11px;height:11px}
-.meter .cap .st.warn{color:var(--status-attn-ink)}
-.meter .cap .st.good{color:var(--status-done-ink)}
-.meter .cap .st.bad{color:var(--status-fail-ink)}
-.bullet{position:relative;height:8px;border-radius:var(--radius-pill);background:var(--surface-sunken)}
-.bullet .bar{position:absolute;left:0;top:0;bottom:0;border-radius:var(--radius-pill)}
-.bullet .range{position:absolute;top:-3px;bottom:-3px;border-radius:var(--radius-pill);background:var(--status-attn-bg);border:1px solid var(--status-attn-ink)}
-.bullet .target{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink-strong);border-radius:1px}
-.meter .leg{font-size:var(--text-xs);color:var(--ink-muted);display:flex;gap:12px}
-.meter .leg b{color:var(--ink-body);font-weight:var(--weight-medium)}
-.meter .leg .sw{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:3px;vertical-align:1px}
+      .meters {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--d-gap);
+        margin: 0 0 var(--d-pan-pad);
+      }
+      .meter {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .meter .cap {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .meter .cap .nm {
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+        font-weight: var(--weight-medium);
+      }
+      .meter .cap .val {
+        font-size: var(--text-md);
+        font-weight: var(--weight-strong);
+        font-variant-numeric: tabular-nums;
+      }
+      .meter .cap .val .now {
+        color: var(--ink-strong);
+      }
+      .meter .cap .val .max {
+        color: var(--ink-muted);
+        font-weight: var(--weight-medium);
+      }
+      .meter .cap .st {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+      }
+      .meter .cap .st svg {
+        width: 11px;
+        height: 11px;
+      }
+      .meter .cap .st.warn {
+        color: var(--status-attn-ink);
+      }
+      .meter .cap .st.good {
+        color: var(--status-done-ink);
+      }
+      .meter .cap .st.bad {
+        color: var(--status-fail-ink);
+      }
+      .bullet {
+        position: relative;
+        height: 8px;
+        border-radius: var(--radius-pill);
+        background: var(--surface-sunken);
+      }
+      .bullet .bar {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        border-radius: var(--radius-pill);
+      }
+      .bullet .range {
+        position: absolute;
+        top: -3px;
+        bottom: -3px;
+        border-radius: var(--radius-pill);
+        background: var(--status-attn-bg);
+        border: 1px solid var(--status-attn-ink);
+      }
+      .bullet .target {
+        position: absolute;
+        top: -4px;
+        bottom: -4px;
+        width: 2px;
+        background: var(--ink-strong);
+        border-radius: 1px;
+      }
+      .meter .leg {
+        font-size: var(--text-xs);
+        color: var(--ink-muted);
+        display: flex;
+        gap: 12px;
+      }
+      .meter .leg b {
+        color: var(--ink-body);
+        font-weight: var(--weight-medium);
+      }
+      .meter .leg .sw {
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        margin-right: 3px;
+        vertical-align: 1px;
+      }
 
-/* ============================== DISTRIBUTION ============================= */
-.dist{display:flex;flex-direction:column;gap:9px}
-.dist .row{display:grid;grid-template-columns:150px 1fr 58px;align-items:center;gap:12px;font-size:var(--text-sm)}
-.dist .row .nm{color:var(--ink-body);font-weight:var(--weight-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dist .row .track{height:8px;border-radius:var(--radius-pill);background:var(--surface-sunken);overflow:hidden}
-.dist .row .track i{display:block;height:100%;border-radius:var(--radius-pill);background:var(--accent-solid);background-image:var(--gradient-action)}
-.dist .row .v{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-strong)}
-.dist .row.alt .track i{background:var(--surface-active)}
+      /* ============================== DISTRIBUTION ============================= */
+      .dist {
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+      .dist .row {
+        display: grid;
+        grid-template-columns: 150px 1fr 58px;
+        align-items: center;
+        gap: 12px;
+        font-size: var(--text-sm);
+      }
+      .dist .row .nm {
+        color: var(--ink-body);
+        font-weight: var(--weight-medium);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .dist .row .track {
+        height: 8px;
+        border-radius: var(--radius-pill);
+        background: var(--surface-sunken);
+        overflow: hidden;
+      }
+      .dist .row .track i {
+        display: block;
+        height: 100%;
+        border-radius: var(--radius-pill);
+        background: var(--accent-solid);
+        background-image: var(--gradient-action);
+      }
+      .dist .row .v {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: var(--ink-strong);
+      }
+      .dist .row.alt .track i {
+        background: var(--surface-active);
+      }
 
-/* ============================== TABLE SYSTEM ============================= */
-/* DW-6.7: text columns left-aligned, numeric columns right-aligned, NO full
+      /* ============================== TABLE SYSTEM ============================= */
+      /* DW-6.7: text columns left-aligned, numeric columns right-aligned, NO full
    cell borders — hairline + whitespace. Row density from the dimension ramp. */
-.toolbar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border-hairline)}
-.toolbar .search{flex:1 1 auto;max-width:260px;height:var(--d-input-h);display:flex;align-items:center;gap:8px;
-  border:1px solid var(--border-control);border-radius:var(--radius-control);padding:0 12px;color:var(--ink-muted);font-size:var(--text-sm)}
-.toolbar .search svg{width:14px;height:14px;flex:0 0 auto}
-.toolbar .ph{margin-left:auto;display:flex;gap:8px}
-.tbl-wrap{overflow-x:auto}
-table.t{width:100%;border-collapse:collapse}
-.t th{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:var(--track-caps);color:var(--ink-label);
-  font-weight:var(--weight-strong);text-align:left;padding:0 var(--d-cell-x);height:var(--d-th-h);
-  border-bottom:1px solid var(--border-divider);white-space:nowrap}
-.t th.num{text-align:right}
-.t td{font-size:var(--text-base);color:var(--ink-body);padding:0 var(--d-cell-x);height:var(--d-row);
-  border-bottom:1px solid var(--border-hairline);text-align:left;white-space:nowrap}
-.t td.num{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-strong)}
-.t tbody tr:last-child td{border-bottom:0}
-.t .nm{color:var(--ink-strong);font-weight:var(--weight-medium);display:inline-flex;align-items:center;gap:8px}
-.t .nm .mark{width:17px;height:17px;border-radius:var(--radius-mark);display:grid;place-items:center;flex:0 0 auto;
-  background-image:var(--mark-overlay);background-color:var(--mark-1)}
-.t .nm .mark svg{width:10px;height:10px;stroke:var(--mark-glyph);stroke-width:1.8}
-.t .sub{color:var(--ink-muted);font-size:var(--text-sm);font-weight:var(--weight-body)}
-.t .mono{font-family:var(--font-mono);font-size:var(--text-sm)}
-.t a{color:var(--ink-strong);text-decoration:none}
-.t a:hover{text-decoration:underline}
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border-hairline);
+      }
+      .toolbar .search {
+        flex: 1 1 auto;
+        max-width: 260px;
+        height: var(--d-input-h);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-control);
+        padding: 0 12px;
+        color: var(--ink-muted);
+        font-size: var(--text-sm);
+      }
+      .toolbar .search svg {
+        width: 14px;
+        height: 14px;
+        flex: 0 0 auto;
+      }
+      .toolbar .ph {
+        margin-left: auto;
+        display: flex;
+        gap: 8px;
+      }
+      .tbl-wrap {
+        overflow-x: auto;
+      }
+      table.t {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .t th {
+        font-size: var(--text-xs);
+        text-transform: uppercase;
+        letter-spacing: var(--track-caps);
+        color: var(--ink-label);
+        font-weight: var(--weight-strong);
+        text-align: left;
+        padding: 0 var(--d-cell-x);
+        height: var(--d-th-h);
+        border-bottom: 1px solid var(--border-divider);
+        white-space: nowrap;
+      }
+      .t th.num {
+        text-align: right;
+      }
+      .t td {
+        font-size: var(--text-base);
+        color: var(--ink-body);
+        padding: 0 var(--d-cell-x);
+        height: var(--d-row);
+        border-bottom: 1px solid var(--border-hairline);
+        text-align: left;
+        white-space: nowrap;
+      }
+      .t td.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: var(--ink-strong);
+      }
+      .t tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      .t .nm {
+        color: var(--ink-strong);
+        font-weight: var(--weight-medium);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .t .nm .mark {
+        width: 17px;
+        height: 17px;
+        border-radius: var(--radius-mark);
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+        background-image: var(--mark-overlay);
+        background-color: var(--mark-1);
+      }
+      .t .nm .mark svg {
+        width: 10px;
+        height: 10px;
+        stroke: var(--mark-glyph);
+        stroke-width: 1.8;
+      }
+      .t .sub {
+        color: var(--ink-muted);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-body);
+      }
+      .t .mono {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+      }
+      .t a {
+        color: var(--ink-strong);
+        text-decoration: none;
+      }
+      .t a:hover {
+        text-decoration: underline;
+      }
 
-/* status pill (glyph-led; status is never colour alone — DW-6.4) */
-.pill{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 9px;border-radius:var(--radius-pill);
-  font-size:var(--text-sm);font-weight:var(--weight-strong);white-space:nowrap}
-.pill svg{width:9px;height:9px;flex:0 0 auto;display:block}
-.pill.live{background:var(--status-live-bg);color:var(--status-live-ink)}
-.pill.attn{background:var(--status-attn-bg);color:var(--status-attn-ink)}
-.pill.done{background:var(--status-done-bg);color:var(--status-done-ink)}
-.pill.fail{background:var(--status-fail-bg);color:var(--status-fail-ink)}
-.pill.idle{background:var(--status-idle-bg);color:var(--status-idle-ink);padding:0;font-weight:var(--weight-medium)}
+      /* status pill (glyph-led; status is never colour alone — DW-6.4) */
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 20px;
+        padding: 0 9px;
+        border-radius: var(--radius-pill);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        white-space: nowrap;
+      }
+      .pill svg {
+        width: 9px;
+        height: 9px;
+        flex: 0 0 auto;
+        display: block;
+      }
+      .pill.live {
+        background: var(--status-live-bg);
+        color: var(--status-live-ink);
+      }
+      .pill.attn {
+        background: var(--status-attn-bg);
+        color: var(--status-attn-ink);
+      }
+      .pill.done {
+        background: var(--status-done-bg);
+        color: var(--status-done-ink);
+      }
+      .pill.fail {
+        background: var(--status-fail-bg);
+        color: var(--status-fail-ink);
+      }
+      .pill.idle {
+        background: var(--status-idle-bg);
+        color: var(--status-idle-ink);
+        padding: 0;
+        font-weight: var(--weight-medium);
+      }
 
-/* ---- THRESHOLD INK (DW-6.4 / 6.5) ----------------------------------------
+      /* ---- THRESHOLD INK (DW-6.4 / 6.5) ----------------------------------------
    Threshold colour is a STATUS signal: it switches at the NAMED breakpoints
    below and never interpolates with the value. Every value carries a NON-COLOUR
    cue — an icon + the named breakpoint word — in the same element, so the status
    reads without hue. The three levels are the three DISCRETE --data-* steps; no
    gradient between them. */
-.thr{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums;font-weight:var(--weight-medium)}
-.thr svg{width:11px;height:11px;flex:0 0 auto}
-.thr .lvl{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:var(--track-caps);font-weight:var(--weight-medium)}
-.thr.ok{color:var(--data-ok)}
-.thr.warn{color:var(--data-warn)}
-.thr.bad{color:var(--data-bad)}
-.t .foot{padding:9px 16px;border-top:1px solid var(--border-hairline);display:flex;align-items:center;gap:10px;font-size:var(--text-sm);color:var(--ink-muted)}
-.t .foot .pg{margin-left:auto;display:flex;gap:6px;align-items:center}
-.pgbtn{width:var(--d-btn-h);height:var(--d-btn-h);min-width:var(--d-btn-h);border:1px solid var(--border-control);
-  border-radius:var(--radius-control);background:var(--surface-raised);color:var(--ink-body);display:grid;place-items:center;cursor:pointer}
-.pgbtn svg{width:14px;height:14px}
-.pgbtn.on{background:var(--brand-solid);background-image:var(--gradient-action);color:var(--on-brand);border-color:transparent}
-@media (hover:hover) and (pointer:fine){.pgbtn:hover:not(.on){background:var(--surface-hover)}}
-.pgbtn:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+      .thr {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-variant-numeric: tabular-nums;
+        font-weight: var(--weight-medium);
+      }
+      .thr svg {
+        width: 11px;
+        height: 11px;
+        flex: 0 0 auto;
+      }
+      .thr .lvl {
+        font-size: var(--text-xs);
+        text-transform: uppercase;
+        letter-spacing: var(--track-caps);
+        font-weight: var(--weight-medium);
+      }
+      .thr.ok {
+        color: var(--data-ok);
+      }
+      .thr.warn {
+        color: var(--data-warn);
+      }
+      .thr.bad {
+        color: var(--data-bad);
+      }
+      .t .foot {
+        padding: 9px 16px;
+        border-top: 1px solid var(--border-hairline);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: var(--text-sm);
+        color: var(--ink-muted);
+      }
+      .t .foot .pg {
+        margin-left: auto;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .pgbtn {
+        width: var(--d-btn-h);
+        height: var(--d-btn-h);
+        min-width: var(--d-btn-h);
+        border: 1px solid var(--border-control);
+        border-radius: var(--radius-control);
+        background: var(--surface-raised);
+        color: var(--ink-body);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+      }
+      .pgbtn svg {
+        width: 14px;
+        height: 14px;
+      }
+      .pgbtn.on {
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        color: var(--on-brand);
+        border-color: transparent;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .pgbtn:hover:not(.on) {
+          background: var(--surface-hover);
+        }
+      }
+      .pgbtn:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
 
-/* ============================== MOTION =================================== */
-/* Durations map to the 100/300/500ms tiers only; easings are the three canonical
+      /* ============================== MOTION =================================== */
+      /* Durations map to the 100/300/500ms tiers only; easings are the three canonical
    curves; ONLY transform/opacity animate. */
-:root{
-  --c-100:100ms; --c-300:300ms; --c-500:500ms;
-  --e-in:cubic-bezier(0.16,1,0.3,1);
-  --e-out:cubic-bezier(0.7,0,0.84,0);
-  --e-toggle:cubic-bezier(0.65,0,0.35,1);
-}
-@media (prefers-reduced-motion: reduce){
-  *,*::before,*::after{transition-duration:1ms !important;animation-duration:1ms !important;animation-iteration-count:1 !important}
-}
+      :root {
+        --c-100: 100ms;
+        --c-300: 300ms;
+        --c-500: 500ms;
+        --e-in: cubic-bezier(0.16, 1, 0.3, 1);
+        --e-out: cubic-bezier(0.7, 0, 0.84, 0);
+        --e-toggle: cubic-bezier(0.65, 0, 0.35, 1);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition-duration: 1ms !important;
+          animation-duration: 1ms !important;
+          animation-iteration-count: 1 !important;
+        }
+      }
 
-/* density / flux toolbar (screenshot affordance, not the product) */
-.fluxbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:98;display:flex;gap:4px;
-  align-items:center;padding:4px;border:1px solid var(--border-control);background:var(--surface-raised);
-  border-radius:var(--radius-control);box-shadow:var(--shadow-lifted)}
-.fluxbar button{height:30px;padding:0 10px;border:1px solid transparent;border-radius:var(--radius-control);
-  background:none;color:var(--ink-muted);font-family:var(--font-body);font-size:var(--text-sm);cursor:pointer}
-.fluxbar button.on{background:var(--brand-solid);background-image:var(--gradient-action);box-shadow:var(--shadow-action);
-  color:var(--on-brand);font-weight:var(--weight-strong)}
+      /* density / flux toolbar (screenshot affordance, not the product) */
+      .fluxbar {
+        position: fixed;
+        left: 50%;
+        bottom: 14px;
+        transform: translateX(-50%);
+        z-index: 98;
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        padding: 4px;
+        border: 1px solid var(--border-control);
+        background: var(--surface-raised);
+        border-radius: var(--radius-control);
+        box-shadow: var(--shadow-lifted);
+      }
+      .fluxbar button {
+        height: 30px;
+        padding: 0 10px;
+        border: 1px solid transparent;
+        border-radius: var(--radius-control);
+        background: none;
+        color: var(--ink-muted);
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        cursor: pointer;
+      }
+      .fluxbar button.on {
+        background: var(--brand-solid);
+        background-image: var(--gradient-action);
+        box-shadow: var(--shadow-action);
+        color: var(--on-brand);
+        font-weight: var(--weight-strong);
+      }
 
-/* screen-reader-only (chart long-description / data tables, DW-6.8) */
-.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+      /* screen-reader-only (chart long-description / data tables, DW-6.8) */
+      .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
 
-/* ==================== DENSITY IS FINE-POINTER AWARE (DW-4.10) =============
+      /* ==================== DENSITY IS FINE-POINTER AWARE (DW-4.10) =============
    Under a coarse pointer / narrow width every row, control and tap target
    relaxes to >=44x44; inputs never drop below 16px; no horizontal doc overflow. */
-@media (pointer:coarse){
-  body{grid-template-columns:1fr}
-  aside{position:fixed;inset:0 auto 0 0;width:284px;z-index:40;transform:translateX(-100%);
-    box-shadow:var(--shadow-drawer);transition:transform var(--c-300) var(--e-out)}
-  .nav-i{min-height:44px}
-  .btn,.pgbtn,.quota button{min-height:44px}
-  .pgbtn{min-width:44px}
-  .toolbar .search{min-height:44px}
-  .t td{height:44px}
-}
-/* nav drawer scrim: hidden at rest, covers the board only while the drawer is
+      @media (pointer: coarse) {
+        body {
+          grid-template-columns: 1fr;
+        }
+        aside {
+          position: fixed;
+          inset: 0 auto 0 0;
+          width: 284px;
+          z-index: 40;
+          transform: translateX(-100%);
+          box-shadow: var(--shadow-drawer);
+          transition: transform var(--c-300) var(--e-out);
+        }
+        .nav-i {
+          min-height: 44px;
+        }
+        .btn,
+        .pgbtn,
+        .quota button {
+          min-height: 44px;
+        }
+        .pgbtn {
+          min-width: 44px;
+        }
+        .toolbar .search {
+          min-height: 44px;
+        }
+        .t td {
+          height: 44px;
+        }
+      }
+      /* nav drawer scrim: hidden at rest, covers the board only while the drawer is
    open. The opener is a real <button> toggling .nav-open on <body>, keyed to the
    ≤900px break at which the aside is pushed off-screen (DW interaction/drawer
    doctrine: a closed drawer is inert, an Escape/close returns focus). */
-.nav-scrim{position:fixed;inset:0;background:var(--scrim);opacity:0;pointer-events:none;
-  transition:opacity var(--c-300) var(--e-toggle);z-index:39}
-@media (max-width:900px){
-  body{grid-template-columns:1fr}
-  aside{position:fixed;inset:0 auto 0 0;width:284px;z-index:40;transform:translateX(-100%);
-    box-shadow:var(--shadow-drawer);transition:transform var(--c-300) var(--e-out)}
-  .nav-open aside{transform:none}
-  .nav-open .nav-scrim{opacity:1;pointer-events:auto}
-  .burger{display:grid;place-items:center;width:44px;height:44px;flex:0 0 auto;
-    border-radius:var(--radius-control);color:var(--ink-body);background:none;border:0;cursor:pointer}
-  .burger svg{width:19px;height:19px}
-  .page{padding-left:16px;padding-right:16px}
-  .phead{flex-wrap:wrap}
-  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .meters{grid-template-columns:1fr}
-  .dist .row{grid-template-columns:110px 1fr 50px;gap:8px}
-}
-/* ========================================================================= */
-</style></head><body>
-
-<aside aria-label="Fleet navigation" id="nav">
-  <div class="brand"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></div><b>Whiffle</b>
-    <button type="button" class="home" aria-label="Home (fleet board)">{{solar:widget-5}}</button>
-  </div>
-  <div class="sec">Fleet</div>
-  <nav>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:widget-5}}</span>Fleet</a>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:tuning-4}}</span>Tools</a>
-    <a class="nav-i" href="#nav"><span class="ic">{{solar:checklist-minimalistic}}</span>Rules</a>
-    <a class="nav-i on" href="#nav"><span class="ic">{{solar:chart-2}}</span>Usage</a>
-  </nav>
-  <div class="quota">
-    <div class="n">{{solar:wallet-money}}$18.40 / $50</div>
-    <div class="s">Daily budget — spend across the fleet</div>
-    <button type="button">Manage budget</button>
-  </div>
-</aside>
-<div class="nav-scrim"></div>
-
-<main>
-  <div class="page">
-
-    <header class="phead">
-      <button type="button" class="burger" aria-label="Open navigation" aria-expanded="false" aria-controls="nav">{{solar:hamburger-menu}}</button>
-      <h1>Usage</h1>
-      <span class="conn">{{solar:check-circle}}connected</span>
-      <div class="actions">
-        <button class="btn" type="button">{{solar:export}}Export</button>
-        <button class="btn" type="button">{{solar:tuning-2}}Filter</button>
-        <button class="btn pri" type="button">{{solar:alt-arrow-down}}2.00 ×</button>
+      .nav-scrim {
+        position: fixed;
+        inset: 0;
+        background: var(--scrim);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--c-300) var(--e-toggle);
+        z-index: 39;
+      }
+      @media (max-width: 900px) {
+        body {
+          grid-template-columns: 1fr;
+        }
+        aside {
+          position: fixed;
+          inset: 0 auto 0 0;
+          width: 284px;
+          z-index: 40;
+          transform: translateX(-100%);
+          box-shadow: var(--shadow-drawer);
+          transition: transform var(--c-300) var(--e-out);
+        }
+        .nav-open aside {
+          transform: none;
+        }
+        .nav-open .nav-scrim {
+          opacity: 1;
+          pointer-events: auto;
+        }
+        .burger {
+          display: grid;
+          place-items: center;
+          width: 44px;
+          height: 44px;
+          flex: 0 0 auto;
+          border-radius: var(--radius-control);
+          color: var(--ink-body);
+          background: none;
+          border: 0;
+          cursor: pointer;
+        }
+        .burger svg {
+          width: 19px;
+          height: 19px;
+        }
+        .page {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+        .phead {
+          flex-wrap: wrap;
+        }
+        .stats {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .meters {
+          grid-template-columns: 1fr;
+        }
+        .dist .row {
+          grid-template-columns: 110px 1fr 50px;
+          gap: 8px;
+        }
+      }
+      /* ========================================================================= */
+    </style>
+  </head>
+  <body>
+    <aside aria-label="Fleet navigation" id="nav">
+      <div class="brand">
+        <div class="logo">
+          <svg
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.7"
+            viewBox="0 0 24 24"
+          >
+            <path d="M4 4h16v16H4z" />
+            <path d="M4 4h8v16H4z" fill="currentColor" />
+          </svg>
+        </div>
+        <b>Whiffle</b>
+        <button aria-label="Home (fleet board)" class="home" type="button">
+          {{solar:widget-5}}
+        </button>
       </div>
-    </header>
+      <div class="sec">Fleet</div>
+      <nav>
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:widget-5}}</span>Fleet</a
+        >
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:tuning-4}}</span>Tools</a
+        >
+        <a class="nav-i" href="#nav"
+          ><span class="ic">{{solar:checklist-minimalistic}}</span>Rules</a
+        >
+        <a class="nav-i on" href="#nav"
+          ><span class="ic">{{solar:chart-2}}</span>Usage</a
+        >
+      </nav>
+      <div class="quota">
+        <div class="n">{{solar:wallet-money}}$18.40 / $50</div>
+        <div class="s">Daily budget — spend across the fleet</div>
+        <button type="button">Manage budget</button>
+      </div>
+    </aside>
+    <div class="nav-scrim"></div>
 
-    <!-- ================= STAT-CARD ROW (DW-6.2, 6.10) =====================
+    <main>
+      <div class="page">
+        <header class="phead">
+          <button
+            aria-controls="nav"
+            aria-expanded="false"
+            aria-label="Open navigation"
+            class="burger"
+            type="button"
+          >
+            {{solar:hamburger-menu}}
+          </button>
+          <h1>Usage</h1>
+          <span class="conn">{{solar:check-circle}}connected</span>
+          <div class="actions">
+            <button class="btn" type="button">{{solar:export}}Export</button>
+            <button class="btn" type="button">{{solar:tuning-2}}Filter</button>
+            <button class="btn pri" type="button">
+              {{solar:alt-arrow-down}}2.00 ×
+            </button>
+          </div>
+        </header>
+
+        <!-- ================= STAT-CARD ROW (DW-6.2, 6.10) =====================
          Every card carries comparison + direction + favorability. Five metrics
          <= 7, and all primary values are visible without scrolling. -->
-    <section class="stats" aria-label="Key metrics">
-      <div class="stat">
-        <div class="top"><span class="ic">{{solar:dollar-minimalistic}}</span><span class="l">Spend today</span></div>
-        <div class="v">$18.40</div>
-        <div class="d"><span class="dir up">{{solar:alt-arrow-up}}<span>+2.30</span></span><span class="cmp">vs yesterday</span><span class="fav atn">near budget</span></div>
-      </div>
-      <div class="stat">
-        <div class="top"><span class="ic">{{solar:programming}}</span><span class="l">Runs today</span></div>
-        <div class="v">28</div>
-        <div class="d"><span class="dir up">{{solar:alt-arrow-up}}<span>+6</span></span><span class="cmp">vs yesterday</span><span class="fav good">good</span></div>
-      </div>
-      <div class="stat">
-        <div class="top"><span class="ic">{{solar:laptop-minimalistic}}</span><span class="l">Machines online</span></div>
-        <div class="v">3 <small>/ 3</small></div>
-        <div class="d"><span class="dir dn">{{solar:alt-arrow-down}}<span>−1</span></span><span class="cmp">vs yesterday</span><span class="fav bad">degraded</span></div>
-      </div>
-      <div class="stat">
-        <div class="top"><span class="ic">{{solar:danger-triangle}}</span><span class="l">Needs you</span></div>
-        <div class="v">3</div>
-        <div class="d"><span class="dir dn">{{solar:alt-arrow-down}}<span>−2</span></span><span class="cmp">vs an hour ago</span><span class="fav good">clearing</span></div>
-      </div>
-      <div class="stat">
-        <div class="top"><span class="ic">{{solar:check-circle}}</span><span class="l">Success rate</span></div>
-        <div class="v">98.2<small>%</small></div>
-        <div class="d"><span class="dir up">{{solar:alt-arrow-up}}<span>+0.4pt</span></span><span class="cmp">vs yesterday</span><span class="fav good">good</span></div>
-      </div>
-    </section>
+        <section aria-label="Key metrics" class="stats">
+          <div class="stat">
+            <div class="top">
+              <span class="ic">{{solar:dollar-minimalistic}}</span
+              ><span class="l">Spend today</span>
+            </div>
+            <div class="v">$18.40</div>
+            <div class="d">
+              <span class="dir up"
+                >{{solar:alt-arrow-up}}<span>+2.30</span></span
+              ><span class="cmp">vs yesterday</span
+              ><span class="fav atn">near budget</span>
+            </div>
+          </div>
+          <div class="stat">
+            <div class="top">
+              <span class="ic">{{solar:programming}}</span
+              ><span class="l">Runs today</span>
+            </div>
+            <div class="v">28</div>
+            <div class="d">
+              <span class="dir up">{{solar:alt-arrow-up}}<span>+6</span></span
+              ><span class="cmp">vs yesterday</span
+              ><span class="fav good">good</span>
+            </div>
+          </div>
+          <div class="stat">
+            <div class="top">
+              <span class="ic">{{solar:laptop-minimalistic}}</span
+              ><span class="l">Machines online</span>
+            </div>
+            <div class="v">3 <small>/ 3</small></div>
+            <div class="d">
+              <span class="dir dn">{{solar:alt-arrow-down}}<span>−1</span></span
+              ><span class="cmp">vs yesterday</span
+              ><span class="fav bad">degraded</span>
+            </div>
+          </div>
+          <div class="stat">
+            <div class="top">
+              <span class="ic">{{solar:danger-triangle}}</span
+              ><span class="l">Needs you</span>
+            </div>
+            <div class="v">3</div>
+            <div class="d">
+              <span class="dir dn">{{solar:alt-arrow-down}}<span>−2</span></span
+              ><span class="cmp">vs an hour ago</span
+              ><span class="fav good">clearing</span>
+            </div>
+          </div>
+          <div class="stat">
+            <div class="top">
+              <span class="ic">{{solar:check-circle}}</span
+              ><span class="l">Success rate</span>
+            </div>
+            <div class="v">98.2<small>%</small></div>
+            <div class="d">
+              <span class="dir up"
+                >{{solar:alt-arrow-up}}<span>+0.4pt</span></span
+              ><span class="cmp">vs yesterday</span
+              ><span class="fav good">good</span>
+            </div>
+          </div>
+        </section>
 
-    <!-- ================= USAGE + CONTEXT BULLET METERS (DW-6.3) =========== -->
-    <section class="meters" aria-label="Usage and context meters">
-      <div class="meter">
-        <div class="cap"><span class="nm">Daily budget</span><span class="val"><span class="now">$18.40</span><span class="max"> / $50</span></span>
-          <span class="st warn">{{solar:danger-triangle}}near limit</span></div>
-        <div class="bullet" aria-hidden="true">
-          <span class="range" style="left:68%;right:4%"></span>
-          <span class="target" style="left:80%"></span>
-          <span class="bar" style="left:0;width:37%;background:var(--data-warn)"></span>
-        </div>
-        <div class="leg"><span><span class="sw" style="background:var(--data-warn)"></span><b>37%</b> used</span>
-          <span><span class="sw" style="background:var(--status-attn-bg)"></span><b>68…96%</b> alert band</span>
-          <span><span class="sw" style="background:var(--ink-strong)"></span><b>100%</b> hard cap</span></div>
-      </div>
-      <div class="meter">
-        <div class="cap"><span class="nm">Context window</span><span class="val"><span class="now">104k</span><span class="max"> / 200k</span></span>
-          <span class="st good">{{solar:check-circle}}healthy</span></div>
-        <div class="bullet" aria-hidden="true">
-          <span class="range" style="left:78%;right:4%"></span>
-          <span class="target" style="left:88%"></span>
-          <span class="bar" style="left:0;width:52%;background:var(--data-ok)"></span>
-        </div>
-        <div class="leg"><span><span class="sw" style="background:var(--data-ok)"></span><b>52%</b> used</span>
-          <span><span class="sw" style="background:var(--status-done-bg)"></span><b>78…96%</b> refill band</span>
-          <span><span class="sw" style="background:var(--ink-strong)"></span><b>100%</b> hard cap</span></div>
-      </div>
-    </section>
+        <!-- ================= USAGE + CONTEXT BULLET METERS (DW-6.3) =========== -->
+        <section aria-label="Usage and context meters" class="meters">
+          <div class="meter">
+            <div class="cap">
+              <span class="nm">Daily budget</span
+              ><span class="val"
+                ><span class="now">$18.40</span
+                ><span class="max"> / $50</span></span
+              >
+              <span class="st warn">{{solar:danger-triangle}}near limit</span>
+            </div>
+            <div aria-hidden="true" class="bullet">
+              <span class="range" style="left:68%;right:4%"></span>
+              <span class="target" style="left:80%"></span>
+              <span
+                class="bar"
+                style="left:0;width:37%;background:var(--data-warn)"
+              ></span>
+            </div>
+            <div class="leg">
+              <span
+                ><span class="sw" style="background:var(--data-warn)"></span
+                ><b>37%</b>
+                used</span
+              >
+              <span
+                ><span
+                  class="sw"
+                  style="background:var(--status-attn-bg)"
+                ></span><b>68…96%</b>
+                alert band</span
+              >
+              <span
+                ><span class="sw" style="background:var(--ink-strong)"></span
+                ><b>100%</b>
+                hard cap</span
+              >
+            </div>
+          </div>
+          <div class="meter">
+            <div class="cap">
+              <span class="nm">Context window</span
+              ><span class="val"
+                ><span class="now">104k</span
+                ><span class="max"> / 200k</span></span
+              >
+              <span class="st good">{{solar:check-circle}}healthy</span>
+            </div>
+            <div aria-hidden="true" class="bullet">
+              <span class="range" style="left:78%;right:4%"></span>
+              <span class="target" style="left:88%"></span>
+              <span
+                class="bar"
+                style="left:0;width:52%;background:var(--data-ok)"
+              ></span>
+            </div>
+            <div class="leg">
+              <span
+                ><span class="sw" style="background:var(--data-ok)"></span
+                ><b>52%</b>
+                used</span
+              >
+              <span
+                ><span
+                  class="sw"
+                  style="background:var(--status-done-bg)"
+                ></span><b>78…96%</b>
+                refill band</span
+              >
+              <span
+                ><span class="sw" style="background:var(--ink-strong)"></span
+                ><b>100%</b>
+                hard cap</span
+              >
+            </div>
+          </div>
+        </section>
 
-    <!-- ================= BAR CHART (DW-6.1, 6.8, 6.9) =====================
+        <!-- ================= BAR CHART (DW-6.1, 6.8, 6.9) =====================
          Cost by day, stacked by model. Value axis starts at ZERO. Series use the
          Okabe-Ito categorical palette (colour-blind safe) and each carries a
          redundant non-hue channel (legend shape marker: squircle / rhombus /
          disc) so it survives deuteranopia / protanopia. -->
-    <section class="panel" aria-labelledby="c1">
-      <div class="phead"><h2 id="c1">Cost by day</h2><span class="sub">last 7 days</span>
-        <div class="pH"><span class="dnote">stacked by model</span></div></div>
-      <div class="body">
-        <div class="chart-legend">
-          <span class="k"><span class="sw disc" style="background:var(--chart-5)"></span>Claude Code</span>
-          <span class="k"><span class="sw rhombus" style="background:var(--chart-2)"></span>OpenCode</span>
-          <span class="k"><span class="sw tri" style="border-bottom-color:var(--chart-1)"></span>pi</span>
-        </div>
-        <svg class="chart-box" viewBox="0 0 560 224" width="100%" height="224" role="img"
-             aria-describedby="cost-data-table"
-             aria-label="Bar chart showing daily cost by model, last 7 days. Spend peaks mid-week at $28 on Thursday, then falls steeply toward the weekend; Claude Code is the largest share every day.">
-          <line x1="0" y1="205" x2="560" y2="205" stroke="var(--border-divider)" stroke-width="1"/>
-          <text x="2" y="204" fill="var(--ink-muted)" font-size="10">0</text>
-          <text x="2" y="14" fill="var(--ink-muted)" font-size="10">$28</text>
-          <rect x="0.00" y="170.00" width="64.57" height="35.00" fill="var(--chart-5)"/>
-          <rect x="0.00" y="142.00" width="64.57" height="28.00" fill="var(--chart-2)"/>
-          <rect x="0.00" y="121.00" width="64.57" height="21.00" fill="var(--chart-1)"/>
-          <rect x="82.57" y="149.00" width="64.57" height="56.00" fill="var(--chart-5)"/>
-          <rect x="82.57" y="107.00" width="64.57" height="42.00" fill="var(--chart-2)"/>
-          <rect x="82.57" y="79.00" width="64.57" height="28.00" fill="var(--chart-1)"/>
-          <rect x="165.14" y="135.00" width="64.57" height="70.00" fill="var(--chart-5)"/>
-          <rect x="165.14" y="79.00" width="64.57" height="56.00" fill="var(--chart-2)"/>
-          <rect x="165.14" y="37.00" width="64.57" height="42.00" fill="var(--chart-1)"/>
-          <rect x="247.71" y="121.00" width="64.57" height="84.00" fill="var(--chart-5)"/>
-          <rect x="247.71" y="51.00" width="64.57" height="70.00" fill="var(--chart-2)"/>
-          <rect x="247.71" y="9.00" width="64.57" height="42.00" fill="var(--chart-1)"/>
-          <rect x="330.29" y="142.00" width="64.57" height="63.00" fill="var(--chart-5)"/>
-          <rect x="330.29" y="93.00" width="64.57" height="49.00" fill="var(--chart-2)"/>
-          <rect x="330.29" y="58.00" width="64.57" height="35.00" fill="var(--chart-1)"/>
-          <rect x="412.86" y="177.00" width="64.57" height="28.00" fill="var(--chart-5)"/>
-          <rect x="412.86" y="156.00" width="64.57" height="21.00" fill="var(--chart-2)"/>
-          <rect x="412.86" y="142.00" width="64.57" height="14.00" fill="var(--chart-1)"/>
-          <rect x="495.43" y="191.00" width="64.57" height="14.00" fill="var(--chart-5)"/>
-          <rect x="495.43" y="177.00" width="64.57" height="14.00" fill="var(--chart-2)"/>
-          <rect x="495.43" y="163.00" width="64.57" height="14.00" fill="var(--chart-1)"/>
-          <g fill="var(--ink-muted)" font-size="10" text-anchor="middle">
-            <text x="32" y="221">Mon</text><text x="115" y="221">Tue</text><text x="197" y="221">Wed</text>
-            <text x="280" y="221">Thu</text><text x="363" y="221">Fri</text><text x="445" y="221">Sat</text><text x="528" y="221">Sun</text>
-          </g>
-        </svg>
-        <p class="axis-note">Value axis starts at $0. Cost is stack of Claude Code, OpenCode and pi spend.</p>
-      </div>
-    </section>
+        <section aria-labelledby="c1" class="panel">
+          <div class="phead">
+            <h2 id="c1">Cost by day</h2>
+            <span class="sub">last 7 days</span>
+            <div class="pH"><span class="dnote">stacked by model</span></div>
+          </div>
+          <div class="body">
+            <div class="chart-legend">
+              <span class="k"
+                ><span class="sw disc" style="background:var(--chart-5)"></span
+                >Claude Code</span
+              >
+              <span class="k"
+                ><span
+                  class="sw rhombus"
+                  style="background:var(--chart-2)"
+                ></span
+                >OpenCode</span
+              >
+              <span class="k"
+                ><span
+                  class="sw tri"
+                  style="border-bottom-color:var(--chart-1)"
+                ></span
+                >pi</span
+              >
+            </div>
+            <svg
+              aria-describedby="cost-data-table"
+              aria-label="Bar chart showing daily cost by model, last 7 days. Spend peaks mid-week at $28 on Thursday, then falls steeply toward the weekend; Claude Code is the largest share every day."
+              class="chart-box"
+              height="224"
+              role="img"
+              viewBox="0 0 560 224"
+              width="100%"
+            >
+              <line
+                stroke="var(--border-divider)"
+                stroke-width="1"
+                x1="0"
+                x2="560"
+                y1="205"
+                y2="205"
+              />
+              <text fill="var(--ink-muted)" font-size="10" x="2" y="204">
+                0
+              </text>
+              <text fill="var(--ink-muted)" font-size="10" x="2" y="14">
+                $28
+              </text>
+              <rect
+                fill="var(--chart-5)"
+                height="35.00"
+                width="64.57"
+                x="0.00"
+                y="170.00"
+              />
+              <rect
+                fill="var(--chart-2)"
+                height="28.00"
+                width="64.57"
+                x="0.00"
+                y="142.00"
+              />
+              <rect
+                fill="var(--chart-1)"
+                height="21.00"
+                width="64.57"
+                x="0.00"
+                y="121.00"
+              />
+              <rect
+                fill="var(--chart-5)"
+                height="56.00"
+                width="64.57"
+                x="82.57"
+                y="149.00"
+              />
+              <rect
+                fill="var(--chart-2)"
+                height="42.00"
+                width="64.57"
+                x="82.57"
+                y="107.00"
+              />
+              <rect
+                fill="var(--chart-1)"
+                height="28.00"
+                width="64.57"
+                x="82.57"
+                y="79.00"
+              />
+              <rect
+                fill="var(--chart-5)"
+                height="70.00"
+                width="64.57"
+                x="165.14"
+                y="135.00"
+              />
+              <rect
+                fill="var(--chart-2)"
+                height="56.00"
+                width="64.57"
+                x="165.14"
+                y="79.00"
+              />
+              <rect
+                fill="var(--chart-1)"
+                height="42.00"
+                width="64.57"
+                x="165.14"
+                y="37.00"
+              />
+              <rect
+                fill="var(--chart-5)"
+                height="84.00"
+                width="64.57"
+                x="247.71"
+                y="121.00"
+              />
+              <rect
+                fill="var(--chart-2)"
+                height="70.00"
+                width="64.57"
+                x="247.71"
+                y="51.00"
+              />
+              <rect
+                fill="var(--chart-1)"
+                height="42.00"
+                width="64.57"
+                x="247.71"
+                y="9.00"
+              />
+              <rect
+                fill="var(--chart-5)"
+                height="63.00"
+                width="64.57"
+                x="330.29"
+                y="142.00"
+              />
+              <rect
+                fill="var(--chart-2)"
+                height="49.00"
+                width="64.57"
+                x="330.29"
+                y="93.00"
+              />
+              <rect
+                fill="var(--chart-1)"
+                height="35.00"
+                width="64.57"
+                x="330.29"
+                y="58.00"
+              />
+              <rect
+                fill="var(--chart-5)"
+                height="28.00"
+                width="64.57"
+                x="412.86"
+                y="177.00"
+              />
+              <rect
+                fill="var(--chart-2)"
+                height="21.00"
+                width="64.57"
+                x="412.86"
+                y="156.00"
+              />
+              <rect
+                fill="var(--chart-1)"
+                height="14.00"
+                width="64.57"
+                x="412.86"
+                y="142.00"
+              />
+              <rect
+                fill="var(--chart-5)"
+                height="14.00"
+                width="64.57"
+                x="495.43"
+                y="191.00"
+              />
+              <rect
+                fill="var(--chart-2)"
+                height="14.00"
+                width="64.57"
+                x="495.43"
+                y="177.00"
+              />
+              <rect
+                fill="var(--chart-1)"
+                height="14.00"
+                width="64.57"
+                x="495.43"
+                y="163.00"
+              />
+              <g fill="var(--ink-muted)" font-size="10" text-anchor="middle">
+                <text x="32" y="221">Mon</text>
+                <text x="115" y="221">Tue</text>
+                <text x="197" y="221">Wed</text>
+                <text x="280" y="221">Thu</text>
+                <text x="363" y="221">Fri</text>
+                <text x="445" y="221">Sat</text>
+                <text x="528" y="221">Sun</text>
+              </g>
+            </svg>
+            <p class="axis-note">
+              Value axis starts at $0. Cost is stack of Claude Code, OpenCode
+              and pi spend.
+            </p>
+          </div>
+        </section>
 
-    <!-- ================= DISTRIBUTION PANEL ============================== -->
-    <section class="panel" aria-labelledby="d1">
-      <div class="phead"><h2 id="d1">Cost by machine</h2><span class="sub">today</span></div>
-      <div class="body">
-        <div class="dist" role="img"
-             aria-label="Horizontal bar chart showing cost by machine, today. nixbox leads at $8.70, then mba-m3 and hetzner-01."
-             aria-describedby="dist-data">
-          <div class="row"><span class="nm">nixbox</span><span class="track"><i style="width:74%"></i></span><span class="v">$8.70</span></div>
-          <div class="row alt"><span class="nm">mba-m3</span><span class="track"><i style="width:61%"></i></span><span class="v">$6.40</span></div>
-          <div class="row"><span class="nm">hetzner-01</span><span class="track"><i style="width:29%"></i></span><span class="v">$3.30</span></div>
+        <!-- ================= DISTRIBUTION PANEL ============================== -->
+        <section aria-labelledby="d1" class="panel">
+          <div class="phead">
+            <h2 id="d1">Cost by machine</h2>
+            <span class="sub">today</span>
+          </div>
+          <div class="body">
+            <div
+              aria-describedby="dist-data"
+              aria-label="Horizontal bar chart showing cost by machine, today. nixbox leads at $8.70, then mba-m3 and hetzner-01."
+              class="dist"
+              role="img"
+            >
+              <div class="row">
+                <span class="nm">nixbox</span
+                ><span class="track"><i style="width:74%"></i></span
+                ><span class="v">$8.70</span>
+              </div>
+              <div class="row alt">
+                <span class="nm">mba-m3</span
+                ><span class="track"><i style="width:61%"></i></span
+                ><span class="v">$6.40</span>
+              </div>
+              <div class="row">
+                <span class="nm">hetzner-01</span
+                ><span class="track"><i style="width:29%"></i></span
+                ><span class="v">$3.30</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========= HIDDEN DATA TABLE for the distribution chart (DW-6.8 long description) ========= -->
+        <div class="sr" id="dist-data">
+          <p>
+            Horizontal bar chart showing cost by machine, today. Values in US
+            dollars.
+          </p>
+          <table>
+            <caption>
+              Cost by machine today (US dollars)
+            </caption>
+            <thead>
+              <tr>
+                <th>Machine</th>
+                <th>Share</th>
+                <th>Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>nixbox</td>
+                <td>74%</td>
+                <td>$8.70</td>
+              </tr>
+              <tr>
+                <td>mba-m3</td>
+                <td>61%</td>
+                <td>$6.40</td>
+              </tr>
+              <tr>
+                <td>hetzner-01</td>
+                <td>29%</td>
+                <td>$3.30</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Insight: nixbox carries the largest share of today's machine cost,
+            followed by mba-m3, then hetzner-01.
+          </p>
+        </div>
+
+        <!-- ================= TABLE SYSTEM (DW-6.7, 6.4, 6.5) ================== -->
+        <section aria-labelledby="t1" class="panel">
+          <div class="phead">
+            <h2 id="t1">Sessions</h2>
+            <span class="sub">live and recent, ordered by spend</span>
+            <div class="pH">
+              <button
+                class="btn"
+                style="height:var(--d-btn-h);padding:0 12px;font-size:var(--text-sm)"
+                type="button"
+              >
+                {{solar:export}}Export
+              </button>
+            </div>
+          </div>
+          <div class="toolbar">
+            <span class="search"
+              >{{solar:magnifer}}<span>Search sessions…</span></span
+            >
+            <div class="ph">
+              <span class="pill live">{{solar:check-circle}}Live</span>
+            </div>
+          </div>
+          <div class="tbl-wrap">
+            <table aria-label="Sessions ordered by spend" class="t">
+              <thead>
+                <tr>
+                  <th>Session</th>
+                  <th>Project</th>
+                  <th>Status</th>
+                  <th class="num">Turns</th>
+                  <th class="num">Spend</th>
+                  <th class="num">Context</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <span class="nm"
+                      ><span class="mark"
+                        ><svg
+                          fill="none"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+                        </svg></span
+                      ><a href="#s">wire delegate rows</a
+                      ><span class="sub">· 3 subagents</span></span
+                    >
+                  </td>
+                  <td class="mono">~/whiffle</td>
+                  <td>
+                    <span class="pill live">{{solar:check-circle}}working</span>
+                  </td>
+                  <td class="num">28</td>
+                  <td class="num">$4.12</td>
+                  <td class="num">
+                    <span class="thr warn"
+                      >{{solar:danger-triangle}}84%<span class="lvl"
+                        >moving</span
+                      ></span
+                    >
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <span class="nm"
+                      ><span class="mark" style="background-color:var(--mark-2)"
+                        ><svg
+                          fill="none"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="M9 8l-4 4 4 4M15 8l4 4-4 4" />
+                        </svg></span
+                      ><a href="#s">table system spike</a
+                      ><span class="sub">· 1 subagent</span></span
+                    >
+                  </td>
+                  <td class="mono">~/whiffle</td>
+                  <td>
+                    <span class="pill attn"
+                      >{{solar:alt-arrow-up}}needs you</span
+                    >
+                  </td>
+                  <td class="num">41</td>
+                  <td class="num">$3.60</td>
+                  <td class="num">
+                    <span class="thr bad"
+                      >{{solar:close-circle}}94%<span class="lvl"
+                        >critical</span
+                      ></span
+                    >
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <span class="nm"
+                      ><span class="mark" style="background-color:var(--mark-5)"
+                        ><svg
+                          fill="none"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+                        </svg></span
+                      ><a href="#s">flaky ws reconnect</a></span
+                    >
+                  </td>
+                  <td class="mono">~/agent</td>
+                  <td>
+                    <span class="pill done">{{solar:check-circle}}done</span>
+                  </td>
+                  <td class="num">17</td>
+                  <td class="num">$2.10</td>
+                  <td class="num">
+                    <span class="thr ok"
+                      >{{solar:check-circle}}61%<span class="lvl"
+                        >ok</span
+                      ></span
+                    >
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <span class="nm"
+                      ><span class="mark" style="background-color:var(--mark-6)"
+                        ><svg
+                          fill="none"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            d="M5 7.5h14M9 7.5v9M15 7.5v6.5a2.5 2.5 0 0 0 4 0"
+                          />
+                        </svg></span
+                      ><a href="#s">landing copy pass</a></span
+                    >
+                  </td>
+                  <td class="mono">~/ui</td>
+                  <td>
+                    <span class="pill attn"
+                      >{{solar:alt-arrow-up}}needs you</span
+                    >
+                  </td>
+                  <td class="num">12</td>
+                  <td class="num">$1.85</td>
+                  <td class="num">
+                    <span class="thr warn"
+                      >{{solar:danger-triangle}}78%<span class="lvl"
+                        >moving</span
+                      ></span
+                    >
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <span class="nm"
+                      ><span class="mark" style="background-color:var(--mark-4)"
+                        ><svg
+                          fill="none"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="M12 4l7 4v8l-7 4-7-4V8z" />
+                        </svg></span
+                      ><a href="#s">retoken pass</a></span
+                    >
+                  </td>
+                  <td class="mono">~/whiffle</td>
+                  <td>
+                    <span class="pill fail">{{solar:close-circle}}failed</span>
+                  </td>
+                  <td class="num">9</td>
+                  <td class="num">$0.92</td>
+                  <td class="num">
+                    <span class="thr ok"
+                      >{{solar:check-circle}}40%<span class="lvl"
+                        >ok</span
+                      ></span
+                    >
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="foot">
+            <span>5 of 34 sessions</span>
+            <div class="pg">
+              <button aria-label="Previous page" class="pgbtn" type="button">
+                {{solar:alt-arrow-left}}
+              </button>
+              <button aria-label="Page 1" class="pgbtn on" type="button">
+                1
+              </button>
+              <button aria-label="Page 2" class="pgbtn" type="button">2</button>
+              <button aria-label="Next page" class="pgbtn" type="button">
+                {{solar:alt-arrow-right}}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====== HIDDEN DATA TABLE for the bar chart (DW-6.8 long description) ====== -->
+        <div class="sr" id="cost-data-table">
+          <p>
+            Bar chart showing daily cost by model, last 7 days. Values in US
+            dollars.
+          </p>
+          <table>
+            <caption>
+              Daily cost by model (US dollars)
+            </caption>
+            <thead>
+              <tr>
+                <th>Day</th>
+                <th>Claude Code</th>
+                <th>OpenCode</th>
+                <th>pi</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Mon</td>
+                <td>5</td>
+                <td>4</td>
+                <td>3</td>
+                <td>12</td>
+              </tr>
+              <tr>
+                <td>Tue</td>
+                <td>8</td>
+                <td>6</td>
+                <td>4</td>
+                <td>18</td>
+              </tr>
+              <tr>
+                <td>Wed</td>
+                <td>10</td>
+                <td>8</td>
+                <td>6</td>
+                <td>24</td>
+              </tr>
+              <tr>
+                <td>Thu</td>
+                <td>12</td>
+                <td>10</td>
+                <td>6</td>
+                <td>28</td>
+              </tr>
+              <tr>
+                <td>Fri</td>
+                <td>9</td>
+                <td>7</td>
+                <td>5</td>
+                <td>21</td>
+              </tr>
+              <tr>
+                <td>Sat</td>
+                <td>4</td>
+                <td>3</td>
+                <td>2</td>
+                <td>9</td>
+              </tr>
+              <tr>
+                <td>Sun</td>
+                <td>2</td>
+                <td>2</td>
+                <td>2</td>
+                <td>6</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Insight: spend rises through the week to a Thursday peak of $28,
+            then falls steeply into the weekend. Claude Code is the largest cost
+            share on every day.
+          </p>
         </div>
       </div>
-    </section>
+    </main>
 
-    <!-- ========= HIDDEN DATA TABLE for the distribution chart (DW-6.8 long description) ========= -->
-    <div class="sr" id="dist-data">
-      <p>Horizontal bar chart showing cost by machine, today. Values in US dollars.</p>
-      <table>
-        <caption>Cost by machine today (US dollars)</caption>
-        <thead><tr><th>Machine</th><th>Share</th><th>Cost</th></tr></thead>
-        <tbody>
-          <tr><td>nixbox</td><td>74%</td><td>$8.70</td></tr>
-          <tr><td>mba-m3</td><td>61%</td><td>$6.40</td></tr>
-          <tr><td>hetzner-01</td><td>29%</td><td>$3.30</td></tr>
-        </tbody>
-      </table>
-      <p>Insight: nixbox carries the largest share of today's machine cost, followed by mba-m3, then hetzner-01.</p>
+    <!-- density toggle (screenshot affordance, not the product) -->
+    <div aria-hidden="true" class="fluxbar">
+      <button
+        class="on"
+        data-dense-btn="comfortable"
+        tabindex="-1"
+        type="button"
+      >
+        Comfortable
+      </button>
+      <button data-dense-btn="compact" tabindex="-1" type="button">
+        Compact
+      </button>
     </div>
 
-    <!-- ================= TABLE SYSTEM (DW-6.7, 6.4, 6.5) ================== -->
-    <section class="panel" aria-labelledby="t1">
-      <div class="phead"><h2 id="t1">Sessions</h2><span class="sub">live and recent, ordered by spend</span>
-        <div class="pH"><button class="btn" type="button" style="height:var(--d-btn-h);padding:0 12px;font-size:var(--text-sm)">{{solar:export}}Export</button></div></div>
-      <div class="toolbar">
-        <span class="search">{{solar:magnifer}}<span>Search sessions…</span></span>
-        <div class="ph"><span class="pill live">{{solar:check-circle}}Live</span></div>
-      </div>
-      <div class="tbl-wrap">
-        <table class="t" aria-label="Sessions ordered by spend">
-          <thead>
-            <tr><th>Session</th><th>Project</th><th>Status</th><th class="num">Turns</th><th class="num">Spend</th><th class="num">Context</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><span class="nm"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span><a href="#s">wire delegate rows</a><span class="sub">· 3 subagents</span></span></td>
-              <td class="mono">~/whiffle</td>
-              <td><span class="pill live">{{solar:check-circle}}working</span></td>
-              <td class="num">28</td>
-              <td class="num">$4.12</td>
-              <td class="num"><span class="thr warn">{{solar:danger-triangle}}84%<span class="lvl">moving</span></span></td>
-            </tr>
-            <tr>
-              <td><span class="nm"><span class="mark" style="background-color:var(--mark-2)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg></span><a href="#s">table system spike</a><span class="sub">· 1 subagent</span></span></td>
-              <td class="mono">~/whiffle</td>
-              <td><span class="pill attn">{{solar:alt-arrow-up}}needs you</span></td>
-              <td class="num">41</td>
-              <td class="num">$3.60</td>
-              <td class="num"><span class="thr bad">{{solar:close-circle}}94%<span class="lvl">critical</span></span></td>
-            </tr>
-            <tr>
-              <td><span class="nm"><span class="mark" style="background-color:var(--mark-5)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span><a href="#s">flaky ws reconnect</a></span></td>
-              <td class="mono">~/agent</td>
-              <td><span class="pill done">{{solar:check-circle}}done</span></td>
-              <td class="num">17</td>
-              <td class="num">$2.10</td>
-              <td class="num"><span class="thr ok">{{solar:check-circle}}61%<span class="lvl">ok</span></span></td>
-            </tr>
-            <tr>
-              <td><span class="nm"><span class="mark" style="background-color:var(--mark-6)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7.5h14M9 7.5v9M15 7.5v6.5a2.5 2.5 0 0 0 4 0"/></svg></span><a href="#s">landing copy pass</a></span></td>
-              <td class="mono">~/ui</td>
-              <td><span class="pill attn">{{solar:alt-arrow-up}}needs you</span></td>
-              <td class="num">12</td>
-              <td class="num">$1.85</td>
-              <td class="num"><span class="thr warn">{{solar:danger-triangle}}78%<span class="lvl">moving</span></span></td>
-            </tr>
-            <tr>
-              <td><span class="nm"><span class="mark" style="background-color:var(--mark-4)"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l7 4v8l-7 4-7-4V8z"/></svg></span><a href="#s">retoken pass</a></span></td>
-              <td class="mono">~/whiffle</td>
-              <td><span class="pill fail">{{solar:close-circle}}failed</span></td>
-              <td class="num">9</td>
-              <td class="num">$0.92</td>
-              <td class="num"><span class="thr ok">{{solar:check-circle}}40%<span class="lvl">ok</span></span></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="foot"><span>5 of 34 sessions</span>
-        <div class="pg">
-          <button class="pgbtn" type="button" aria-label="Previous page">{{solar:alt-arrow-left}}</button>
-          <button class="pgbtn on" type="button" aria-label="Page 1">1</button>
-          <button class="pgbtn" type="button" aria-label="Page 2">2</button>
-          <button class="pgbtn" type="button" aria-label="Next page">{{solar:alt-arrow-right}}</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- ====== HIDDEN DATA TABLE for the bar chart (DW-6.8 long description) ====== -->
-    <div class="sr" id="cost-data-table">
-      <p>Bar chart showing daily cost by model, last 7 days. Values in US dollars.</p>
-      <table>
-        <caption>Daily cost by model (US dollars)</caption>
-        <thead><tr><th>Day</th><th>Claude Code</th><th>OpenCode</th><th>pi</th><th>Total</th></tr></thead>
-        <tbody>
-          <tr><td>Mon</td><td>5</td><td>4</td><td>3</td><td>12</td></tr>
-          <tr><td>Tue</td><td>8</td><td>6</td><td>4</td><td>18</td></tr>
-          <tr><td>Wed</td><td>10</td><td>8</td><td>6</td><td>24</td></tr>
-          <tr><td>Thu</td><td>12</td><td>10</td><td>6</td><td>28</td></tr>
-          <tr><td>Fri</td><td>9</td><td>7</td><td>5</td><td>21</td></tr>
-          <tr><td>Sat</td><td>4</td><td>3</td><td>2</td><td>9</td></tr>
-          <tr><td>Sun</td><td>2</td><td>2</td><td>2</td><td>6</td></tr>
-        </tbody>
-      </table>
-      <p>Insight: spend rises through the week to a Thursday peak of $28, then falls steeply into the weekend. Claude Code is the largest cost share on every day.</p>
-    </div>
-
-  </div>
-</main>
-
-<!-- density toggle (screenshot affordance, not the product) -->
-<div class="fluxbar" aria-hidden="true">
-  <button type="button" tabindex="-1" data-dense-btn="comfortable" class="on">Comfortable</button>
-  <button type="button" tabindex="-1" data-dense-btn="compact">Compact</button>
-</div>
-
-<script>
-(function () {
-  var btn = document.querySelector('[data-dense-btn="comfortable"]');
-  var cbtn = document.querySelector('[data-dense-btn="compact"]');
-  function set(d) {
-    document.documentElement.classList.toggle('d-compact', d === 'compact');
-    btn.classList.toggle('on', d === 'comfortable');
-    cbtn.classList.toggle('on', d === 'compact');
-  }
-  btn.addEventListener('click', function () { set('comfortable'); });
-  cbtn.addEventListener('click', function () { set('compact'); });
-})();
-/* navigation drawer toggle — real control (DW drawer doctrine): the ≤900px
+    <script>
+      "use strict";
+      (() => {
+        var btn = document.querySelector('[data-dense-btn="comfortable"]');
+        var cbtn = document.querySelector('[data-dense-btn="compact"]');
+        function set(d) {
+          document.documentElement.classList.toggle(
+            "d-compact",
+            d === "compact"
+          );
+          btn.classList.toggle("on", d === "comfortable");
+          cbtn.classList.toggle("on", d === "compact");
+        }
+        btn.addEventListener("click", () => {
+          set("comfortable");
+        });
+        cbtn.addEventListener("click", () => {
+          set("compact");
+        });
+      })();
+      /* navigation drawer toggle — real control (DW drawer doctrine): the ≤900px
    aside is off-canvas, the <button> opens it via .nav-open on <body>; the
    scrim and Escape close it and return focus to the opener. `aria-expanded`
    tracks the drawer state. */
-(function () {
-  var burger = document.querySelector('.burger');
-  var scrim = document.querySelector('.nav-scrim');
-  if (!burger) return;
-  function set(open) {
-    document.body.classList.toggle('nav-open', open);
-    burger.setAttribute('aria-expanded', open ? 'true' : 'false');
-  }
-  burger.addEventListener('click', function () {
-    set(!document.body.classList.contains('nav-open'));
-  });
-  if (scrim) scrim.addEventListener('click', function () { set(false); burger.focus(); });
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && document.body.classList.contains('nav-open')) {
-      set(false); burger.focus();
-    }
-  });
-})();
-</script>
+      (() => {
+        var burger = document.querySelector(".burger");
+        var scrim = document.querySelector(".nav-scrim");
+        if (!burger) {
+          return;
+        }
+        function set(open) {
+          document.body.classList.toggle("nav-open", open);
+          burger.setAttribute("aria-expanded", open ? "true" : "false");
+        }
+        burger.addEventListener("click", () => {
+          set(!document.body.classList.contains("nav-open"));
+        });
+        if (scrim) {
+          scrim.addEventListener("click", () => {
+            set(false);
+            burger.focus();
+          });
+        }
+        document.addEventListener("keydown", (e) => {
+          if (
+            e.key === "Escape" &&
+            document.body.classList.contains("nav-open")
+          ) {
+            set(false);
+            burger.focus();
+          }
+        });
+      })();
+    </script>
 
-<!-- =========================================================================
+    <!-- =========================================================================
    DESIGN-DELIVERABLE NOTES (not rendered) — part of the Phase 6 spec.
 
    ---- RECORDED DEVIATION FROM THE REFERENCE (DW-6.2) ------------------------
@@ -687,4 +2029,5 @@ table.t{width:100%;border-collapse:collapse}
    with the value, and every value carries its glyph + word so a colour-blind
    operator reads the status.
    ========================================================================== -->
-</body></html>
+  </body>
+</html>

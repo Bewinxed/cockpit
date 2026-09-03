@@ -11,46 +11,47 @@
  * advice. Effort is not only thinking depth — a lower level also buys fewer and
  * more consolidated tool calls, less preamble and terser confirmations.
  */
-import type { EffortLevel, ModelInfo } from '@whiffle/core';
+import type { EffortLevel, ModelInfo } from "@whiffle/core";
 
 export interface EffortLevelOption {
-  value: EffortLevel;
-  label: string;
-  description: string;
   /** `high` is what the API answers on when nothing asks for a level. */
   apiDefault?: boolean;
+  description: string;
+  label: string;
+  value: EffortLevel;
 }
 
 export const EFFORT_LEVELS: EffortLevelOption[] = [
   {
-    value: 'low',
-    label: 'low',
+    value: "low",
+    label: "low",
     description:
-      'Short, scoped tasks and latency-sensitive workloads that are not intelligence-sensitive.',
+      "Short, scoped tasks and latency-sensitive workloads that are not intelligence-sensitive.",
   },
   {
-    value: 'medium',
-    label: 'medium',
+    value: "medium",
+    label: "medium",
     description:
-      'Cost-sensitive use cases that need to reduce token usage while trading off intelligence.',
+      "Cost-sensitive use cases that need to reduce token usage while trading off intelligence.",
   },
   {
-    value: 'high',
-    label: 'high',
+    value: "high",
+    label: "high",
     description:
-      'Balances token usage and intelligence; the recommended minimum for most intelligence-sensitive work.',
+      "Balances token usage and intelligence; the recommended minimum for most intelligence-sensitive work.",
     apiDefault: true,
   },
   {
-    value: 'xhigh',
-    label: 'xhigh',
-    description: 'The best setting for most coding and agentic use cases; the default in Claude Code.',
+    value: "xhigh",
+    label: "xhigh",
+    description:
+      "The best setting for most coding and agentic use cases; the default in Claude Code.",
   },
   {
-    value: 'max',
-    label: 'max',
+    value: "max",
+    label: "max",
     description:
-      'Can deliver gains in some use cases but may show diminishing returns from increased token usage; can be prone to overthinking.',
+      "Can deliver gains in some use cases but may show diminishing returns from increased token usage; can be prone to overthinking.",
   },
 ];
 
@@ -71,7 +72,10 @@ export interface EffortStop extends EffortLevelOption {
  * `xhigh` or `max` changes with every release, so it is never our list to keep.
  */
 export function hasEffortScale(model: ModelInfo | null | undefined): boolean {
-  return model?.supportsEffort === true && (model.supportedEffortLevels?.length ?? 0) > 0;
+  return (
+    model?.supportsEffort === true &&
+    (model.supportedEffortLevels?.length ?? 0) > 0
+  );
 }
 
 /**
@@ -83,5 +87,8 @@ export function hasEffortScale(model: ModelInfo | null | undefined): boolean {
  */
 export function effortStops(model: ModelInfo | null | undefined): EffortStop[] {
   const offered = model?.supportedEffortLevels ?? [];
-  return EFFORT_LEVELS.map((option) => ({ ...option, reachable: offered.includes(option.value) }));
+  return EFFORT_LEVELS.map((option) => ({
+    ...option,
+    reachable: offered.includes(option.value),
+  }));
 }

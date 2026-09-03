@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 /**
  * Hover behaviour x pointer type.
  *
@@ -20,47 +23,68 @@
  *
  *   node mocks/hovercheck.mjs
  */
-import { chromium } from 'playwright-core';
-import { pathToFileURL } from 'node:url';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { readFileSync } from 'node:fs';
+import { chromium } from "playwright-core";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const FILES = ['v2-fleet.html', 'v3-assistant.html', 'v4-transcript.html'];
-const WIDTHS = [390, 1440];   // touch phones and touch laptops both exist
+const FILES = ["v2-fleet.html", "v3-assistant.html", "v4-transcript.html"];
+const WIDTHS = [390, 1440]; // touch phones and touch laptops both exist
 
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_BIN
-    || '/home/bewinxed/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome',
-  headless: true, args: ['--no-sandbox', '--disable-gpu', '--force-color-profile=srgb'],
+  executablePath:
+    process.env.CHROMIUM_BIN ||
+    "/home/bewinxed/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome",
+  headless: true,
+  args: ["--no-sandbox", "--disable-gpu", "--force-color-profile=srgb"],
 });
 
 let fails = 0;
 for (const file of FILES) {
   // parse once per file
-  const css = readFileSync(join(HERE, file), 'utf8')
-    .replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
-  const hoverSelectors = [...new Set(
-    [...css.matchAll(/([^{}]*:hover[^{}]*)\{/g)]
-      .flatMap((m) => m[1].split(','))
-      .map((t) => t.trim().replace(/:hover\b/g, '').trim())
-      .filter((t) => t && !t.includes(':where') && !t.includes('::') && !t.startsWith('@'))
-  )];
+  const css = readFileSync(join(HERE, file), "utf8")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+  const hoverSelectors = [
+    ...new Set(
+      [...css.matchAll(/([^{}]*:hover[^{}]*)\{/g)]
+        .flatMap((m) => m[1].split(","))
+        .map((t) =>
+          t
+            .trim()
+            .replace(/:hover\b/g, "")
+            .trim()
+        )
+        .filter(
+          (t) =>
+            t &&
+            !t.includes(":where") &&
+            !t.includes("::") &&
+            !t.startsWith("@")
+        )
+    ),
+  ];
   if (!hoverSelectors.length) {
-    console.log(`  FAIL  ${file} — parsed ZERO hover selectors; the gate cannot pass vacuously`);
+    console.log(
+      `  FAIL  ${file} — parsed ZERO hover selectors; the gate cannot pass vacuously`
+    );
     fails++;
   }
   for (const width of WIDTHS) {
     for (const dark of [false, true]) {
       const page = await browser.newPage({
-        viewport: { width, height: 1023 }, deviceScaleFactor: 1,
-        hasTouch: true, isMobile: true,          // => pointer: coarse, hover: none
+        viewport: { width, height: 1023 },
+        deviceScaleFactor: 1,
+        hasTouch: true,
+        isMobile: true, // => pointer: coarse, hover: none
       });
-      await page.goto(pathToFileURL(join(HERE, file)).href, { waitUntil: 'load' });
-      if (dark) await page.evaluate(() => document.documentElement.classList.add('dark'));
+      await page.goto(pathToFileURL(join(HERE, file)).href, {
+        waitUntil: "load",
+      });
+      if (dark) {
+        await page.evaluate(() =>
+          document.documentElement.classList.add("dark")
+        );
+      }
       await page.evaluate(() => document.fonts.ready);
-
 
       // Selectors are parsed from the stylesheet TEXT in node, not read from
       // the CSSOM: `cssRules` throws SecurityError on the file:// linked sheets
@@ -73,39 +97,75 @@ for (const file of FILES) {
       for (const sel of targets) {
         const probe = await page.evaluate((s) => {
           const el = document.querySelector(s);
-          if (!el) return null;
-          if (el.closest('[inert]')) return null;
+          if (!el) {
+            return null;
+          }
+          if (el.closest("[inert]")) {
+            return null;
+          }
           const r = el.getBoundingClientRect();
-          if (r.width < 3 || r.height < 3 || r.right <= 0 || r.left >= window.innerWidth) return null;
-          const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
-          if (!hit || !(hit === el || el.contains(hit) || hit.contains(el))) return null;
+          if (
+            r.width < 3 ||
+            r.height < 3 ||
+            r.right <= 0 ||
+            r.left >= window.innerWidth
+          ) {
+            return null;
+          }
+          const hit = document.elementFromPoint(
+            r.x + r.width / 2,
+            r.y + r.height / 2
+          );
+          if (!(hit && (hit === el || el.contains(hit) || hit.contains(el)))) {
+            return null;
+          }
           const cs = getComputedStyle(el);
-          return { bg: cs.backgroundColor, filter: cs.filter, shadow: cs.boxShadow };
+          return {
+            bg: cs.backgroundColor,
+            filter: cs.filter,
+            shadow: cs.boxShadow,
+          };
         }, sel);
-        if (!probe) continue;
+        if (!probe) {
+          continue;
+        }
         await page.hover(sel).catch(() => {});
         await page.waitForTimeout(30);
         const after = await page.evaluate((s) => {
           const cs = getComputedStyle(document.querySelector(s));
-          return { bg: cs.backgroundColor, filter: cs.filter, shadow: cs.boxShadow };
+          return {
+            bg: cs.backgroundColor,
+            filter: cs.filter,
+            shadow: cs.boxShadow,
+          };
         }, sel);
         const changed = Object.keys(probe).filter((k) => probe[k] !== after[k]);
         if (changed.length) {
-          problems.push(`${sel} changes ${changed.join('+')} on a device that cannot hover`);
+          problems.push(
+            `${sel} changes ${changed.join("+")} on a device that cannot hover`
+          );
         }
         await page.mouse.move(0, 0);
         await page.waitForTimeout(10);
       }
 
-      const tag = `${file.replace('.html', '')} @${width} ${dark ? 'dark ' : 'light'} coarse`;
-      console.log(`  ${problems.length ? 'FAIL' : 'PASS'}  ${tag.padEnd(38)}`
-        + ` ${targets.length} hover selectors, ${problems.length} unsuppressed`);
-      for (const p of problems) { fails++; console.log(`          ${p}`); }
+      const tag = `${file.replace(".html", "")} @${width} ${dark ? "dark " : "light"} coarse`;
+      console.log(
+        `  ${problems.length ? "FAIL" : "PASS"}  ${tag.padEnd(38)}` +
+          ` ${targets.length} hover selectors, ${problems.length} unsuppressed`
+      );
+      for (const p of problems) {
+        fails++;
+        console.log(`          ${p}`);
+      }
       await page.close();
     }
   }
 }
 await browser.close();
-console.log(fails ? `  ${fails} hover states survive on a touch device`
-  : '  no hover state survives on a device that cannot hover');
+console.log(
+  fails
+    ? `  ${fails} hover states survive on a touch device`
+    : "  no hover state survives on a device that cannot hover"
+);
 process.exit(fails ? 1 : 0);

@@ -1,7 +1,7 @@
-import type { InstanceRow, SessionMessage } from '@whiffle/core';
-import { turnStart } from '$lib/whiffle/frames';
-import { TRANSCRIPT_FIRST_CHUNK } from '$lib/config';
-import type { PageServerLoad } from './$types';
+import type { InstanceRow, SessionMessage } from "@whiffle/core";
+import { TRANSCRIPT_FIRST_CHUNK } from "$lib/config";
+import { turnStart } from "$lib/whiffle/frames";
+import type { PageServerLoad } from "./$types";
 
 /**
  * Where this conversation's stored transcript can be read from, resolved on the
@@ -9,23 +9,27 @@ import type { PageServerLoad } from './$types';
  * Mirrors `HistorySource` in the whiffle store.
  */
 interface HistorySource {
-  viewId: string;
-  machineId: string;
-  sessionId: string;
   cwd: string;
   harness: string;
   live: boolean;
+  machineId: string;
   /** The location came from the URL's own query and is sent to the hub as an override. */
   override?: boolean;
+  sessionId: string;
+  viewId: string;
 }
 
 /** Beyond this many entries the tail read gives up looking for a clean cut. */
 const TAIL_CEILING = TRANSCRIPT_FIRST_CHUNK * 4;
 
 /** The content blocks of a stored entry, for the tool pairing a cut must not split. */
-function contentBlocks(entry: SessionMessage): { type?: string; id?: string; tool_use_id?: string }[] {
+function contentBlocks(
+  entry: SessionMessage
+): { type?: string; id?: string; tool_use_id?: string }[] {
   const content = (entry.message as { content?: unknown } | null)?.content;
-  return Array.isArray(content) ? (content as { type?: string; id?: string; tool_use_id?: string }[]) : [];
+  return Array.isArray(content)
+    ? (content as { type?: string; id?: string; tool_use_id?: string }[])
+    : [];
 }
 
 /**
@@ -47,43 +51,64 @@ async function readTail(
   url: string
 ): Promise<{ messages: SessionMessage[]; found: Partial<HistorySource> }> {
   const response = await fetch(url);
-  if (!response.ok || !response.body) return { messages: [], found: {} };
+  if (!(response.ok && response.body)) {
+    return { messages: [], found: {} };
+  }
   // Where the hub found it — the one thing a bare id does not say, and the
   // pane names the machine in its header from the first paint.
   const found: Partial<HistorySource> = {};
-  const machineId = response.headers.get('x-whiffle-machine');
-  if (machineId) found.machineId = machineId;
-  const cwd = response.headers.get('x-whiffle-cwd');
-  if (cwd) found.cwd = decodeURIComponent(cwd);
-  const harness = response.headers.get('x-whiffle-harness');
-  if (harness) found.harness = harness;
+  const machineId = response.headers.get("x-whiffle-machine");
+  if (machineId) {
+    found.machineId = machineId;
+  }
+  const cwd = response.headers.get("x-whiffle-cwd");
+  if (cwd) {
+    found.cwd = decodeURIComponent(cwd);
+  }
+  const harness = response.headers.get("x-whiffle-harness");
+  if (harness) {
+    found.harness = harness;
+  }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   /** Newest first, as the hub sends it. */
   const buffered: SessionMessage[] = [];
   /** Tool results whose `tool_use` is older still — a cut here would split them. */
   const dangling = new Set<string>();
-  let carry = '';
+  let carry = "";
   let cut = false;
 
   /** True once `buffered` is a chunk that can stand on its own. */
   const consume = (entry: SessionMessage): boolean => {
     for (const block of contentBlocks(entry)) {
-      if (block.type === 'tool_result' && block.tool_use_id) dangling.add(block.tool_use_id);
-      else if (block.type === 'tool_use' && block.id) dangling.delete(block.id);
+      if (block.type === "tool_result" && block.tool_use_id) {
+        dangling.add(block.tool_use_id);
+      } else if (block.type === "tool_use" && block.id) {
+        dangling.delete(block.id);
+      }
     }
     buffered.push(entry);
-    if (buffered.length >= TAIL_CEILING) return true;
-    if (buffered.length < TRANSCRIPT_FIRST_CHUNK || dangling.size > 0) return false;
+    if (buffered.length >= TAIL_CEILING) {
+      return true;
+    }
+    if (buffered.length < TRANSCRIPT_FIRST_CHUNK || dangling.size > 0) {
+      return false;
+    }
     return turnStart(entry) !== null;
   };
 
   try {
     for (;;) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        break;
+      }
       carry += decoder.decode(value, { stream: true });
-      for (let newline = carry.indexOf('\n'); newline >= 0; newline = carry.indexOf('\n')) {
+      for (
+        let newline = carry.indexOf("\n");
+        newline >= 0;
+        newline = carry.indexOf("\n")
+      ) {
         const line = carry.slice(0, newline);
         carry = carry.slice(newline + 1);
         if (line && consume(JSON.parse(line) as SessionMessage)) {
@@ -91,11 +116,15 @@ async function readTail(
           break;
         }
       }
-      if (cut) break;
+      if (cut) {
+        break;
+      }
     }
     if (!cut) {
       carry += decoder.decode();
-      if (carry.trim()) consume(JSON.parse(carry) as SessionMessage);
+      if (carry.trim()) {
+        consume(JSON.parse(carry) as SessionMessage);
+      }
     }
   } catch {
     // A half-read tail is still a tail; whatever arrived whole is rendered.
@@ -114,7 +143,9 @@ async function readTail(
  */
 function messagesUrl(source: HistorySource): string {
   const path = `/api/instances/${encodeURIComponent(source.viewId)}/messages`;
-  if (!source.override) return path;
+  if (!source.override) {
+    return path;
+  }
   return `${path}?${new URLSearchParams({
     machine: source.machineId,
     harness: source.harness,
@@ -146,22 +177,30 @@ function messagesUrl(source: HistorySource): string {
  * reaches this file at all — the workspace store owns that now — so this gate
  * is what remains for arrivals from another route.
  */
-export const load: PageServerLoad = async ({ params, url, fetch, untrack, isDataRequest }) => {
+export const load: PageServerLoad = async ({
+  params,
+  url,
+  fetch,
+  untrack,
+  isDataRequest,
+}) => {
   const viewId = untrack(() => params.id);
 
-  if (!viewId) return { history: null, tail: null };
+  if (!viewId) {
+    return { history: null, tail: null };
+  }
 
   // A link minted while stored transcripts still carried their location. It
   // is honoured as an override rather than resolved, so an old bookmark reads
   // exactly what it always read.
-  const machine = untrack(() => url.searchParams.get('machine'));
+  const machine = untrack(() => url.searchParams.get("machine"));
   if (machine) {
     const source: HistorySource = {
       viewId,
       machineId: machine,
       sessionId: viewId,
-      cwd: untrack(() => url.searchParams.get('cwd')) ?? '',
-      harness: untrack(() => url.searchParams.get('harness')) ?? 'claude',
+      cwd: untrack(() => url.searchParams.get("cwd")) ?? "",
+      harness: untrack(() => url.searchParams.get("harness")) ?? "claude",
       live: false,
       override: true,
     };
@@ -177,7 +216,7 @@ export const load: PageServerLoad = async ({ params, url, fetch, untrack, isData
   // does not hold is read by the same id and located on the way.
   let row: InstanceRow | undefined;
   try {
-    const response = await fetch('/api/instances');
+    const response = await fetch("/api/instances");
     if (response.ok) {
       const rows = (await response.json()) as InstanceRow[];
       row = rows.find((instance) => instance.id === viewId);
@@ -187,10 +226,10 @@ export const load: PageServerLoad = async ({ params, url, fetch, untrack, isData
   }
   const source: HistorySource = {
     viewId,
-    machineId: row?.machineId ?? '',
+    machineId: row?.machineId ?? "",
     sessionId: row?.sessionId ?? viewId,
-    cwd: row?.cwd ?? '',
-    harness: row?.harness ?? 'claude',
+    cwd: row?.cwd ?? "",
+    harness: row?.harness ?? "claude",
     live: row !== undefined,
   };
 
@@ -205,9 +244,9 @@ async function tailFor(fetch: typeof globalThis.fetch, source: HistorySource) {
   const { messages, found } = await readTail(fetch, messagesUrl(source));
   return {
     viewId: source.viewId,
-    machineId: source.machineId || (found.machineId ?? ''),
+    machineId: source.machineId || (found.machineId ?? ""),
     sessionId: source.sessionId,
-    cwd: source.cwd || (found.cwd ?? ''),
+    cwd: source.cwd || (found.cwd ?? ""),
     harness: found.harness ?? source.harness,
     messages,
   };

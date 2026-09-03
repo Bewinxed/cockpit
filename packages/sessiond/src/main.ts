@@ -4,8 +4,8 @@
  * future Windows port has to touch (design §11, §12).
  */
 
-import { sessiondEndpoint } from '@whiffle/core/sessiond';
-import { SessiondServer } from './server';
+import { sessiondEndpoint } from "@whiffle/core/sessiond";
+import { SessiondServer } from "./server";
 
 const main = async (): Promise<void> => {
   // Read directly: `WHIFFLE_ENV` has no key for sessiond's own override.
@@ -18,15 +18,17 @@ const main = async (): Promise<void> => {
   // §11: the handlers do nothing but call the plain drain function. The
   // Windows port wires console ctrl events to the same call.
   const shutdown = async (signal: string): Promise<void> => {
-    if (draining) return;
+    if (draining) {
+      return;
+    }
     draining = true;
     console.log(`[sessiond] ${signal} — draining children`);
     await server.drain();
     await server.close();
     process.exit(0);
   };
-  process.on('SIGTERM', () => void shutdown('SIGTERM'));
-  process.on('SIGINT', () => void shutdown('SIGINT'));
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 };
 
 await main();

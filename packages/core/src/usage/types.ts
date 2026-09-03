@@ -3,52 +3,52 @@
  * (USAGE-SPEC.md §4.1). Pure types only; no runtime imports.
  */
 
-export type UsageHarness = 'claude' | 'opencode';
+export type UsageHarness = "claude" | "opencode";
 
 export interface UsageTokens {
-  input: number;
-  output: number;
   cacheCreation: number; // Claude: see cacheCreationCount() rule in tokens.ts
   cacheRead: number;
+  input: number;
+  output: number;
   reasoning: number; // opencode only; 0 for Claude
 }
 
 /** One (session, model, hour) bucket. The unit the agent reports and the hub stores. */
 export interface UsageBucket {
+  costUsd: number;
+  firstTs: number; // ms epoch of the earliest record in the bucket
   harness: UsageHarness;
   hourStart: number; // ms epoch, floored to the UTC hour
-  firstTs: number; // ms epoch of the earliest record in the bucket
   lastTs: number; // ms epoch of the latest record in the bucket
-  sessionId: string;
+  messages: number;
+  model: string;
   project: string; // Claude: dir name after `projects/`. opencode: basename(path.root)
   projectPath: string | null;
-  model: string;
   provider: string | null; // opencode only
+  sessionId: string;
   tokens: UsageTokens;
-  costUsd: number;
-  messages: number;
 }
 
 export interface LimitWindow {
+  group: "session" | "weekly" | string;
+  isActive: boolean;
   kind: string; // 'session' | 'weekly_all' | 'weekly_scoped' | …
-  group: 'session' | 'weekly' | string;
   percent: number;
-  severity: 'normal' | 'warning' | 'critical' | string;
   resetsAt: string | null; // ISO
   scopeLabel: string | null; // scope.model.display_name, e.g. "Fable"
-  isActive: boolean;
+  severity: "normal" | "warning" | "critical" | string;
 }
 
 export interface ClaudeLimits {
+  error: string | null;
   fetchedAt: number;
   planTier: string | null; // rateLimitTier
-  subscription: string | null; // subscriptionType
-  windows: LimitWindow[];
-  spendUsed: number | null; // dollars
   spendLimit: number | null;
-  error: string | null;
+  spendUsed: number | null; // dollars
   /** Set when a fetch failed and the caller is served the last good reading. */
   stale?: boolean;
+  subscription: string | null; // subscriptionType
+  windows: LimitWindow[];
 }
 
 /**
@@ -57,9 +57,9 @@ export interface ClaudeLimits {
  * the hub and the ISO string it serialises to on the wire.
  */
 export interface UsageLimitsReading {
+  fetchedAt: string | number | Date;
   machineId: string;
   payload: ClaudeLimits;
-  fetchedAt: string | number | Date;
 }
 
 /**
@@ -67,14 +67,14 @@ export interface UsageLimitsReading {
  * are the on-disk snake_case, not the neutral {@link UsageTokens}.
  */
 export interface RawClaudeUsage {
-  input_tokens: number;
-  output_tokens: number;
-  cache_creation_input_tokens?: number;
-  cache_read_input_tokens?: number;
   cache_creation?: {
     ephemeral_5m_input_tokens?: number;
     ephemeral_1h_input_tokens?: number;
   };
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+  input_tokens: number;
+  output_tokens: number;
   service_tier?: string;
   speed?: string;
 }
@@ -84,18 +84,18 @@ export interface RawClaudeUsage {
  * `sessionID` / `providerID` / `modelID` — they are not the neutral casing.
  */
 export interface RawOpenCodeMessage {
+  cost?: number;
   id: string;
-  sessionID: string;
-  role: string;
-  providerID?: string;
   modelID?: string;
   path?: { cwd?: string; root?: string };
-  cost?: number;
+  providerID?: string;
+  role: string;
+  sessionID: string;
+  time?: { created?: number };
   tokens?: {
     input?: number;
     output?: number;
     reasoning?: number;
     cache?: { read?: number; write?: number };
   };
-  time?: { created?: number };
 }

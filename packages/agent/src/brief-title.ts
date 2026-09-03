@@ -15,13 +15,17 @@ const LIMIT = 80;
  * untitled rather than taking a made-up one.
  */
 export function briefTitle(prompt: string): string | undefined {
-  const first = prompt.split('\n').find((line) => line.trim().length > 0);
-  if (!first) return undefined;
+  const first = prompt.split("\n").find((line) => line.trim().length > 0);
+  if (!first) {
+    return undefined;
+  }
 
-  const line = first.trim().replace(/\s+/g, ' ');
-  if (line.length <= LIMIT) return line;
+  const line = first.trim().replace(/\s+/g, " ");
+  if (line.length <= LIMIT) {
+    return line;
+  }
 
   const cut = line.slice(0, LIMIT - 1);
-  const boundary = cut.lastIndexOf(' ');
+  const boundary = cut.lastIndexOf(" ");
   return `${boundary > 0 ? cut.slice(0, boundary) : cut}…`;
 }

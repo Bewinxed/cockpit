@@ -20,18 +20,20 @@ const QUOTE_MAX = 2000;
  * which is where the reply gets written.
  */
 export function quoteBlock(text: string, existingDraft: string): string {
-  const quoted = capped(text.replace(/\r\n?/g, '\n').trim())
-    .split('\n')
+  const quoted = capped(text.replace(/\r\n?/g, "\n").trim())
+    .split("\n")
     // A bare `>` rather than `"> "`: an empty quoted line is trailing whitespace.
-    .map((line) => (line.trim() ? `> ${line}` : '>'))
-    .join('\n');
+    .map((line) => (line.trim() ? `> ${line}` : ">"))
+    .join("\n");
   const head = existingDraft.trimEnd();
   return head ? `${head}\n\n${quoted}\n\n` : `${quoted}\n\n`;
 }
 
 /** Cut at the last word boundary that fits, and say that it was cut. */
 function capped(text: string): string {
-  if (text.length <= QUOTE_MAX) return text;
+  if (text.length <= QUOTE_MAX) {
+    return text;
+  }
   const head = text.slice(0, QUOTE_MAX);
   // Greedy up to the last whitespace in the run; a single unbroken token that
   // long has no boundary to cut at and takes the hard cut.
@@ -41,23 +43,23 @@ function capped(text: string): string {
 
 /** What `getBoundingClientRect` gives, as much of it as placement needs. */
 export interface Rect {
-  top: number;
-  right: number;
   bottom: number;
-  left: number;
-  width: number;
   height: number;
+  left: number;
+  right: number;
+  top: number;
+  width: number;
 }
 
 export interface Size {
-  width: number;
   height: number;
+  width: number;
 }
 
 export interface Placement {
+  side: "above" | "below";
   x: number;
   y: number;
-  side: 'above' | 'below';
 }
 
 /** Clear of the selection, and clear of the pane's own edges. */
@@ -76,10 +78,14 @@ export function barPlacement(
   selection: Rect,
   pane: Rect,
   bar: Size,
-  prefer: 'above' | 'below' = 'above'
+  prefer: "above" | "below" = "above"
 ): Placement {
-  const side = prefer === 'below' || selection.top < TOP_SAFE ? 'below' : 'above';
-  const y = side === 'below' ? selection.bottom + GAP : selection.top - bar.height - GAP;
+  const side =
+    prefer === "below" || selection.top < TOP_SAFE ? "below" : "above";
+  const y =
+    side === "below"
+      ? selection.bottom + GAP
+      : selection.top - bar.height - GAP;
   const x = selection.left + selection.width / 2 - bar.width / 2;
   return {
     x: clamp(x, pane.left + GUTTER, pane.right - GUTTER - bar.width),

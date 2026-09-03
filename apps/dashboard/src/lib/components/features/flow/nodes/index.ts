@@ -1,21 +1,21 @@
-import type { NodeTypes } from '@xyflow/svelte';
-import UserMessageNode from './UserMessageNode.svelte';
-import AssistantMessageNode from './AssistantMessageNode.svelte';
-import ToolNode from './ToolNode.svelte';
-import SubagentNode from './SubagentNode.svelte';
-import SystemMessageNode from './SystemMessageNode.svelte';
-import { BRANCH_COLORS_FALLBACK } from '$lib/utils/flow-constants';
+import type { NodeTypes } from "@xyflow/svelte";
+import { BRANCH_COLORS_FALLBACK } from "$lib/utils/flow-constants";
+import AssistantMessageNode from "./AssistantMessageNode.svelte";
+import SubagentNode from "./SubagentNode.svelte";
+import SystemMessageNode from "./SystemMessageNode.svelte";
+import ToolNode from "./ToolNode.svelte";
+import UserMessageNode from "./UserMessageNode.svelte";
 
 // Node type identifiers
 export const NODE_TYPES = {
-  USER: 'user',
-  ASSISTANT: 'assistant',
-  TOOL: 'tool',
-  SUBAGENT: 'subagent',
-  SYSTEM: 'system',
+  USER: "user",
+  ASSISTANT: "assistant",
+  TOOL: "tool",
+  SUBAGENT: "subagent",
+  SYSTEM: "system",
 } as const;
 
-export type FlowNodeType = typeof NODE_TYPES[keyof typeof NODE_TYPES];
+export type FlowNodeType = (typeof NODE_TYPES)[keyof typeof NODE_TYPES];
 
 // Re-export branch colors from constants
 export const BRANCH_COLORS = BRANCH_COLORS_FALLBACK;
@@ -31,9 +31,9 @@ export const nodeTypes: NodeTypes = {
 
 // Re-export individual components
 export {
-  UserMessageNode,
   AssistantMessageNode,
-  ToolNode,
   SubagentNode,
   SystemMessageNode,
+  ToolNode,
+  UserMessageNode,
 };

@@ -20,17 +20,17 @@
  * a `result` line, which is the line that would arm the boundary hand-off and
  * ask the supervisor to spawn a real SDK session.
  */
-import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import type { FramePayload, FrameProvenance } from '@whiffle/core';
-import { SessiondClient, probeEndpoint } from './sessiond-client';
-import { SessionSupervisor } from './session';
+import { afterAll, beforeAll, expect, test } from "bun:test";
+import { type ChildProcess, spawn } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { FramePayload, FrameProvenance } from "@whiffle/core";
+import { SessionSupervisor } from "./session";
+import { probeEndpoint, SessiondClient } from "./sessiond-client";
 
-const dir = mkdtempSync(join(tmpdir(), 'reattach-ledger-'));
-const endpoint = join(dir, 'sessiond.sock');
+const dir = mkdtempSync(join(tmpdir(), "reattach-ledger-"));
+const endpoint = join(dir, "sessiond.sock");
 let daemon: ChildProcess;
 let client: SessiondClient;
 let epoch: string;
@@ -41,27 +41,27 @@ let epoch: string;
  * timer so "nothing was replayed" is an assertion about the code and not about
  * how fast a clock happened to tick.
  */
-const emitterPath = join(dir, 'emitter.mjs');
+const emitterPath = join(dir, "emitter.mjs");
 writeFileSync(
   emitterPath,
   [
-    'let n = 0;',
+    "let n = 0;",
     "const emit = () => process.stdout.write(JSON.stringify({ type: 'system', subtype: 'note', n: ++n }) + '\\n');",
-    'for (let i = 0; i < Number(process.argv[2] ?? 1); i++) emit();',
+    "for (let i = 0; i < Number(process.argv[2] ?? 1); i++) emit();",
     "let buffer = '';",
     "process.stdin.on('data', (chunk) => {",
-    '  buffer += chunk;',
-    '  let nl = buffer.indexOf(String.fromCharCode(10));',
-    '  while (nl >= 0) {',
-    '    const asked = Number(buffer.slice(0, nl).trim() || 1);',
-    '    buffer = buffer.slice(nl + 1);',
-    '    for (let i = 0; i < asked; i++) emit();',
-    '    nl = buffer.indexOf(String.fromCharCode(10));',
-    '  }',
-    '});',
-    'process.stdin.resume();',
+    "  buffer += chunk;",
+    "  let nl = buffer.indexOf(String.fromCharCode(10));",
+    "  while (nl >= 0) {",
+    "    const asked = Number(buffer.slice(0, nl).trim() || 1);",
+    "    buffer = buffer.slice(nl + 1);",
+    "    for (let i = 0; i < asked; i++) emit();",
+    "    nl = buffer.indexOf(String.fromCharCode(10));",
+    "  }",
+    "});",
+    "process.stdin.resume();",
     "process.stdin.on('end', () => process.exit(0));",
-  ].join('\n')
+  ].join("\n")
 );
 
 const spawned: string[] = [];
@@ -70,13 +70,15 @@ beforeAll(async () => {
   // Both halves point at the scratch socket: the adapter reads this env var for
   // exactly this reason (`claude.ts`'s `sessiond()`).
   process.env.WHIFFLE_SESSIOND_ENDPOINT = endpoint;
-  const main = join(import.meta.dir, '..', '..', 'sessiond', 'src', 'main.ts');
+  const main = join(import.meta.dir, "..", "..", "sessiond", "src", "main.ts");
   daemon = spawn(process.execPath, [main], {
     env: { ...process.env, WHIFFLE_SESSIOND_ENDPOINT: endpoint },
-    stdio: 'ignore',
+    stdio: "ignore",
   });
   const deadline = Date.now() + 10_000;
-  while (Date.now() < deadline && !(await probeEndpoint(endpoint, 200))) await Bun.sleep(25);
+  while (Date.now() < deadline && !(await probeEndpoint(endpoint, 200))) {
+    await Bun.sleep(25);
+  }
   client = await SessiondClient.connect(endpoint);
   epoch = client.epoch!;
   expect(epoch).toBeTruthy();
@@ -85,10 +87,12 @@ beforeAll(async () => {
 afterAll(async () => {
   // The children are killed BEFORE the daemon, so nothing is orphaned onto a
   // machine full of the operator's real work.
-  for (const procId of spawned) await client.signal(procId, 'SIGKILL').catch(() => {});
+  for (const procId of spawned) {
+    await client.signal(procId, "SIGKILL").catch(() => {});
+  }
   await Bun.sleep(50);
   client.close();
-  daemon.kill('SIGKILL');
+  daemon.kill("SIGKILL");
 });
 
 const startChild = async (procId: string, burst: number): Promise<void> => {
@@ -104,10 +108,12 @@ const startChild = async (procId: string, burst: number): Promise<void> => {
 };
 
 /** Ask the child for more lines, through sessiond, exactly as the agent would. */
-const askFor = (procId: string, lines: number): Promise<void> => client.write(procId, `${lines}\n`);
+const askFor = (procId: string, lines: number): Promise<void> =>
+  client.write(procId, `${lines}\n`);
 
 /** What the daemon's socket writer would put on the wire, captured instead. */
-type Sunk = Exclude<FramePayload, { kind: 'instances' }> & Partial<FrameProvenance>;
+type Sunk = Exclude<FramePayload, { kind: "instances" }> &
+  Partial<FrameProvenance>;
 
 const supervisorWatching = (sink: Sunk[]): SessionSupervisor => {
   const supervisor = new SessionSupervisor();
@@ -116,17 +122,26 @@ const supervisorWatching = (sink: Sunk[]): SessionSupervisor => {
 };
 
 const noteOf = (frame: Sunk): number | undefined => {
-  if (frame.kind !== 'frame') return undefined;
+  if (frame.kind !== "frame") {
+    return undefined;
+  }
   return (frame.message as unknown as { n?: number }).n;
 };
 
 /** The neutral message a frame carries, read structurally. */
 const messageOf = (frame: Sunk): { subtype?: string; text?: string } =>
-  frame.kind === 'frame' ? (frame.message as unknown as { subtype?: string; text?: string }) : {};
+  frame.kind === "frame"
+    ? (frame.message as unknown as { subtype?: string; text?: string })
+    : {};
 
-const waitFor = async (predicate: () => boolean | Promise<boolean>, why: string): Promise<void> => {
+const waitFor = async (
+  predicate: () => boolean | Promise<boolean>,
+  why: string
+): Promise<void> => {
   for (let waited = 0; waited < 400; waited++) {
-    if (await predicate()) return;
+    if (await predicate()) {
+      return;
+    }
     await Bun.sleep(10);
   }
   throw new Error(`timed out waiting for ${why}`);
@@ -139,7 +154,7 @@ const headOf = async (procId: string): Promise<number> =>
 /** How far the ring's head has to be pushed to guarantee it dropped line 1. */
 const OVERFLOW_LINES = 4200; // > SESSIOND_RING_LINES (4096, design §6)
 
-test('a stale-epoch mark replays nothing and follows from head', async () => {
+test("a stale-epoch mark replays nothing and follows from head", async () => {
   const procId = `honest-loss-${crypto.randomUUID()}`;
   await startChild(procId, 6);
   await Bun.sleep(150);
@@ -149,7 +164,10 @@ test('a stale-epoch mark replays nothing and follows from head', async () => {
   // A mark minted under a sessiond that has since restarted. Its seqs name
   // lines that no longer exist, so the only honest answer is to replay none.
   const adopted = await supervisor.reattachFrom(
-    { ok: true, ingested: { [procId]: { epoch: crypto.randomUUID(), srcSeq: 1 } } },
+    {
+      ok: true,
+      ingested: { [procId]: { epoch: crypto.randomUUID(), srcSeq: 1 } },
+    },
     [{ instanceId: procId, cwd: dir, sessionId: null }]
   );
   expect(adopted).toEqual([procId]);
@@ -160,11 +178,14 @@ test('a stale-epoch mark replays nothing and follows from head', async () => {
 
   // And it IS following: the next line the child writes arrives.
   await askFor(procId, 2);
-  await waitFor(() => sunk.filter((f) => noteOf(f) !== undefined).length === 2, 'the live lines');
+  await waitFor(
+    () => sunk.filter((f) => noteOf(f) !== undefined).length === 2,
+    "the live lines"
+  );
   expect(sunk.map(noteOf).filter((n) => n !== undefined)).toEqual([7, 8]);
 }, 30_000);
 
-test('an ack with no ingested field is tolerated: the agent follows from head', async () => {
+test("an ack with no ingested field is tolerated: the agent follows from head", async () => {
   const procId = `old-ack-${crypto.randomUUID()}`;
   await startChild(procId, 5);
   await Bun.sleep(150);
@@ -180,10 +201,13 @@ test('an ack with no ingested field is tolerated: the agent follows from head', 
   await Bun.sleep(200);
   expect(sunk.filter((frame) => noteOf(frame) !== undefined)).toEqual([]);
   await askFor(procId, 1);
-  await waitFor(() => sunk.some((f) => noteOf(f) === 6), 'the first live line after an old-shape ack');
+  await waitFor(
+    () => sunk.some((f) => noteOf(f) === 6),
+    "the first live line after an old-shape ack"
+  );
 }, 30_000);
 
-test('a usable mark replays exactly the gap the hub named, in order', async () => {
+test("a usable mark replays exactly the gap the hub named, in order", async () => {
   const procId = `replay-${crypto.randomUUID()}`;
   await startChild(procId, 9);
   await Bun.sleep(200);
@@ -192,17 +216,23 @@ test('a usable mark replays exactly the gap the hub named, in order', async () =
   const supervisor = supervisorWatching(sunk);
   // The hub says: I have your first four lines of this epoch. Lines 5..9 were
   // written while the agent was dead, and they are exactly what comes back.
-  const adopted = await supervisor.reattachFrom({ ok: true, ingested: { [procId]: { epoch, srcSeq: 4 } } }, [
-    { instanceId: procId, cwd: dir, sessionId: null },
-  ]);
+  const adopted = await supervisor.reattachFrom(
+    { ok: true, ingested: { [procId]: { epoch, srcSeq: 4 } } },
+    [{ instanceId: procId, cwd: dir, sessionId: null }]
+  );
   expect(adopted).toEqual([procId]);
 
-  await waitFor(() => sunk.filter((f) => noteOf(f) !== undefined).length >= 5, 'the replayed backlog');
+  await waitFor(
+    () => sunk.filter((f) => noteOf(f) !== undefined).length >= 5,
+    "the replayed backlog"
+  );
   await Bun.sleep(100);
-  expect(sunk.map(noteOf).filter((n) => n !== undefined)).toEqual([5, 6, 7, 8, 9]);
+  expect(sunk.map(noteOf).filter((n) => n !== undefined)).toEqual([
+    5, 6, 7, 8, 9,
+  ]);
 }, 30_000);
 
-test('a ring that overflowed during the absence lands a sessiond_stream_gap frame, not a splice', async () => {
+test("a ring that overflowed during the absence lands a sessiond_stream_gap frame, not a splice", async () => {
   const procId = `overflow-${crypto.randomUUID()}`;
   await startChild(procId, 4);
   await Bun.sleep(150);
@@ -211,20 +241,26 @@ test('a ring that overflowed during the absence lands a sessiond_stream_gap fram
   await askFor(procId, OVERFLOW_LINES);
   // Waited on the daemon's own head rather than on a clock: the ring must
   // actually have passed the mark, or this test proves nothing.
-  await waitFor(async () => (await headOf(procId)) > OVERFLOW_LINES, 'the ring to outrun the mark');
+  await waitFor(
+    async () => (await headOf(procId)) > OVERFLOW_LINES,
+    "the ring to outrun the mark"
+  );
 
   const sunk: Sunk[] = [];
   const supervisor = supervisorWatching(sunk);
-  await supervisor.reattachFrom({ ok: true, ingested: { [procId]: { epoch, srcSeq: 2 } } }, [
-    { instanceId: procId, cwd: dir, sessionId: null },
-  ]);
+  await supervisor.reattachFrom(
+    { ok: true, ingested: { [procId]: { epoch, srcSeq: 2 } } },
+    [{ instanceId: procId, cwd: dir, sessionId: null }]
+  );
 
   await waitFor(
     () =>
-      sunk.some((frame) => messageOf(frame).subtype === 'sessiond_stream_gap'),
-    'the announced seam'
+      sunk.some((frame) => messageOf(frame).subtype === "sessiond_stream_gap"),
+    "the announced seam"
   );
-  const seam = sunk.find((frame) => messageOf(frame).subtype === 'sessiond_stream_gap')!;
+  const seam = sunk.find(
+    (frame) => messageOf(frame).subtype === "sessiond_stream_gap"
+  )!;
   // It says where the seam is, so the operator reads a hole rather than a
   // transcript that quietly skipped four thousand lines.
   expect(messageOf(seam).text).toMatch(/resumes at line \d+/);
@@ -241,7 +277,7 @@ test('a ring that overflowed during the absence lands a sessiond_stream_gap fram
  * sessiond was keeping alive one process away. Detaching drops the bookkeeping
  * and leaves the child; the next daemon reattaches to it.
  */
-test('detach leaves the child running, and the next daemon adopts it', async () => {
+test("detach leaves the child running, and the next daemon adopts it", async () => {
   const procId = `detach-${crypto.randomUUID()}`;
   await startChild(procId, 2);
   await Bun.sleep(150);
@@ -249,7 +285,9 @@ test('detach leaves the child running, and the next daemon adopts it', async () 
   const before: Sunk[] = [];
   const outgoing = supervisorWatching(before);
   expect(
-    await outgoing.reattachFrom({ ok: true }, [{ instanceId: procId, cwd: dir, sessionId: null }])
+    await outgoing.reattachFrom({ ok: true }, [
+      { instanceId: procId, cwd: dir, sessionId: null },
+    ])
   ).toEqual([procId]);
   expect(outgoing.instanceIds).toEqual([procId]);
 
@@ -259,16 +297,23 @@ test('detach leaves the child running, and the next daemon adopts it', async () 
   await Bun.sleep(200);
 
   // The child is still there. This is the whole assertion.
-  expect((await client.list()).procs.find((proc) => proc.procId === procId)?.alive).toBe(true);
+  expect(
+    (await client.list()).procs.find((proc) => proc.procId === procId)?.alive
+  ).toBe(true);
 
   // And it is still usable: the next daemon adopts it and hears what it says.
   const after: Sunk[] = [];
   const incoming = supervisorWatching(after);
   expect(
-    await incoming.reattachFrom({ ok: true }, [{ instanceId: procId, cwd: dir, sessionId: null }])
+    await incoming.reattachFrom({ ok: true }, [
+      { instanceId: procId, cwd: dir, sessionId: null },
+    ])
   ).toEqual([procId]);
   await askFor(procId, 1);
-  await waitFor(() => after.some((frame) => noteOf(frame) !== undefined), 'a line after the restart');
+  await waitFor(
+    () => after.some((frame) => noteOf(frame) !== undefined),
+    "a line after the restart"
+  );
 }, 30_000);
 
 /**
@@ -279,19 +324,25 @@ test('detach leaves the child running, and the next daemon adopts it', async () 
  * reattach, and its child went on running with nobody pumping it. `survivors`
  * is the machine's own answer, read straight off sessiond.
  */
-test('survivors reports what sessiond holds, with the cwd needed to adopt it', async () => {
+test("survivors reports what sessiond holds, with the cwd needed to adopt it", async () => {
   const procId = `survivor-${crypto.randomUUID()}`;
   await startChild(procId, 1);
   await Bun.sleep(150);
 
   const supervisor = supervisorWatching([]);
-  const found = (await supervisor.survivors()).find((row) => row.instanceId === procId);
+  const found = (await supervisor.survivors()).find(
+    (row) => row.instanceId === procId
+  );
   expect(found).toBeDefined();
   // The cwd is what makes it adoptable at all — sessiond echoes back the spec's.
   expect(found?.cwd).toBe(dir);
 
   // Adoptable on exactly that row, with no help from the hub.
-  expect(await supervisor.reattachFrom({ ok: true }, [found!])).toEqual([procId]);
+  expect(await supervisor.reattachFrom({ ok: true }, [found!])).toEqual([
+    procId,
+  ]);
   // And once carried, it is no longer an unclaimed survivor.
-  expect((await supervisor.survivors()).some((row) => row.instanceId === procId)).toBe(false);
+  expect(
+    (await supervisor.survivors()).some((row) => row.instanceId === procId)
+  ).toBe(false);
 }, 30_000);
