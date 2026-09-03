@@ -169,7 +169,14 @@
         : {
             viewId: id,
             machineId: hint?.machineId ?? "",
-            sessionId: id,
+            // The rail row's real SDK key when it has one — never the view id
+            // itself. The store adopts this sessionId, and any later
+            // revive/relaunch/rewind re-sends it as the resume key; an
+            // instance id there becomes a bogus handle the hub then cements
+            // into the row permanently. The id tail stays for the read, which
+            // the hub resolves on its own.
+            sessionId:
+              whiffle.instances.find((row) => row.id === id)?.sessionId ?? id,
             cwd: hint?.cwd ?? "",
             harness: hint?.harness as never,
             live: running,

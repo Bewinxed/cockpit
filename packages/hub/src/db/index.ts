@@ -967,18 +967,24 @@ const make = (path: string): DbShape => {
     }) => {
       const now = new Date();
 
+      // Same refusal as noteInstanceSession below: a spawn whose resume key is
+      // the instance id itself carries confusion, not identity. Treat it as
+      // absent so the row is born session-less instead of self-pointing.
+      const cleanSessionId =
+        sessionId && sessionId !== id ? sessionId : undefined;
+
       // One conversation, one live row.
       //
       // A session already being answered by a live process must not get a
       // second one: two rows in the rail for the same chat, two processes
       // writing one transcript, and a reader who cannot tell which is which.
-      if (sessionId) {
+      if (cleanSessionId) {
         const live = db
           .select()
           .from(instances)
           .where(
             and(
-              eq(instances.sessionId, sessionId),
+              eq(instances.sessionId, cleanSessionId),
               ne(instances.id, id),
               inArray(instances.status, ["running", "starting"])
             )
@@ -993,7 +999,7 @@ const make = (path: string): DbShape => {
           id,
           machineId,
           cwd,
-          sessionId,
+          sessionId: cleanSessionId,
           harness,
           projectId,
           parentInstanceId,
@@ -1031,7 +1037,7 @@ const make = (path: string): DbShape => {
             status: "starting",
             lastError: null,
             updatedAt: now,
-            ...(sessionId ? { sessionId } : {}),
+            ...(cleanSessionId ? { sessionId: cleanSessionId } : {}),
             ...(harness ? { harness } : {}),
             ...(projectId ? { projectId } : {}),
             ...(parentInstanceId ? { parentInstanceId } : {}),
@@ -1089,6 +1095,19 @@ const make = (path: string): DbShape => {
         .returning()
         .get(),
     noteInstanceSession: (id, sessionId, cwd, harness) => {
+      // A harness key naming the row itself is confusion, never identity: hub
+      // ids are hub-minted, harness sids are harness-minted, and the two only
+      // meet when a caller echoed the instance id back as the session key
+      // (dashboard fallback reads do exactly this — see SessionPane's
+      // readHistory). Storing it poisons the row permanently: every later
+      // restore re-addresses the bogus key. Refuse it loudly and keep whatever
+      // the row already had.
+      if (sessionId === id) {
+        console.warn(
+          `[hub] refused self session_id for ${id}: a harness session is never its own instance`
+        );
+        return;
+      }
       db.update(instances)
         .set({
           sessionId,

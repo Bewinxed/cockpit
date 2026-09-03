@@ -2570,8 +2570,20 @@ export class OpencodeHarness implements Harness {
       sessionId = (fork.data as Session).id;
     } else if (spec.resume) {
       // Re-open: opencode sessions persist in the server's DB, so resuming is
-      // just addressing the id again. A resume anchored at a message rewinds the
-      // conversation to it first.
+      // just addressing the id again — but only an id the server actually
+      // holds. A key nobody holds is refused loudly here rather than addressed
+      // blindly: a blind address becomes a live handle whose every prompt
+      // fails, plus an init frame that cements the bogus key into the hub row
+      // (noteInstanceSession trusts it), poisoning the session permanently.
+      const held = await client.session.get({
+        path: { id: spec.resume.sessionKey },
+        query: { directory: ctx.cwd },
+      });
+      if (held.error || !held.data) {
+        throw new Error(
+          `opencode has no session ${spec.resume.sessionKey} to resume in ${ctx.cwd}`
+        );
+      }
       sessionId = spec.resume.sessionKey;
       if (spec.resume.atMessage) {
         const reverted = await client.session.revert({
