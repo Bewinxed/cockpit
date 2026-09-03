@@ -458,7 +458,7 @@ function withExtras(
  * answers with it, and {@link onConsume} fires at the moment the wait ends.
  */
 export class InputStream implements AsyncIterable<SDKUserMessage> {
-  #queue: { message: SDKUserMessage; queueId?: string }[] = [];
+  readonly #queue: { message: SDKUserMessage; queueId?: string }[] = [];
   #waiting: ((result: IteratorResult<SDKUserMessage>) => void) | null = null;
   #ended = false;
 

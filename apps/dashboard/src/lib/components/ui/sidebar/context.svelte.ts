@@ -4,7 +4,7 @@ import { SIDEBAR_KEYBOARD_SHORTCUT } from "./constants.js";
 
 type Getter<T> = () => T;
 
-export type SidebarStateProps = {
+export interface SidebarStateProps {
   /**
    * A getter function that returns the current open state of the sidebar.
    * We use a getter function here to support `bind:open` on the `Sidebar.Provider`
@@ -18,14 +18,14 @@ export type SidebarStateProps = {
    * the sub-components and any `bind:` references.
    */
   setOpen: (open: boolean) => void;
-};
+}
 
 class SidebarState {
   readonly props: SidebarStateProps;
   open = $derived.by(() => this.props.open());
   openMobile = $state(false);
   setOpen: SidebarStateProps["setOpen"];
-  #isMobile: IsMobile;
+  readonly #isMobile: IsMobile;
   state = $derived.by(() => (this.open ? "expanded" : "collapsed"));
 
   constructor(props: SidebarStateProps) {

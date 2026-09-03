@@ -50,7 +50,7 @@ const ok = (cond, msg) => {
   checks++;
   if (!cond) {
     fails++;
-    console.log("  FAIL  " + msg);
+    console.log(`  FAIL  ${msg}`);
   }
 };
 
@@ -67,10 +67,10 @@ console.log(
   // Pull out every `@media (hover:hover) and (pointer:fine){ ... }` block by
   // brace balancing, remove them, and assert no `:hover` remains outside.
   const css = styleText.replace(/\/\*[\s\S]*?\*\//g, ""); // strip comments (prose about :hover is not a rule)
-  const gatedHover = [];
+  const _gatedHover = [];
   const re = /@media[^{]*\(hover\s*:\s*hover\)[^{]*\{/g;
   let m,
-    prevEnd = 0,
+    _prevEnd = 0,
     markers = [];
   while ((m = re.exec(css))) {
     const start = m.index;
@@ -88,7 +88,7 @@ console.log(
       }
     }
     markers.push([start, i + 1]);
-    prevEnd = i + 1;
+    _prevEnd = i + 1;
   }
   // assemble the non-gated remainder
   let remainder = "";
@@ -671,7 +671,7 @@ for (const width of [390, 430, 768]) {
   await p.evaluate(SAMPLER);
   const hasActive = await p.evaluate(() => {
     const tab = document.querySelector(".tabstrip .tab");
-    const prev = document.querySelector(".pager button");
+    const _prev = document.querySelector(".pager button");
     return (
       getComputedStyle(tab).cursor !== "auto" ||
       !!document.querySelector(".pager button")

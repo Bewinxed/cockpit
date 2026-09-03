@@ -258,7 +258,7 @@ for (const file of FILES) {
                   !isNumericToken &&
                   (ratio < LEAD_MIN - EPS || ratio > LEAD_MAX + EPS)
                 ) {
-                  out.lead["BAD:" + key] = (out.lead["BAD:" + key] || 0) + 1;
+                  out.lead[`BAD:${key}`] = (out.lead[`BAD:${key}`] || 0) + 1;
                 }
               }
             }

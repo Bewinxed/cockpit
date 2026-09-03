@@ -162,7 +162,7 @@ export async function refreshPricing(): Promise<number> {
 
 /** Same providers and key scheme the bundled snapshot generator used. */
 function filterModelsDev(raw: unknown): PricingSnapshot {
-  type Provider = {
+  interface Provider {
     models?: Record<
       string,
       {
@@ -174,7 +174,7 @@ function filterModelsDev(raw: unknown): PricingSnapshot {
         };
       }
     >;
-  };
+  }
   const providers = ["anthropic", "opencode", "opencode-go"];
   const models: Record<string, SnapshotModel> = {};
   for (const provider of providers) {

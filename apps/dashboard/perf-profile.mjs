@@ -125,7 +125,7 @@ const sessionId = await evaluate(`(() => {
 
 if (sessionId) {
   console.log(`  → Opening session ${sessionId.slice(0, 8)}...`);
-  await cdp("Page.navigate", { url: TARGET + "/session/" + sessionId });
+  await cdp("Page.navigate", { url: `${TARGET}/session/${sessionId}` });
   await new Promise((r) => {
     const handler = (ev) => {
       const msg = JSON.parse(ev.data);

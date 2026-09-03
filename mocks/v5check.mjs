@@ -30,7 +30,7 @@ const ok = (cond, msg) => {
   checks++;
   if (!cond) {
     fails++;
-    console.log("  FAIL  " + msg);
+    console.log(`  FAIL  ${msg}`);
   }
 };
 
@@ -69,7 +69,7 @@ async function open({
   return page;
 }
 
-const G = ["color", "background-color", "border-color", "border-top-color"];
+const _G = ["color", "background-color", "border-color", "border-top-color"];
 const SAMPLER = `
 window.__cs = (sel, prop) => {
   const el = document.querySelector(sel); if (!el) return null;
@@ -175,13 +175,13 @@ console.log(
   "== density = dimension-only: one tier, colours identical, sizes smaller =="
 );
 {
-  const cols = [
+  const _cols = [
     "color",
     "background-color",
     "background-image",
     "border-top-color",
   ];
-  const sel = (base, state) => `${base}`;
+  const _sel = (base, state) => `${base}`;
   const gDatasets = {};
   for (const compact of [false, true]) {
     const p = await open({ compact });
@@ -284,7 +284,7 @@ console.log("== pagination exposes all 8 interaction states (DW-4.4) ==");
 {
   const p = await open({});
   await p.evaluate(SAMPLER);
-  const caps = await p.evaluate(
+  const _caps = await p.evaluate(
     () =>
       Array.from(document.querySelectorAll("section.group h2")).map(
         (h) => h.textContent
@@ -460,7 +460,7 @@ console.log(
   "== density: compact rects strictly smaller than comfortable (pixel gate input) =="
 );
 
-const RECTS = [
+const _RECTS = [
   "navOn",
   "btnPri",
   "btnDes",

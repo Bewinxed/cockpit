@@ -92,7 +92,7 @@ const dump = async (dark) =>
           continue; // alpha tokens are not inks
         }
         out[n] =
-          "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
+          `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
       }
       return { out, skipped };
     },

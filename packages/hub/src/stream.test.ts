@@ -112,12 +112,15 @@ const harness = (): Harness => {
 
 const hubs: ReturnType<typeof createStreamHub>[] = [];
 
-type Delta = { type: "stream.event"; event: SessionStreamEvent };
-type Backlog = {
+interface Delta {
+    type: "stream.event";
+    event: SessionStreamEvent 
+}
+interface Backlog {
   type: "stream.backlog";
   sessionId: string;
   events: SessionStreamEvent[];
-};
+}
 
 /** Every message this socket was sent, in order, with its `type` narrowed. */
 const typed = <T extends { type: string }>(

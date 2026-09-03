@@ -53,7 +53,7 @@ const hubWsProxy = (): Plugin => ({
             `${proxyRes.rawHeaders[i]}: ${proxyRes.rawHeaders[i + 1]}`
           );
         }
-        socket.write(lines.join("\r\n") + "\r\n\r\n");
+        socket.write(`${lines.join("\r\n")}\r\n\r\n`);
         if (proxyHead?.length) {
           socket.write(proxyHead);
         }

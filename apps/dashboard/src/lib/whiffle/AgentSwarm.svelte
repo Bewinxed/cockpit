@@ -1,11 +1,11 @@
 <script lang="ts" module>
   /** One agent in the strip, flattened from a branch or a delegate alike. */
-  export type SwarmMark = {
+  export interface SwarmMark {
     key: string;
     state: "working" | "idle" | "blocked" | "failed" | "sleeping";
     model: string | null;
     label: string;
-  };
+  }
 </script>
 
 <script lang="ts">

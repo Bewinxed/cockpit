@@ -111,8 +111,8 @@ export async function exchangeCodeForTokens(
 
   console.log("[OAuth] Token exchange request:", {
     ...body,
-    code: actualCode.slice(0, 10) + "...",
-    code_verifier: codeVerifier.slice(0, 10) + "...",
+    code: `${actualCode.slice(0, 10)}...`,
+    code_verifier: `${codeVerifier.slice(0, 10)}...`,
   });
 
   // Use JSON body format (like OpenCode does)

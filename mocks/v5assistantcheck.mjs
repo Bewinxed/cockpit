@@ -217,7 +217,7 @@ console.log(
     "recommendations labelled principle-derived (ai-native has no settled canon)"
   );
   for (const gap of ["STREAMING", "LATENCY", "REFUSAL", "REASONING"]) {
-    const re = new RegExp(gap + "[^\\n]*designer inference", "i");
+    const re = new RegExp(`${gap}[^\\n]*designer inference`, "i");
     ok(re.test(raw), `canon gap ${gap} marked [designer inference]`);
   }
 }

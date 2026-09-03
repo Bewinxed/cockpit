@@ -52,9 +52,16 @@ const KEYFRAME_MS = 8;
 
 type Phase = "idle" | "tracking" | "decided";
 /** One point of the integrated settle: seconds since release, px, px/s. */
-type Sample = { t: number; x: number; v: number };
+interface Sample {
+    t: number;
+    x: number;
+    v: number 
+}
 /** A pane in view: its element and its distance from the active tab. */
-type Pane = { el: HTMLElement; delta: number };
+interface Pane {
+    el: HTMLElement;
+    delta: number 
+}
 
 /**
  * Whether something under the finger wants this touch more than the page

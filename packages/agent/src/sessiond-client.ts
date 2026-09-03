@@ -187,11 +187,11 @@ export interface SessiondWelcomeInfo {
   procs: SessiondProcInfo[];
 }
 
-type ProcListener = {
+interface ProcListener {
   line?: (event: SessiondLine) => void;
   exit?: (exitCode: number | null, signal: NodeJS.Signals | null) => void;
   reset?: (nextSeq: number) => void;
-};
+}
 
 /**
  * One attached agent connection.
@@ -201,7 +201,7 @@ type ProcListener = {
  * gapless without any reordering buffer here.
  */
 export class SessiondClient {
-  #socket: Socket;
+  readonly #socket: Socket;
   #buffer = "";
   #welcome: SessiondWelcomeInfo | undefined;
   readonly #acks = new Map<string, (ack: SessiondAck) => void>();

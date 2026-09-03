@@ -62,9 +62,9 @@ export function getPayloadConfigFromPayload(
     : config[key as keyof typeof config];
 }
 
-type ChartContextValue = {
+interface ChartContextValue {
   config: ChartConfig;
-};
+}
 
 const chartContextKey = Symbol("chart-context");
 

@@ -275,7 +275,7 @@ for (const file of [
       const measured = await page.evaluate(
         async ({ b64, rects }) => {
           const img = new Image();
-          img.src = "data:image/png;base64," + b64;
+          img.src = `data:image/png;base64,${b64}`;
           await img.decode();
           const cv = document.createElement("canvas");
           cv.width = img.width;

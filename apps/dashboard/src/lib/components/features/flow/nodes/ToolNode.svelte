@@ -55,7 +55,7 @@
   const family = $derived(toolFamily(toolName));
 
   // Status styling
-  const statusClass = $derived.by(() => {
+  const _statusClass = $derived.by(() => {
     if (isStreaming) {
       return "border-warning animate-pulse";
     }

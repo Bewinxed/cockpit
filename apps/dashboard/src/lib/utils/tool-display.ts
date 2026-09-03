@@ -25,7 +25,7 @@ export function getToolGlance(
   // Bash - show command preview
   if (input.command) {
     const cmd = String(input.command);
-    return cmd.length > 40 ? cmd.slice(0, 40) + "..." : cmd;
+    return cmd.length > 40 ? `${cmd.slice(0, 40)}...` : cmd;
   }
 
   // Search - show pattern
@@ -59,7 +59,7 @@ export function getResultGlimpse(result: unknown, maxLength = 60): string {
   const firstLine = str.split("\n")[0];
 
   if (firstLine.length > maxLength) {
-    return firstLine.slice(0, maxLength) + "...";
+    return `${firstLine.slice(0, maxLength)}...`;
   }
   return firstLine;
 }

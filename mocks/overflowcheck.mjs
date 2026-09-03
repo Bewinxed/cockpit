@@ -138,7 +138,7 @@ for (const f of FILES) {
             continue;
           }
           out.push({
-            name: (el.tagName + "." + String(el.className || "")).slice(0, 34),
+            name: (`${el.tagName}.${String(el.className || "")}`).slice(0, 34),
             sw: el.scrollWidth,
             cw: el.clientWidth,
             lost: over,
@@ -162,7 +162,7 @@ for (const f of FILES) {
           const off = Math.max(0, Math.round(r.right - vw));
           if (over > 1 || off > 0) {
             unread.push({
-              name: (el.tagName + "." + String(el.className || "")).slice(
+              name: (`${el.tagName}.${String(el.className || "")}`).slice(
                 0,
                 30
               ),

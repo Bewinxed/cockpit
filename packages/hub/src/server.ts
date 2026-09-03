@@ -4914,7 +4914,7 @@ export const createServer = ({
                             type: "user",
                             message: {
                               role: "user",
-                              content: header + "\n\n" + body,
+                              content: `${header}\n\n${body}`,
                             },
                             parent_tool_use_id: null,
                             origin: {

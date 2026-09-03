@@ -29,7 +29,7 @@ const check = (label, ok, detail) => {
     fails++;
   }
   console.log(
-    `  ${ok ? "PASS" : "FAIL"}  ${label}${detail ? "  " + detail : ""}`
+    `  ${ok ? "PASS" : "FAIL"}  ${label}${detail ? `  ${detail}` : ""}`
   );
 };
 
@@ -62,7 +62,7 @@ const stops =
 check(
   "action carries a linear-gradient (not a flat fill)",
   action.backgroundImage.includes("linear-gradient"),
-  action.backgroundImage.slice(0, 40) + "…"
+  `${action.backgroundImage.slice(0, 40)}…`
 );
 check(
   "gradient has two distinct stops (top highlight -> body)",
@@ -321,7 +321,7 @@ const themed = await page.evaluate(() => {
     }
     ctx.fillRect(0, 0, 1, 1);
     const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-    return "#" + [r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("");
+    return `#${[r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
   };
   const read = () => {
     const cs = getComputedStyle(document.body);
@@ -373,6 +373,6 @@ check(
 
 await browser.close();
 console.log(
-  "\n" + (fails === 0 ? "ALL DOM CHECKS PASS" : `${fails} DOM CHECKS FAILED`)
+  `\n${fails === 0 ? "ALL DOM CHECKS PASS" : `${fails} DOM CHECKS FAILED`}`
 );
 process.exit(fails ? 1 : 0);

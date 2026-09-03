@@ -129,7 +129,7 @@
     }
   }
 
-  function getBorderClass(status: string): string {
+  function _getBorderClass(status: string): string {
     switch (status) {
       case "complete":
         return "border-success";

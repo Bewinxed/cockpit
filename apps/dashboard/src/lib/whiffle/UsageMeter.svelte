@@ -68,7 +68,7 @@
   const fivePct = $derived(sessionWindow?.percent ?? null);
   const weekPct = $derived(weeklyWindow?.percent ?? null);
 
-  const label = $derived.by(() => {
+  const _label = $derived.by(() => {
     if (fivePct !== null && weekPct !== null) {
       return `${Math.round(fivePct)}% · ${Math.round(weekPct)}%`;
     }

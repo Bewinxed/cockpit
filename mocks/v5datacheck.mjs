@@ -51,7 +51,7 @@ const ok = (cond, msg) => {
   checks++;
   if (!cond) {
     fails++;
-    console.log("  FAIL  " + msg);
+    console.log(`  FAIL  ${msg}`);
   }
 };
 
@@ -317,7 +317,7 @@ for (const scheme of ["light", "dark"]) {
   const p = await open({ scheme });
   await p.evaluate(SAMPLER);
   const thr = await p.evaluate(() => {
-    const data = {};
+    const _data = {};
     const grab = (sel) => {
       const v = getComputedStyle(document.querySelector(sel)).color;
       return v;
@@ -369,7 +369,7 @@ console.log(
   await p.evaluate(SAMPLER);
   const palette = await p.evaluate(() => {
     const cs = getComputedStyle(document.documentElement);
-    const k = (v) => {
+    const _k = (v) => {
       // normalise a resolved oklch/color string to rgb via canvas later
       return v;
     };
@@ -428,7 +428,7 @@ console.log(
   const seriesColors = await p.evaluate(() =>
     Array.from(document.querySelectorAll("svg.chart-box rect")).map((r) => {
       const f = r.getAttribute("fill");
-      const id = "seg" + Math.random().toString(36).slice(2);
+      const id = `seg${Math.random().toString(36).slice(2)}`;
       const d = document.createElement("div");
       d.id = id;
       d.style.background = f;
@@ -655,7 +655,7 @@ for (const scheme of ["light", "dark"]) {
       continue;
     }
     const exp = band(c.val);
-    if (c.cls !== "thr " + exp) {
+    if (c.cls !== `thr ${exp}`) {
       wrongBand++;
       bad.push(`${c.val}% -> class "${c.cls}" should be "thr ${exp}"`);
     }
@@ -825,7 +825,7 @@ console.log(
       document.querySelectorAll(".chart-legend .k")
     ).map((k) => k.querySelector(".sw").className);
     const rgb = (v) => {
-      const id = "r" + Math.random().toString(36).slice(2);
+      const id = `r${Math.random().toString(36).slice(2)}`;
       const d = document.createElement("div");
       d.id = id;
       d.style.background = v;

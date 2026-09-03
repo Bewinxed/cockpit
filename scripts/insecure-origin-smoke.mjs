@@ -209,7 +209,7 @@ function startFrontProxy({ port, previewPort, hub }) {
       for (let i = 0; i < upstream.rawHeaders.length; i += 2) {
         lines.push(`${upstream.rawHeaders[i]}: ${upstream.rawHeaders[i + 1]}`);
       }
-      socket.write(lines.join("\r\n") + "\r\n\r\n");
+      socket.write(`${lines.join("\r\n")}\r\n\r\n`);
       if (upstreamHead?.length) {
         socket.write(upstreamHead);
       }

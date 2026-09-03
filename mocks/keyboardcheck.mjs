@@ -134,7 +134,7 @@ for (const file of FILES) {
             continue; // the focusable ancestor is the control
           }
           const label =
-            (el.tagName + "." + cls(el)).slice(0, 30) +
+            (`${el.tagName}.${cls(el)}`).slice(0, 30) +
             ' "' +
             name(el).slice(0, 18) +
             '"';
@@ -166,7 +166,7 @@ for (const file of FILES) {
           const r = el.getBoundingClientRect();
           const cs = getComputedStyle(el);
           return {
-            tag: (el.tagName + "." + String(el.className || "")).slice(0, 26),
+            tag: (`${el.tagName}.${String(el.className || "")}`).slice(0, 26),
             name: (el.getAttribute("aria-label") || el.textContent || "")
               .trim()
               .slice(0, 20),
@@ -191,7 +191,7 @@ for (const file of FILES) {
                 'aside,main,header,footer,nav,section,[role="dialog"]'
               );
               return l
-                ? l.tagName + "." + String(l.className || "").slice(0, 12)
+                ? `${l.tagName}.${String(l.className || "").slice(0, 12)}`
                 : "root";
             })(),
             outline:
@@ -255,7 +255,7 @@ for (const file of FILES) {
               async ({ a, b }) => {
                 const load = async (s) => {
                   const im = new Image();
-                  im.src = "data:image/png;base64," + s;
+                  im.src = `data:image/png;base64,${s}`;
                   await im.decode();
                   const c = document.createElement("canvas");
                   c.width = im.width;

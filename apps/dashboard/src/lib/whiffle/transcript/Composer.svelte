@@ -79,8 +79,16 @@
     leading?: Snippet;
   } = $props();
 
-  type PendingImage = { mediaType: string; data: string; name: string };
-  type PendingText = { kind: "text"; name: string; content: string };
+  interface PendingImage {
+    mediaType: string;
+    data: string;
+    name: string 
+}
+  interface PendingText {
+    kind: "text";
+    name: string;
+    content: string 
+}
 
   let images = $state<PendingImage[]>([]);
   let texts = $state<PendingText[]>([]);

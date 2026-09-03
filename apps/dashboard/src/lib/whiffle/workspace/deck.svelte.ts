@@ -71,9 +71,16 @@ const VELOCITY_WINDOW = 80;
 
 type Phase = "idle" | "armed" | "claimed";
 /** One point of the integrated settle: seconds since release, px, px/s. */
-type Sample = { t: number; x: number; v: number };
+interface Sample {
+    t: number;
+    x: number;
+    v: number 
+}
 /** A card in view: its element and its distance from the focus. */
-type Card = { el: HTMLElement; delta: number };
+interface Card {
+    el: HTMLElement;
+    delta: number 
+}
 
 export function createDeck(
   getLeaves: () => LeafNode[],

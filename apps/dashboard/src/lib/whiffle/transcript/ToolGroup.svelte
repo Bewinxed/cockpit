@@ -89,7 +89,11 @@
      licenses the coloring, not the shape of the string, so both rows agree on
      what green means: added. Whitespace is kept as its own token so the fact
      reads exactly as the descriptor wrote it. */
-  type FactPart = { text: string; add: boolean; del: boolean };
+  interface FactPart {
+    text: string;
+    add: boolean;
+    del: boolean 
+}
 
   const ADDED = /^\+\d[\d,._]*$/;
   const REMOVED = /^[−-]\d[\d,._]*$/;

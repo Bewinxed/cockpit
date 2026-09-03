@@ -97,7 +97,7 @@ for (const file of FILES) {
           s[cs.fontSize] = (s[cs.fontSize] || 0) + 1;
           if (cs.lineHeight === "normal") {
             n.push(
-              (el.tagName + "." + String(el.className || "")).slice(0, 40)
+              (`${el.tagName}.${String(el.className || "")}`).slice(0, 40)
             );
           }
           // UA defaults arrive whenever markup is promoted to a real control or
@@ -106,7 +106,7 @@ for (const file of FILES) {
           // class rather than the instances.
           if (cs.textDecorationLine && cs.textDecorationLine !== "none") {
             u.push(
-              (el.tagName + "." + String(el.className || "")).slice(0, 40) +
+              (`${el.tagName}.${String(el.className || "")}`).slice(0, 40) +
                 " " +
                 cs.textDecorationLine
             );

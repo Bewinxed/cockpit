@@ -65,7 +65,7 @@ const ctx: HarnessContext = {
   closed: () => {},
 };
 
-type TaskFrameShape = {
+interface TaskFrameShape {
   subtype?: string;
   tool_use_id?: string;
   subagent_type?: string;
@@ -73,7 +73,7 @@ type TaskFrameShape = {
   status?: string;
   summary?: string;
   task_type?: string;
-};
+}
 
 /** One DIAG line per task_* system frame, in the shape the branch rule reads. */
 function dumpTaskFrames(label: string, from: number): number {

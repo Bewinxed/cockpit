@@ -87,11 +87,11 @@ const readWhole = async (
 };
 
 export class UsageScanner {
-  private buckets = new Map<string, UsageBucket>();
-  private claudeMain = new Map<string, DedupEntry>();
-  private claudeSide = new Map<string, DedupEntry>();
-  private opencodeSeen = new Set<string>();
-  private touchedKeys = new Set<string>();
+  private readonly buckets = new Map<string, UsageBucket>();
+  private readonly claudeMain = new Map<string, DedupEntry>();
+  private readonly claudeSide = new Map<string, DedupEntry>();
+  private readonly opencodeSeen = new Set<string>();
+  private readonly touchedKeys = new Set<string>();
   private index: UsageIndex;
   private lastFullRebuild = 0;
 

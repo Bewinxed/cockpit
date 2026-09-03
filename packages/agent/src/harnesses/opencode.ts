@@ -1038,29 +1038,29 @@ export class OpencodeSession implements HarnessSession {
   readonly #directory: string;
   #model: string | undefined;
   #lastTokens = EMPTY_TOKENS;
-  #roles = new Map<string, "user" | "assistant">();
-  #costs = new Map<string, number>();
+  readonly #roles = new Map<string, "user" | "assistant">();
+  readonly #costs = new Map<string, number>();
   #costBase = 0;
-  #pending = new Map<string, PendingMessage>();
+  readonly #pending = new Map<string, PendingMessage>();
   /** The reasoning part whose live block is open, so it is closed exactly once. */
   #openThinking: string | null = null;
-  #toolsEmitted = new Map<string, "called" | "resolved">();
+  readonly #toolsEmitted = new Map<string, "called" | "resolved">();
   #busy = false;
   /** The last provider-retry note surfaced, so a repeating retry says it once. */
   #lastRetryNote = "";
   #turnOpen = false;
-  #queue: {
+  readonly #queue: {
     parts: unknown[];
     model?: { providerID?: string; modelID?: string };
   }[] = [];
   #permissionMode: string | undefined;
   #providersCache: Promise<{ providers?: Provider[] } | undefined> | undefined;
   #commandNames: Promise<Set<string>> | null = null;
-  #questions = new Set<string>();
-  #questionData = new Map<string, UserQuestion[]>();
-  #childInfo = new Map<string, { agent?: string; title?: string }>();
-  #childState = new Map<string, ChildState>();
-  #boundCalls = new Set<string>();
+  readonly #questions = new Set<string>();
+  readonly #questionData = new Map<string, UserQuestion[]>();
+  readonly #childInfo = new Map<string, { agent?: string; title?: string }>();
+  readonly #childState = new Map<string, ChildState>();
+  readonly #boundCalls = new Set<string>();
   readonly #serverUrl: string;
   readonly #registerChild: (childId: string, callID: string) => void;
   readonly #onRelease: () => void;
@@ -1859,7 +1859,7 @@ export class OpencodeSession implements HarnessSession {
         type: "file",
         mime: image.mediaType,
         filename: "image",
-        url: "data:" + image.mediaType + ";base64," + image.data,
+        url: `data:${image.mediaType};base64,${image.data}`,
       });
     }
     for (const attachment of extras.attachments ?? []) {
@@ -2284,10 +2284,10 @@ export class OpencodeHarness implements Harness {
   // an earlier instance's entry with a later one's on every such resume.
   // Event routing, which only has opencode's own id off the wire, falls back
   // to {@link OpencodeHarness.#sessionForSid}.
-  #sessions = new Map<string, OpencodeSession>();
-  #children = new Map<string, { parent: OpencodeSession; callID: string }>();
+  readonly #sessions = new Map<string, OpencodeSession>();
+  readonly #children = new Map<string, { parent: OpencodeSession; callID: string }>();
   #disposed = false;
-  #pumpDirs = new Set<string>();
+  readonly #pumpDirs = new Set<string>();
 
   async detect(): Promise<HarnessReport> {
     const installed = resolveBin("opencode") !== undefined;

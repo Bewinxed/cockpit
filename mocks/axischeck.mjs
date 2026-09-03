@@ -251,7 +251,7 @@ for (const axis of AXES) {
             if (srOnly(el, cs)) {
               continue;
             }
-            const name = (el.tagName + "." + String(el.className || "")).slice(
+            const name = (`${el.tagName}.${String(el.className || "")}`).slice(
               0,
               34
             );
@@ -304,7 +304,7 @@ for (const axis of AXES) {
             const off = Math.max(0, Math.round(r.right - vw));
             if (el.scrollWidth - el.clientWidth > 1 || off > 0) {
               out.unread.push(
-                `${(el.tagName + "." + String(el.className || "")).slice(0, 26)} ` +
+                `${(`${el.tagName}.${String(el.className || "")}`).slice(0, 26)} ` +
                   `${el.scrollWidth}/${el.clientWidth} off ${off}`
               );
             }

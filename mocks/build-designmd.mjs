@@ -56,7 +56,7 @@ const CENSUS = {
     const g = (f) => {
       const all = [
         ...kb.matchAll(
-          new RegExp(f + "\\s+@\\d+ \\w+\\s+(\\d+) tab stops", "g")
+          new RegExp(`${f}\\s+@\\d+ \\w+\\s+(\\d+) tab stops`, "g")
         ),
       ].map((m) => Number(m[1]));
       return all.length ? `${Math.min(...all)}–${Math.max(...all)}` : "?";

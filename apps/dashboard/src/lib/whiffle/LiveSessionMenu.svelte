@@ -43,7 +43,7 @@
   const scratch = $derived(instance.kind === "scratch");
   const pinned = $derived(rail.isPinned("session", instance.id));
 
-  let busy = $state(false);
+  let _busy = $state(false);
 
   async function askDiscard() {
     const ok = await confirm({
@@ -55,11 +55,11 @@
     if (!ok) {
       return;
     }
-    busy = true;
+    _busy = true;
     try {
       await discardSession(instance.id, instance.machineId);
     } finally {
-      busy = false;
+      _busy = false;
     }
   }
 </script>

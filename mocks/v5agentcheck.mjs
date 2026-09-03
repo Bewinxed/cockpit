@@ -50,7 +50,7 @@ const ok = (cond, msg) => {
   checks++;
   if (!cond) {
     fails++;
-    console.log("  FAIL  " + msg);
+    console.log(`  FAIL  ${msg}`);
   }
 };
 
@@ -245,7 +245,7 @@ for (const st of [
   "st-error",
   "st-success",
 ]) {
-  const n = (raw.match(new RegExp('class="[^"]*' + st + '[^"]*"', "g")) || [])
+  const n = (raw.match(new RegExp(`class="[^"]*${st}[^"]*"`, "g")) || [])
     .length;
   ok(
     n >= 6,
@@ -296,7 +296,7 @@ async function open({ width = 1440, height = 2400, coarse = false } = {}) {
     isMobile: coarse,
   });
   const page = await ctx.newPage();
-  await page.goto("file://" + join(HERE, "v5-agent.html"), {
+  await page.goto(`file://${join(HERE, "v5-agent.html")}`, {
     waitUntil: "load",
   });
   await page.evaluate(() => document.fonts.ready);
@@ -310,7 +310,7 @@ async function open({ width = 1440, height = 2400, coarse = false } = {}) {
   await p.evaluate(SAMPLER);
   const grant = await p.evaluate(() => window.__rect(".choice button.grant"));
   const refuse = await p.evaluate(() => window.__rect(".choice button.refuse"));
-  const widen = await p.evaluate(() => window.__rect(".widen button"));
+  const _widen = await p.evaluate(() => window.__rect(".widen button"));
   const widenTop = await p.evaluate(() => {
     const r = document.querySelector(".widen").getBoundingClientRect();
     return Math.round(r.top);
@@ -352,7 +352,7 @@ async function open({ width = 1440, height = 2400, coarse = false } = {}) {
       ctx.clearRect(0, 0, 1, 1);
       try {
         ctx.fillStyle = v;
-      } catch (e) {
+      } catch (_e) {
         return null;
       }
       ctx.fillRect(0, 0, 1, 1);
@@ -400,7 +400,7 @@ async function open({ width = 1440, height = 2400, coarse = false } = {}) {
       "cubic-bezier(0.7, 0, 0.84, 0)",
       "cubic-bezier(0.65, 0, 0.35, 1)",
     ];
-    const allowedProps = /^(opacity|transform)$/;
+    const _allowedProps = /^(opacity|transform)$/;
     const banned =
       /width|height|padding|margin|top|left|border-radius|grid-template|box-shadow/i;
     const out = {
@@ -534,7 +534,7 @@ async function open({ width = 1440, height = 2400, coarse = false } = {}) {
     p.evaluate((s) => {
       const e = document.querySelector(s);
       if (!e) {
-        return "NULL:" + s;
+        return `NULL:${s}`;
       }
       const r = e.getBoundingClientRect();
       return [
@@ -559,7 +559,7 @@ async function open({ width = 1440, height = 2400, coarse = false } = {}) {
     await p.waitForTimeout(30);
     const now = await grab();
     for (const k of ["home", "input", "stop"]) {
-      const key = k + "@" + st;
+      const key = `${k}@${st}`;
       deltas[key] = now[k] === base[k] ? 0 : `${base[k]} -> ${now[k]}`;
     }
   }

@@ -190,7 +190,7 @@ for (let i = 0; i < 10; i++) {
   });
 
   // Push one message and wait for rendering
-  const pushResult = await evaluate(`new Promise(resolve => {
+  const _pushResult = await evaluate(`new Promise(resolve => {
     const d = window.__whiffleDebug;
     const s = d?.state?.sessions?.['${chosen.id}'];
     if (!s) { resolve({ error: 'no session' }); return; }

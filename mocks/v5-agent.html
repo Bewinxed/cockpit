@@ -2896,7 +2896,7 @@
         };
         function set(state) {
           body.setAttribute("data-ux", state);
-          pill.className = "pill fs-pill " + spec[state].pill;
+          pill.className = `pill fs-pill ${spec[state].pill}`;
           label.textContent = spec[state].word;
           stop.disabled = state === "idle" || state === "error";
           /* the awaiting-approval answer row is disabled while the hub is erroring —

@@ -31,7 +31,7 @@ export type CarouselProps = {
 
 const EMBLA_CAROUSEL_CONTEXT = Symbol("EMBLA_CAROUSEL_CONTEXT");
 
-export type EmblaContext = {
+export interface EmblaContext {
   api: CarouselAPI | undefined;
   orientation: "horizontal" | "vertical";
   scrollNext: () => void;
@@ -45,7 +45,7 @@ export type EmblaContext = {
   scrollTo: (index: number, jump?: boolean) => void;
   scrollSnaps: number[];
   selectedIndex: number;
-};
+}
 
 export function setEmblaContext(config: EmblaContext): EmblaContext {
   setContext(EMBLA_CAROUSEL_CONTEXT, config);
