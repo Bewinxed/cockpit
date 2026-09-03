@@ -117,6 +117,15 @@ export const OPENCODE_SERVER_PROC_ID = "opencode-server";
 export const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
 
 /**
+ * How long a turn may go with no server event at all before the wait itself
+ * is framed as a `provider_stalled` system note. Our choice: the hangs seen
+ * live ran 6+ silent minutes, while first tokens on huge contexts can
+ * legitimately take one or two — 3 minutes sits between "slow" and "stuck".
+ * Fires at most once per turn; any server event re-arms it.
+ */
+export const STALLED_TURN_MS = 3 * 60_000;
+
+/**
  * The port announcement, parsed agent-side. sessiond parses nothing — it hands
  * back the child's stdout lines opaque, and the meaning is decided here.
  *
@@ -1048,6 +1057,8 @@ export class OpencodeSession implements HarnessSession {
   /** The last provider-retry note surfaced, so a repeating retry says it once. */
   #lastRetryNote = "";
   #turnOpen = false;
+  /** Armed while a turn is open without any server event; see STALLED_TURN_MS. */
+  #stallTimer: ReturnType<typeof setTimeout> | undefined;
   readonly #queue: {
     parts: unknown[];
     model?: { providerID?: string; modelID?: string };
@@ -1099,6 +1110,9 @@ export class OpencodeSession implements HarnessSession {
     if (sid !== undefined && sid !== this.sessionId) {
       return;
     }
+    // Any event off the wire is a sign of life: a turn that keeps emitting
+    // can never trip the stall notice, only a truly silent one does.
+    this.#noteServerActivity();
 
     // `message.part.delta` is a real event the SDK's generated union omits, so
     // switch on the string form rather than the nominal `Event` union.
@@ -1827,6 +1841,37 @@ export class OpencodeSession implements HarnessSession {
       }
     }
     this.#turnOpen = false;
+    this.#clearStallTimer();
+  }
+
+  /** Any server event is progress: re-arm the stall notice while a turn is open. */
+  #noteServerActivity(): void {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: #turnOpen is reassigned across methods; biome's field-declaration inference doesn't see it
+    if (!this.#turnOpen) {
+      return;
+    }
+    this.#clearStallTimer();
+    this.#stallTimer = setTimeout(() => {
+      this.#stallTimer = undefined;
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: #turnOpen is reassigned across methods; biome's field-declaration inference doesn't see it
+      if (!this.#turnOpen) {
+        return;
+      }
+      this.#ctx.frame({
+        type: "system",
+        subtype: "provider_stalled",
+        session_id: this.sessionId ?? undefined,
+        content:
+          "Still waiting on the provider with no output — the turn is open and may yet complete. If this persists, interrupt and retry.",
+      });
+    }, STALLED_TURN_MS);
+  }
+
+  #clearStallTimer(): void {
+    if (this.#stallTimer !== undefined) {
+      clearTimeout(this.#stallTimer);
+      this.#stallTimer = undefined;
+    }
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: routes a send between urgent-abort, hand-back-queue, and command/prompt branches; not refactored in this pass
@@ -1930,6 +1975,7 @@ export class OpencodeSession implements HarnessSession {
     model?: { providerID?: string; modelID?: string }
   ): void {
     this.#turnOpen = true;
+    this.#noteServerActivity();
     // biome-ignore lint/complexity/noVoid: fire-and-forget: #prompt itself is not awaited by its callers
     void this.#client.session
       .promptAsync({
@@ -1951,6 +1997,18 @@ export class OpencodeSession implements HarnessSession {
         if (res.error) {
           this.#ctx.failed(new Error(errorText(res.error)));
         }
+      })
+      .catch((error: unknown) => {
+        // A rejected prompt never opens a turn server-side, so no pump event
+        // will ever settle it: fail loudly and leave busy clear here, or the
+        // session strands busy with every later message queuing behind nothing.
+        this.#turnOpen = false;
+        this.#clearStallTimer();
+        this.#busy = false;
+        this.#ctx.busy(false);
+        this.#ctx.failed(
+          error instanceof Error ? error : new Error(String(error))
+        );
       });
   }
 
@@ -2289,6 +2347,8 @@ export class OpencodeSession implements HarnessSession {
 
   async stop(): Promise<void> {
     this.#onRelease();
+    this.#turnOpen = false;
+    this.#clearStallTimer();
     await this.#client.session
       .abort({
         // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses

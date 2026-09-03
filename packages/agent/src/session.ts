@@ -402,6 +402,20 @@ export class SessionSupervisor {
       .then(() => this.#route(envelope))
       .catch((error: unknown) => {
         warn(`${envelope.verb} failed: ${error}`);
+        // A route failure otherwise reads as delivered silence: spawn answers
+        // through #fail and control through its own timeout, but a send or a
+        // stop has no ack — without this the reader waits on work that died.
+        if (
+          envelope.instanceId &&
+          (envelope.verb === "send" || envelope.verb === "stop")
+        ) {
+          this.sink({
+            kind: "error",
+            instanceId: envelope.instanceId,
+            verb: envelope.verb,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
       });
     this.#queues.set(key, queue);
     // biome-ignore lint/complexity/noVoid: fire-and-forget cleanup; dispatch() itself is synchronous and does not wait on the queue draining
