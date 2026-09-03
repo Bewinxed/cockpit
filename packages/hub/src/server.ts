@@ -459,7 +459,9 @@ export const resolveCanDelegate = (
  * The session a spawn came FROM — `spawnedBy` when the payload carries it,
  * `parent` otherwise. An `instanceId` names the row outright; a `sessionKey`
  * is the harness's own session id (all the opencode plugin knows about
- * itself), resolved here to the live row on `machineId` carrying it. Live —
+ * itself), resolved here to the live row carrying it — scoped to `machineId`
+ * when one is known, fleet-wide (newest first) when it is not, so an HTTP
+ * relay caller that omits its machine still resolves. Live —
  * `running`/`starting` — because `openInstance` keeps one live row per session
  * key, so that filter is what makes the answer unique; a row that lost the
  * race is the newest of the rest. Undefined when nothing names a requester.
@@ -467,7 +469,7 @@ export const resolveCanDelegate = (
  */
 export const resolveRequester = (
   rows: InstanceRow[],
-  machineId: string,
+  machineId: string | undefined,
   payload: unknown
 ): string | undefined => {
   const spawnedBy =
@@ -482,11 +484,11 @@ export const resolveRequester = (
     return spawnedBy.instanceId;
   }
   if (typeof spawnedBy?.sessionKey === "string") {
-    const live = rows
-      .filter(
-        (row) =>
-          row.sessionId === spawnedBy.sessionKey && row.machineId === machineId
-      )
+    const byKey = rows.filter((row) => row.sessionId === spawnedBy.sessionKey);
+    const scoped = machineId
+      ? byKey.filter((row) => row.machineId === machineId)
+      : byKey;
+    const live = scoped
       .filter((row) => row.status === "running" || row.status === "starting")
       .sort(
         (a, b) =>
@@ -498,6 +500,62 @@ export const resolveRequester = (
     }
   }
   return peekParent(payload).parentInstanceId;
+};
+
+/**
+ * The machine an HTTP relay call belongs on, without trusting the caller to
+ * say so. The relay body comes over plain HTTP from a plugin that may not
+ * know its own machine (no env to read it from); the hub's own instance
+ * table does. Order: an explicit `machineId` still wins (older plugins send
+ * one), then the spawn's parent row, then whoever asked (`spawnedBy`), then —
+ * for a send — the target session's own row. Undefined when nothing on the
+ * body names a session the hub knows. Pure, so it is exercised directly.
+ */
+export const resolveRelayMachine = (
+  rows: InstanceRow[],
+  body: unknown,
+  explicit?: string
+): string | undefined => {
+  if (explicit) {
+    return explicit;
+  }
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const parent = peekParent(body).parentInstanceId;
+  const parentRow = parent ? byId.get(parent) : undefined;
+  if (parentRow) {
+    return parentRow.machineId;
+  }
+  const requester = resolveRequester(rows, undefined, body);
+  const requesterRow = requester ? byId.get(requester) : undefined;
+  if (requesterRow) {
+    return requesterRow.machineId;
+  }
+  const target = peek(body, "instanceId");
+  const targetRow = target ? byId.get(target) : undefined;
+  return targetRow?.machineId;
+};
+
+/**
+ * Urgency is only honoured toward the caller's own delegate; anything else
+ * downgrades to a normal queued send. Mutates the relay body in place.
+ */
+const downgradeNonDelegateUrgent = (
+  rows: InstanceRow[],
+  body: unknown,
+  instanceId: string
+): void => {
+  if ((body as { urgent?: unknown }).urgent !== true) {
+    return;
+  }
+  const from = peek(body, "from");
+  const row = rows.find((r) => r.id === instanceId);
+  if (!(from && row) || row.parentInstanceId !== from) {
+    console.warn(
+      `[hub] downgraded urgent send to ${instanceId}: not its delegate`
+    );
+    // biome-ignore lint/performance/noDelete: an undefined assignment would leave the key present, and the check above reads `.urgent === true` — a present-but-undefined value must still read as not urgent, but the field must not ride along into what gets relayed.
+    delete (body as Record<string, unknown>).urgent;
+  }
 };
 
 /** What a leaf delegate hears when it tries to spawn — relayed verbatim to the model. */
@@ -4032,10 +4090,27 @@ export const createServer = ({
       // dashboard's own. Fire-and-forget — the tool has nothing to wait on.
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates and relays every field of a spawn request in one place; splitting it would scatter the validation order this route depends on.
       .post("/api/relay/spawn", { body: t.Any() }, ({ body, status }) => {
-        const machineId = peek(body, "machineId");
-        const instanceId = peek(body, "instanceId");
-        if (!(machineId && instanceId)) {
-          return status(400, "name a machine and an instance");
+        // `machineId` is optional: older plugins send one, current ones omit
+        // it and the hub resolves the parent/requester row's own machine
+        // instead — the table is fresher than the caller's environment.
+        // `instanceId` is minted here when absent so a caller never has to
+        // invent one; a supplied id still wins.
+        let instanceId = peek(body, "instanceId");
+        if (!instanceId) {
+          instanceId = crypto.randomUUID();
+          (body as Record<string, unknown>).instanceId = instanceId;
+        }
+        const rows = db.listInstances();
+        const machineId = resolveRelayMachine(
+          rows,
+          body,
+          peek(body, "machineId")
+        );
+        if (!machineId) {
+          return status(
+            400,
+            "could not determine the target machine: send no machineId only when the spawn names a known parent or spawnedBy session"
+          );
         }
 
         // A delegate type, for callers outside the WebSocket tunnel (the
@@ -4101,8 +4176,8 @@ export const createServer = ({
         // a delegate that does not say whether its child may is spawning a leaf:
         // the hub applies the default, so a plugin predating the field still
         // produces leaves.
-        const requester = resolveRequester(db.listInstances(), machineId, body);
-        if (requester && !resolveCanDelegate(db.listInstances(), requester)) {
+        const requester = resolveRequester(rows, machineId, body);
+        if (requester && !resolveCanDelegate(rows, requester)) {
           return status(403, LEAF_DELEGATE_REFUSAL);
         }
         // The plugin names its `parent` from its own roster guess (`meOf`); the
@@ -4147,10 +4222,14 @@ export const createServer = ({
           instanceId,
           payload: body,
         } satisfies Envelope);
+        // A delegate that names no cwd works where its parent does.
+        const parentRow = parent.parentInstanceId
+          ? rows.find((row) => row.id === parent.parentInstanceId)
+          : undefined;
         db.openInstance({
           id: instanceId,
           machineId,
-          cwd: peek(body, "cwd") ?? "",
+          cwd: peek(body, "cwd") ?? parentRow?.cwd ?? "",
           sessionId: peekResume(body),
           harness: peekHarness(body),
           projectId: peek(body, "projectId"),
@@ -4167,28 +4246,30 @@ export const createServer = ({
           awaitingFirstTurn.add(instanceId);
         }
         publishInstances(machineId);
-        return { ok: true };
+        return { ok: true, instanceId, machineId };
       })
       .post("/api/relay/send", { body: t.Any() }, ({ body, status }) => {
-        const machineId = peek(body, "machineId");
+        // `machineId` is optional here too: the target session's own row names
+        // the machine it lives on. An explicit value still wins, so older
+        // plugins keep working unchanged.
         const instanceId = peek(body, "instanceId");
-        if (!(machineId && instanceId)) {
-          return status(400, "name a machine and an instance");
+        if (!instanceId) {
+          return status(
+            400,
+            "relay send needs the target session's instanceId"
+          );
+        }
+        const rows = db.listInstances();
+        const machineId = resolveRelayMachine(
+          rows,
+          body,
+          peek(body, "machineId")
+        );
+        if (!machineId) {
+          return status(404, `unknown session ${instanceId}: no such instance`);
         }
 
-        // Urgency is only honoured toward the caller's own delegate; anything else
-        // downgrades to a normal queued send.
-        if ((body as { urgent?: unknown }).urgent === true) {
-          const from = peek(body, "from");
-          const row = db.listInstances().find((r) => r.id === instanceId);
-          if (!(from && row) || row.parentInstanceId !== from) {
-            console.warn(
-              `[hub] downgraded urgent send to ${instanceId}: not its delegate`
-            );
-            // biome-ignore lint/performance/noDelete: an undefined assignment would leave the key present, and the check above reads `.urgent === true` — a present-but-undefined value must still read as not urgent, but the field must not ride along into what gets relayed.
-            delete (body as Record<string, unknown>).urgent;
-          }
-        }
+        downgradeNonDelegateUrgent(rows, body, instanceId);
 
         const agent = registry.agent(machineId);
         if (!agent) {

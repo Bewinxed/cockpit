@@ -256,7 +256,9 @@ const buildHandoffPluginSource = (
 
 const ws = process.env.WHIFFLE_HUB_URL ?? "ws://localhost:3456/ws";
 const HUB = ws.replace(/^ws/, "http").replace(/\\/ws$/, "");
-const MACHINE = process.env.WHIFFLE_MACHINE_ID ?? "";
+// No MACHINE here by design: the hub resolves the target machine from the
+// session the call names (parent/spawnedBy/target instance row), so the
+// plugin never has to know its own machine id and no env has to carry it.
 
 const leaf = (p) => p.split("/").filter(Boolean).pop() ?? p;
 const short = (id) => id.slice(0, 8);
@@ -427,7 +429,6 @@ export const WhiffleHandoff = async () => {
               throw error;
             }
             await relay("send", {
-              machineId: peer.row.machineId,
               instanceId: peer.row.id,
               message: {
                 type: "user",
@@ -443,7 +444,6 @@ export const WhiffleHandoff = async () => {
           }
           const peer = resolve(peers, target);
           await relay("send", {
-            machineId: peer.row.machineId,
             instanceId: peer.row.id,
             message: {
               type: "user",
@@ -474,18 +474,17 @@ export const WhiffleHandoff = async () => {
           if (me && me.row.canDelegate === false) throw new Error("This session is a leaf delegate — it was spawned with can_delegate=false and may not delegate or start sessions. Do the work yourself, or handoff to your parent session.");
           const id = crypto.randomUUID();
           await relay("spawn", {
-            machineId: MACHINE,
             instanceId: id,
             cwd,
             harness: "opencode",
             ...(model ? { model } : {}),
             ...(sideQuest ? { scratch: { baseCwd: cwd } } : {}),
             // Who asked, by opencode's own session id: the hub resolves it to
-            // the live row itself (see /api/relay/spawn), fresher than meOf.
+            // the live row itself (see /api/relay/spawn), fresher than meOf —
+            // and the target machine with it, so no machineId is sent.
             spawnedBy: { sessionKey: context.sessionID },
           });
           await relay("send", {
-            machineId: MACHINE,
             instanceId: id,
             message: {
               type: "user",
@@ -553,7 +552,6 @@ export const WhiffleHandoff = async () => {
           }
 
           await relay("spawn", {
-            machineId: MACHINE,
             instanceId: id,
             cwd: workdir,
             // Resolution stays hub-side (see /api/relay/spawn): this plugin
@@ -573,7 +571,6 @@ export const WhiffleHandoff = async () => {
             ...(can_delegate === undefined ? {} : { canDelegate: can_delegate }),
           });
           await relay("send", {
-            machineId: MACHINE,
             instanceId: id,
             message: {
               type: "user",
