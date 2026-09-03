@@ -1056,17 +1056,6 @@
   }
 }
 
-/* Card -> header morphs share one soft curve. */
-/* biome-ignore lint/correctness/noUnknownPseudoElement: view-transition-old with a wildcard view-transition-name argument; Biome's CSS parser doesn't support this View Transitions syntax (pre-existing parse error, see brief) */
-/* biome-ignore lint/correctness/noUnknownTypeSelector: same wildcard view-transition-name argument, not an HTML type selector; pre-existing parse error, see brief */
-::view-transition-old(instance-*),
-/* biome-ignore lint/correctness/noUnknownPseudoElement: view-transition-new with a wildcard view-transition-name argument; Biome's CSS parser doesn't support this View Transitions syntax (pre-existing parse error, see brief) */
-/* biome-ignore lint/correctness/noUnknownTypeSelector: same wildcard view-transition-name argument, not an HTML type selector; pre-existing parse error, see brief */
-::view-transition-new(instance-*) {
-  animation-duration: 180ms;
-  animation-timing-function: var(--e-toggle);
-}
-
 /* ---- Coarse pointer (touch) relaxation ---------------------------------
    The comps are desktop-only. Compact density is a fine-pointer affordance;
    under pointer:coarse or narrow viewports, interactive rows grow to the
