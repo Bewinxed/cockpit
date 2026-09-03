@@ -1355,6 +1355,10 @@ export class OpencodeSession implements HarnessSession {
             errors: [errorText(error)],
           });
         }
+        // The turn is over either way: whatever queued behind it runs now,
+        // same as the idle path. Without this an abort parks queued messages
+        // forever — busy is clear but nobody drains.
+        this.#drainQueue();
         break;
       }
       default:
