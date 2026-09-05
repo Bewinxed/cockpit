@@ -206,12 +206,18 @@
       cwd: project.cwd,
       projectId: project.id,
       permissionMode: perm,
+      harness: spawnPrefs.harness,
       model: mod,
       effort: level ?? undefined,
       prompt,
       scratch: scratch ? {} : undefined,
     });
-    rememberSpawn({ model: mod, permissionMode: perm, effort: level });
+    rememberSpawn({
+      harness: spawnPrefs.harness,
+      model: mod,
+      permissionMode: perm,
+      effort: level,
+    });
     spawnPrompt = "";
     spawnOpen = false;
     // biome-ignore lint/complexity/noVoid: fire-and-forget navigation after the spawn already succeeded

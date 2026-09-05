@@ -519,7 +519,7 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       sdk.message.content.forEach((block, index) => {
         const message = blockToMessage(block, {
           ...base,
-          id: `${base.id}:${index}`,
+          id: `${base.id}:${(sdk.contentOffset ?? 0) + index}`,
         });
         if (message) {
           mapping.messages.push(message);

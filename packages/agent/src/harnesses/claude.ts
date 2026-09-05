@@ -696,7 +696,8 @@ class ClaudeSession implements HarnessSession {
      * optional in practice — `spawn()` always supplies it, and there is no
      * in-process fallback (PLAN.md C7: full cutover, rollback is a revert).
      */
-    sessiond?: { client: SessiondClient; procId: string }
+    sessiond?: { client: SessiondClient; procId: string },
+    delegateTypesError?: string
   ) {
     this.instanceId = instanceId;
     this.#ctx = ctx;
@@ -742,6 +743,7 @@ class ClaudeSession implements HarnessSession {
               cwd: workdir,
               emit: (envelope) => ctx.emit(envelope),
               delegateTypes,
+              delegateTypesError,
               canDelegate,
             },
             // Keyed under BOTH the handler's text and the serialized payload:
@@ -1704,8 +1706,13 @@ export class ClaudeHarness implements Harness {
     // exists — see `fetchDelegateTypes`'s own comment for why this is a plain
     // per-spawn HTTP read rather than a fleet-sync field.
     // A leaf never builds the tool that needs the list, so skip the HTTP read.
+    let delegateTypesError: string | undefined;
     const delegateTypes =
-      spec.canDelegate === false ? [] : await fetchDelegateTypes();
+      spec.canDelegate === false
+        ? []
+        : await fetchDelegateTypes((message) => {
+            delegateTypesError = message;
+          });
     // The child is spawned under sessiond, unconditionally — no flag, no
     // in-process fallback (PLAN.md C7). `procId` is the instance id: stable
     // across agent restarts, which is what lets the returning agent match a
@@ -1725,7 +1732,8 @@ export class ClaudeHarness implements Harness {
       spec.denyTools,
       delegateTypes,
       spec.canDelegate,
-      { client, procId: ctx.instanceId }
+      { client, procId: ctx.instanceId },
+      delegateTypesError
     );
   }
 

@@ -7,9 +7,10 @@
  * can run. Kept in localStorage across visits.
  */
 
-import type { InstanceRow, ModelInfo } from "@whiffle/core";
+import type { HarnessKind, InstanceRow, ModelInfo } from "@whiffle/core";
 import { untrack } from "svelte";
 import { isCustodyRefusal, loadModels, whiffle } from "./client.svelte";
+import { type HarnessModel, modelsForHarness } from "./model-catalog";
 import { readJson, writeJson } from "./storage";
 
 /**
@@ -17,7 +18,7 @@ import { readJson, writeJson } from "./storage";
  * Nothing else may write the literal.
  */
 export const MODEL_STORAGE_PREFIX = "whiffle-models";
-const OFFERED_KEY = MODEL_STORAGE_PREFIX;
+const OFFERED_KEY = `${MODEL_STORAGE_PREFIX}:by-harness`;
 const RECENT_KEY = `${MODEL_STORAGE_PREFIX}:recent`;
 
 /** How many typed-in model ids are remembered — a shortlist, not a history. */
@@ -31,7 +32,7 @@ const isKnownModel = (id: string): boolean =>
 export const MODEL_DEFAULT = "";
 
 const store = $state({
-  offered: [] as ModelInfo[],
+  offered: [] as HarnessModel[],
   recent: [] as string[],
   loading: false,
   /** Why the last read failed, for the picker to say instead of showing nothing. */
@@ -42,7 +43,7 @@ const store = $state({
 // getter — a read that writes is a render that mutates. Nothing to read on the
 // server, where the picker is a trigger and no more.
 if (typeof localStorage !== "undefined") {
-  store.offered = readJson<ModelInfo[]>(OFFERED_KEY, []);
+  store.offered = readJson<HarnessModel[]>(OFFERED_KEY, []);
   store.recent = readJson<string[]>(RECENT_KEY, []);
 
   // A past session may have remembered an id that no offered model covers — a
@@ -85,13 +86,16 @@ const hasLiveSession = () => whiffle.runningInstances.length > 0;
  */
 const asked = new Set<string>();
 
-async function ask(): Promise<void> {
+async function ask(harness?: string): Promise<void> {
   if (liveByHarness().length === 0) {
     throw new Error(
       "A session has to be running to ask what models it offers."
     );
   }
-  const rows = liveByHarness().filter((row) => !asked.has(row.id));
+  const rows = liveByHarness().filter(
+    (row) =>
+      (!harness || (row.harness ?? "claude") === harness) && !asked.has(row.id)
+  );
   if (rows.length === 0) {
     return;
   }
@@ -105,32 +109,34 @@ async function ask(): Promise<void> {
     const lists = await Promise.all(
       rows.map((row) =>
         loadModels(row.id, row.machineId).catch(
-          (error: unknown): ModelInfo[] => {
+          (error: unknown): ModelInfo[] | undefined => {
             if (!isCustodyRefusal(error)) {
               refused ??= error;
             }
-            return [];
+            return undefined;
           }
         )
       )
     );
-    // Merge and deduplicate by value — first occurrence wins (preserves order).
-    const seen = new Set<string>();
-    const merged: ModelInfo[] = [];
-    for (const list of lists) {
-      for (const model of list) {
-        if (seen.has(model.value)) {
-          continue;
-        }
-        seen.add(model.value);
-        merged.push(model);
-      }
-    }
+    const merged = lists.flatMap((list, index) =>
+      (list ?? []).map((model) => ({
+        ...model,
+        harness: (rows[index].harness ?? "claude") as HarnessKind,
+      }))
+    );
     if (merged.length === 0 && refused !== undefined) {
       throw refused;
     }
-    store.offered = merged;
-    writeJson(OFFERED_KEY, merged);
+    const refreshed = new Set(
+      rows
+        .filter((_, index) => lists[index] !== undefined)
+        .map((row) => row.harness ?? "claude")
+    );
+    store.offered = [
+      ...store.offered.filter((row) => !refreshed.has(row.harness)),
+      ...merged,
+    ];
+    writeJson(OFFERED_KEY, store.offered);
   } finally {
     store.loading = false;
   }
@@ -138,8 +144,10 @@ async function ask(): Promise<void> {
 
 export const models = {
   get offered(): ModelInfo[] {
-    return store.offered;
+    return modelsForHarness(store.offered);
   },
+  forHarness: (harness?: string): ModelInfo[] =>
+    modelsForHarness(store.offered, harness),
   /** Typed-in ids the offered list does not cover, newest first. */
   get recent(): string[] {
     return store.recent.filter(
@@ -156,6 +164,10 @@ export const models = {
   get askable(): boolean {
     return hasLiveSession();
   },
+  askableFor: (harness?: string): boolean =>
+    liveByHarness().some(
+      (row) => !harness || (row.harness ?? "claude") === harness
+    ),
 };
 
 /**
@@ -165,23 +177,26 @@ export const models = {
  * the reads are untracked so a caller's effect depends only on what it reads
  * itself, not on the store this changes.
  */
-export function ensureModels(): void {
+export function ensureModels(harness?: string): void {
   untrack(() => {
-    if (store.offered.length > 0 || !hasLiveSession()) {
+    if (
+      modelsForHarness(store.offered, harness).length > 0 ||
+      !hasLiveSession()
+    ) {
       return;
     }
     // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — ensureModels itself is synchronous, and the catch below already reports a refusal via store.error
-    void ask().catch((error: unknown) => {
+    void ask(harness).catch((error: unknown) => {
       store.error = error instanceof Error ? error.message : String(error);
     });
   });
 }
 
 /** Asks again and replaces what was cached — the picker's "Refresh models". */
-export async function refreshModels(): Promise<void> {
+export async function refreshModels(harness?: string): Promise<void> {
   asked.clear();
   try {
-    await ask();
+    await ask(harness);
   } catch (error) {
     store.error = error instanceof Error ? error.message : String(error);
     throw error;
@@ -197,11 +212,14 @@ export const covers = (row: ModelInfo, model: string): boolean =>
   row.value === model || row.resolvedModel === model;
 
 /** What to call a model in a trigger: the offered name, or the id as typed. */
-export function modelLabel(model: string): string {
+export function modelLabel(model: string, harness?: string): string {
   if (!model) {
     return "Default";
   }
-  return models.offered.find((row) => covers(row, model))?.displayName ?? model;
+  return (
+    models.forHarness(harness).find((row) => covers(row, model))?.displayName ??
+    model
+  );
 }
 
 /**

@@ -1,9 +1,8 @@
 <script lang="ts">
   /**
    * Which model answers — for a session that is running, and for one that is
-   * still a form. `supportedModels()` only reports what Claude Code offers
-   * today, so the list is a suggestion rather than the set: anything typed goes
-   * through verbatim, which is the only way a legacy id is reachable at all.
+   * still a form. Lists retain the harness that reported them; custom ids go
+   * through verbatim for models the catalog has not learned yet.
    */
   import { tick } from "svelte";
   import ProviderLogo from "$lib/components/features/ProviderLogo.svelte";
@@ -25,6 +24,7 @@
 
   let {
     value,
+    harness,
     onchoose,
     showDefault = false,
     size = "sm",
@@ -32,6 +32,7 @@
   }: {
     /** The model in force, as the id it is known by. `''` is the SDK's own choice. */
     value: string;
+    harness?: string;
     /** Chosen. Rejections belong to the caller — it owns the slot they show in. */
     onchoose: (model: string) => void | Promise<void>;
     /** Whether "Default" is offered — it is, wherever no model at all is a choice. */
@@ -52,11 +53,15 @@
   const unreported = $derived(!(value || showDefault));
 
   const trimmed = $derived(typed.trim());
+  const offered = $derived(models.forHarness(harness));
+  const askable = $derived(models.askableFor(harness));
+  // Legacy recent ids have no harness provenance; keep them out of scoped pickers.
+  const recent = $derived(harness ? [] : models.recent);
   /** A typed id nothing on the list already covers — the whole point of the field. */
   const custom = $derived(
     trimmed.length > 0 &&
-      !models.offered.some((row) => covers(row, trimmed)) &&
-      !models.recent.includes(trimmed)
+      !offered.some((row) => covers(row, trimmed)) &&
+      !recent.includes(trimmed)
   );
 
   /** Why the list is thin, when it is — said under it rather than as a fake row. */
@@ -67,7 +72,7 @@
     if (models.loading) {
       return "Asking a running session what it offers…";
     }
-    if (models.offered.length === 0) {
+    if (offered.length === 0) {
       return "No list yet — refresh it through a running session, or type an id.";
     }
     return null;
@@ -75,7 +80,7 @@
 
   function opened(next: boolean) {
     if (next) {
-      ensureModels();
+      ensureModels(harness);
     } else {
       typed = "";
     }
@@ -92,7 +97,7 @@
   /** Already running it — an init names the wire id, its row is keyed by the alias. */
   const isCurrent = (model: string) =>
     model === value ||
-    models.offered.some((row) => row.value === model && covers(row, value));
+    offered.some((row) => row.value === model && covers(row, value));
 
   async function choose(model: string, remember = false) {
     closeAndFocusTrigger();
@@ -124,7 +129,7 @@
   // ate every send from a plain-http origin — that one sat on a user action.
   const refresh = () =>
     // biome-ignore lint/complexity/noVoid: the refresh is fire-and-forget by intent — see the comment above
-    void refreshModels().catch(() => {
+    void refreshModels(harness).catch(() => {
       // Log-only boundary: the popover already shows the last-known list.
     });
 </script>
@@ -141,10 +146,12 @@
         {size}
         title={unreported
           ? "Read from this session's next turn — it has not said which model answers"
-          : value || 'The model Claude Code picks for itself'}
+           : value || 'The model the harness picks for itself'}
         variant="outline"
       >
-        <span class="truncate">{unreported ? '—' : modelLabel(value)}</span>
+        <span class="truncate"
+          >{unreported ? '—' : modelLabel(value, harness)}</span
+        >
         <!-- 14px: the inline-with-text icon size the session bar settled on,
              so this unfold mark matches the one on the disclosure trigger. -->
         <IconUnfold class="size-3.5 shrink-0 opacity-50" />
@@ -160,13 +167,13 @@
       />
       <Command.List>
         {#if custom}
-          <Command.Group heading="Custom">
+          <Command.Group forceMount heading="Custom">
             <Command.Item forceMount onSelect={selectCustom} value={trimmed}>
               <ProviderLogo model={trimmed} />
               <span class="flex flex-col">
                 <span>Use <span class="font-mono">{trimmed}</span></span>
                 <span class="text-xs text-muted-foreground">
-                  Sent to Claude Code exactly as typed
+                  Sent to the selected harness exactly as typed
                 </span>
               </span>
             </Command.Item>
@@ -177,9 +184,9 @@
           <Command.Empty>No model here goes by that.</Command.Empty>
         {/if}
 
-        {#if models.recent.length > 0}
+        {#if recent.length > 0}
           <Command.Group heading="Recently used">
-            {#each models.recent as id (id)}
+            {#each recent as id (id)}
               <Command.Item
                 data-checked={id === value}
                 onSelect={() => selectRecent(id)}
@@ -204,12 +211,12 @@
               <span class="flex flex-col">
                 <span>Default</span>
                 <span class="text-xs text-muted-foreground">
-                  Whatever Claude Code would have picked
+                  Whatever the selected harness would have picked
                 </span>
               </span>
             </Command.Item>
           {/if}
-          {#each models.offered as row (row.value)}
+          {#each offered as row (row.value)}
             <Command.Item
               data-checked={covers(row, value)}
               keywords={[row.displayName]}
@@ -231,11 +238,11 @@
         <Command.Separator />
         <Command.Group>
           <Command.Item
-            disabled={!models.askable || models.loading}
+            disabled={!askable || models.loading}
             forceMount
             onSelect={refresh}
-            title={models.askable
-              ? 'Ask a running session what Claude Code offers today'
+            title={askable
+              ? 'Ask a running session of this harness what models it offers'
               : 'A session has to be running to ask what models it offers.'}
             value="refresh-models"
           >

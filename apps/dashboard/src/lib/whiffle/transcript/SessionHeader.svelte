@@ -140,8 +140,9 @@
    */
   type Slot = "model" | "permission" | "effort";
   const SLOTS: Slot[] = ["model", "permission", "effort"];
-  const per = <T>(value: T): Record<Slot, T> =>
-    Object.fromEntries(SLOTS.map((slot) => [slot, value])) as Record<Slot, T>;
+  function per<T>(value: T): Record<Slot, T> {
+    return { model: value, permission: value, effort: value };
+  }
 
   /** The round trip that beat the eye is no round trip at all — say nothing under it. */
   const SETTLE = 150;
@@ -391,6 +392,7 @@
     <span class="ctl-label" id="sh-model-label">Model</span>
     <ModelCombobox
       class="w-full text-foreground"
+      {harness}
       onchoose={(next) => apply('model', onmodel, next)}
       size="sm"
       value={model ?? ''}

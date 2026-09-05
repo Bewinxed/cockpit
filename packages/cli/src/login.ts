@@ -1,4 +1,4 @@
-import { readConfig, writeConfig } from "./config";
+import { readConfig, writeConfig } from "@whiffle/agent";
 
 /**
  * `claude setup-token` is a full-screen TUI, not a line-oriented command: with

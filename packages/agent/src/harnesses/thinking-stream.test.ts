@@ -157,6 +157,43 @@ const shape = (frame: StreamFrame): string => {
 const trace = (frames: NeutralMessage[]): string[] =>
   streamed(frames).map(shape);
 
+test.each([false, true])(
+  "prose settles before tools, including child=%s, without final replay",
+  (child) => {
+    const { session, frames } = build();
+    const handle = (next: Event) =>
+      child ? session.handleChild(next, "parent-call") : session.handle(next);
+    handle(busy());
+    handle(assistantMessage("msg_1"));
+    handle(textDelta("msg_1", "text_1", "I will check."));
+    handle(toolPart("msg_1", "tool_1", "call_1"));
+    const settled = frames.filter((frame) => frame.type === "assistant");
+    expect(settled[0]?.message.content).toEqual([
+      { type: "text", text: "I will check." },
+    ]);
+    expect(settled[1].message.content[0].type).toBe("tool_use");
+    if (child) {
+      expect(settled[0]?.parent_tool_use_id).toBe("parent-call");
+    }
+    handle(textPart("msg_1", "text_1", "I will check."));
+    handle(toolPart("msg_1", "tool_1", "call_1"));
+    handle(textDelta("msg_1", "text_2", "Here is the result."));
+    handle(idle());
+    const messages = frames.filter((frame) => frame.type === "assistant");
+    expect(
+      messages
+        .flatMap((frame) => frame.message.content)
+        .filter((block) => block.type === "text")
+    ).toEqual([
+      { type: "text", text: "I will check." },
+      { type: "text", text: "Here is the result." },
+    ]);
+    expect(messages[0]?.uuid).toBe("msg_1");
+    expect(messages[2]?.uuid).toBe("msg_1");
+    expect(messages[2]?.contentOffset).toBe(1);
+  }
+);
+
 test("the first reasoning update opens a thinking block and streams what it says", () => {
   const { session, frames } = build();
   session.handle(assistantMessage("msg_1"));

@@ -2,7 +2,7 @@ import { chmod } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-/** Everything the CLI remembers between runs: where the hub was, last time. */
+/** Machine configuration shared by the CLI and daemon. */
 export interface CliConfig {
   /**
    * A `claude setup-token` token, for a machine whose daemon cannot reach the
@@ -25,13 +25,22 @@ export const CONFIG_PATH = join(
 const CONFIG_MODE = 0o600;
 
 /** Undefined for a first run, and for a file someone has since broken. */
-export const readConfig = async (): Promise<CliConfig | undefined> => {
-  const file = Bun.file(CONFIG_PATH);
+export const readConfig = async (
+  path = CONFIG_PATH
+): Promise<CliConfig | undefined> => {
+  const file = Bun.file(path);
   if (!(await file.exists())) {
     return undefined;
   }
   const config = await file.json().catch(() => undefined);
-  return typeof config?.hubUrl === "string" ? (config as CliConfig) : undefined;
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    return undefined;
+  }
+  return {
+    ...config,
+    hubUrl: typeof config.hubUrl === "string" ? config.hubUrl : "",
+    updatedAt: typeof config.updatedAt === "string" ? config.updatedAt : "",
+  };
 };
 
 /**
@@ -39,13 +48,16 @@ export const readConfig = async (): Promise<CliConfig | undefined> => {
  * and signing in must not forget the hub. The mode is set after the write
  * because it has to be re-applied to a file that already existed.
  */
-export const writeConfig = async (patch: Partial<CliConfig>): Promise<void> => {
+export const writeConfig = async (
+  patch: Partial<CliConfig>,
+  path = CONFIG_PATH
+): Promise<void> => {
   const config: CliConfig = {
     hubUrl: "",
-    ...(await readConfig()),
+    ...(await readConfig(path)),
     ...patch,
     updatedAt: new Date().toISOString(),
   };
-  await Bun.write(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`);
-  await chmod(CONFIG_PATH, CONFIG_MODE);
+  await Bun.write(path, `${JSON.stringify(config, null, 2)}\n`);
+  await chmod(path, CONFIG_MODE);
 };

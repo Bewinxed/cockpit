@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import type { Envelope, SendPayload } from "@whiffle/core";
-import { WHIFFLE_ENV } from "@whiffle/core";
-import { handoffTools } from "./handoff";
+import { DEFAULT_DELEGATE_TYPES, WHIFFLE_ENV } from "@whiffle/core";
+import { handoffInstructions, handoffTools } from "./handoff";
+import { fetchDelegateTypes } from "./harnesses/handoff-shared";
 
 /**
  * A stand-in hub, so the tools are exercised against a real fetch of a real
@@ -22,9 +23,16 @@ const rows = [
 ];
 
 let hub: ReturnType<typeof Bun.serve>;
+let catalogResponse = () => Response.json({ types: DEFAULT_DELEGATE_TYPES });
 
 beforeAll(() => {
-  hub = Bun.serve({ port: 0, fetch: () => Response.json(rows) });
+  hub = Bun.serve({
+    port: 0,
+    fetch: (request) =>
+      new URL(request.url).pathname === "/api/delegate-types"
+        ? catalogResponse()
+        : Response.json(rows),
+  });
   process.env[WHIFFLE_ENV.hubUrl] = `ws://localhost:${hub.port}/ws`;
 });
 
@@ -212,4 +220,121 @@ test("a user message goes up as a frames envelope with no target and no ask", as
     text: "the build passed",
   });
   expect(text).toContain("Sent to the user");
+});
+
+test("startup instructions expose routing and catalog before tool discovery", () => {
+  const deps = {
+    instanceId: "self",
+    cwd: "/tmp",
+    emit: () => {
+      throw new Error("Must not spawn");
+    },
+    delegateTypes: DEFAULT_DELEGATE_TYPES,
+  };
+  const instructions = handoffInstructions(deps);
+  expect(instructions).toContain(
+    'ToolSearch(query="select:mcp__whiffle__delegate")'
+  );
+  expect(instructions).toContain("native Agent and Task tools are disabled");
+  expect(instructions).toContain("Before repository exploration");
+  for (const type of DEFAULT_DELEGATE_TYPES) {
+    expect(instructions).toContain(`'${type.name}'`);
+    expect(instructions).toContain(type.description);
+    expect(instructions).toContain(
+      `model: ${type.model}; effort: ${type.effort}`
+    );
+  }
+  const leaf = { ...deps, canDelegate: false };
+  expect(handoffInstructions(leaf)).toContain("Do the assigned work yourself");
+  expect(handoffInstructions(leaf)).not.toContain("ToolSearch");
+  expect(handoffTools(leaf).some((tool) => tool.name === "delegate")).toBe(
+    false
+  );
+});
+
+test("catalog errors reach startup instructions and failed delegation; valid empty is distinct", async () => {
+  const deps = {
+    instanceId: "self",
+    cwd: "/tmp",
+    emit: () => {
+      throw new Error("Must not spawn");
+    },
+  };
+  try {
+    for (const response of [
+      () => new Response("unavailable", { status: 503 }),
+      () => Response.json({ unexpected: [] }),
+      () => Response.json({ types: [{ name: "broken" }] }),
+    ]) {
+      catalogResponse = response;
+      let failure: string | undefined;
+      // biome-ignore lint/performance/noAwaitInLoops: each case changes the shared fake hub response
+      const types = await fetchDelegateTypes((message) => {
+        failure = message;
+      });
+      expect(types).toEqual([]);
+      expect(failure).toContain("Could not load delegate types:");
+      const instructions = handoffInstructions({
+        ...deps,
+        delegateTypes: types,
+        delegateTypesError: failure,
+      });
+      if (!failure) {
+        throw new Error("Expected a catalog failure");
+      }
+      expect(instructions).toContain(failure);
+      expect(instructions).toContain("unavailable, not empty");
+      const delegate = handoffTools({ ...deps, delegateTypes: types }).find(
+        (tool) => tool.name === "delegate"
+      );
+      if (!delegate) {
+        throw new Error("Expected delegate tool");
+      }
+      await expect(
+        (delegate.handler as unknown as Handler)(
+          { prompt: "Read files", type: "explore" },
+          {}
+        )
+      ).rejects.toThrow("Could not load delegate types:");
+    }
+    catalogResponse = () => Response.json({ types: [] });
+    const errors: string[] = [];
+    expect(await fetchDelegateTypes((message) => errors.push(message))).toEqual(
+      []
+    );
+    expect(errors).toEqual([]);
+    expect(handoffInstructions({ ...deps, delegateTypes: [] })).toContain(
+      "No delegate types are configured"
+    );
+    catalogResponse = () => Response.json({ types: DEFAULT_DELEGATE_TYPES });
+    expect(await fetchDelegateTypes()).toEqual(DEFAULT_DELEGATE_TYPES);
+  } finally {
+    catalogResponse = () => Response.json({ types: DEFAULT_DELEGATE_TYPES });
+  }
+});
+
+test("an initially unavailable catalog recovers a named route without model overrides", async () => {
+  const sent: Envelope[] = [];
+  const delegate = handoffTools({
+    instanceId: "self",
+    cwd: "/tmp",
+    delegateTypes: [],
+    delegateTypesError: "Could not load delegate types: HTTP 503",
+    emit: (envelope) => sent.push(envelope),
+  }).find((tool) => tool.name === "delegate");
+  if (!delegate) {
+    throw new Error("Expected delegate tool");
+  }
+  await (delegate.handler as unknown as Handler)(
+    { prompt: "Inspect the parser", type: "explore" },
+    {}
+  );
+  expect(sent.map((envelope) => envelope.verb)).toEqual(["spawn", "send"]);
+  expect(sent[0].payload).toMatchObject({
+    harness: "claude",
+    model: "sonnet",
+    effort: "low",
+    canDelegate: false,
+    denyTools: ["Write", "Edit", "NotebookEdit"],
+  });
 });

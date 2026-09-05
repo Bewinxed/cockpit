@@ -18,6 +18,7 @@ import type {
   SpawnPayload,
 } from "@whiffle/core";
 import {
+  delegateTypeProblem,
   QUESTION_DISMISSED,
   WHIFFLE_ENV,
   WHIFFLE_HUB_PORT,
@@ -40,24 +41,35 @@ const hubHttpUrl = (): string => {
  * and skills) — a daemon fetches this directly from the hub it already knows
  * the address of, right before it builds the `delegate` tool's description,
  * and the caller freezes what comes back for the session's whole life.
- * A hub that is unreachable, or predates the table, answers with none —
- * `delegate` then falls back to its pre-type behaviour (raw model/harness).
+ * Failures are logged and passed to the caller for its startup instructions.
+ * A valid empty catalog remains distinct from a failed fetch.
  * The description needs this list before the first tool call can happen, so
  * the fetch stays here, at construction; `delegate()`'s own body retries it
  * once, lazily, if a `type` is named against a cache this call found empty —
  * that covers the blip case without paying a second fetch on every call.
  */
-export async function fetchDelegateTypes(): Promise<DelegateType[]> {
+export async function fetchDelegateTypes(
+  onError?: (message: string) => void
+): Promise<DelegateType[]> {
   try {
     const res = await fetch(`${hubHttpUrl()}/api/delegate-types`, {
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) {
-      return [];
+      throw new Error(`HTTP ${res.status}`);
     }
-    const body = (await res.json()) as { types?: DelegateType[] };
-    return body.types ?? [];
-  } catch {
+    const body = (await res.json()) as { types?: DelegateType[] } | null;
+    if (
+      !Array.isArray(body?.types) ||
+      body.types.some((type) => !type || delegateTypeProblem(type))
+    ) {
+      throw new Error("Invalid delegate catalog response");
+    }
+    return body.types;
+  } catch (error) {
+    const message = `Could not load delegate types: ${error instanceof Error ? error.message : String(error)}`;
+    console.warn(`[whiffle] ${message}`);
+    onError?.(message);
     return [];
   }
 }
@@ -269,11 +281,11 @@ export interface HandoffDeps {
   readonly cwd: string;
   /**
    * The fleet's delegate types, fetched once via {@link fetchDelegateTypes}
-   * before this session's tools were built. Empty on a hub that has none, or
-   * could not be reached — `delegate`'s `type` param then has nothing to
-   * resolve against and every call needs its own `harness`/`model`.
+   * before this session's tools were built. An empty catalog is retried when
+   * a delegate call names a type; delegateTypesError records a failed fetch.
    */
   readonly delegateTypes?: DelegateType[];
+  readonly delegateTypesError?: string;
   /** Puts an envelope on the daemon's hub socket. */
   readonly emit: (envelope: Envelope) => void;
   /** The session doing the handing over. */
@@ -536,7 +548,11 @@ export const handoffActions = ({
       // refusing. The frozen list still stands for every other call: this is a
       // one-shot recovery from the blip, not a standing re-fetch per call.
       const types =
-        delegateTypes.length === 0 ? await fetchDelegateTypes() : delegateTypes;
+        delegateTypes.length === 0
+          ? await fetchDelegateTypes((message) => {
+              throw new Error(message);
+            })
+          : delegateTypes;
       resolvedType = types.find((type) => type.name === opts.type);
       if (!resolvedType) {
         const known =

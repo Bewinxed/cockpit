@@ -354,6 +354,8 @@ export const isInjected = (origin?: NeutralOrigin): boolean =>
   origin?.kind === "peer" || origin?.kind === "system";
 
 export interface NeutralAssistantMessage {
+  /** Blocks already published for this message, preserving row ids across incremental settlement. */
+  contentOffset?: number;
   message: { model?: string; content: NeutralAssistantBlock[] };
   parent_tool_use_id?: string | null;
   /** The harness's own event, verbatim, for renderers that need more than this. */

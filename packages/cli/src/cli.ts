@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { CONFIG_PATH, readConfig } from "@whiffle/agent";
 import type { AgentRow, AuthState } from "@whiffle/core";
 import {
   readEnv,
@@ -6,7 +7,6 @@ import {
   WHIFFLE_HUB_PORT,
   WHIFFLE_MDNS_TYPE,
 } from "@whiffle/core";
-import { CONFIG_PATH, readConfig } from "./config";
 import { discoverHub, type Hub } from "./discover";
 import { clearToken, LoginError, login, saveToken } from "./login";
 import {

@@ -57,6 +57,7 @@
   import ModelCombobox from "./ModelCombobox.svelte";
   import { covers, MODEL_DEFAULT, modelLabel, models } from "./models.svelte";
   import { PERMISSION_MODES, permissionModeLabel } from "./permission-modes";
+  import { spawnDraft } from "./spawn-draft";
   import { rememberSpawn, spawnPrefs } from "./spawnPrefs.svelte";
 
   interface SpawnPanelProps {
@@ -165,7 +166,7 @@
 
   /** The offered row for the model in the field, which is what carries its scale. */
   const chosenModel = $derived(
-    models.offered.find((row) => covers(row, model)) ?? null
+    models.forHarness(harness).find((row) => covers(row, model)) ?? null
   );
   /**
    * The effort control is offered only when both halves are known to have one:
@@ -197,13 +198,21 @@
 
   /** A machine switched to may not run the harness the form still names. */
   let lastMachine = $state("");
+  function chooseHarness(next: HarnessKind) {
+    if (next === harness) {
+      return;
+    }
+    harness = next;
+    model = MODEL_DEFAULT;
+    effort = null;
+  }
   $effect(() => {
     if (machineId === lastMachine) {
       return;
     }
     lastMachine = machineId;
     if (!availableHarnesses.includes(harness)) {
-      harness = availableHarnesses[0] ?? "claude";
+      chooseHarness(availableHarnesses[0] ?? "claude");
     }
   });
 
@@ -514,7 +523,7 @@
       seededProject?.machineId ||
       whiffle.onlineMachines[0]?.machineId ||
       "";
-    harness = "claude";
+    ({ harness } = spawnPrefs);
     source = "directory";
     cwd = prefill?.cwd || seededProject?.cwd || "";
     repo = "";
@@ -533,6 +542,37 @@
     repoOpen = false;
     repos = [];
     repoNotice = null;
+    if (spawnDraft.current) {
+      ({
+        machineId,
+        harness,
+        source,
+        cwd,
+        repo,
+        prompt,
+        permissionMode,
+        model,
+        effort,
+        sideQuest,
+        worktree,
+        saveAsProject,
+        projectName,
+        projectId,
+        projectQuery,
+        editingPrefill,
+      } = spawnDraft.current);
+      if (
+        hasPrefill &&
+        JSON.stringify(prefill ?? {}) !== spawnDraft.current.prefillKey
+      ) {
+        machineId = prefill?.machineId || seededProject?.machineId || machineId;
+        cwd = prefill?.cwd || seededProject?.cwd || cwd;
+        projectId = seededProject?.id ?? null;
+        projectQuery = seededProject?.name ?? "";
+        source = "directory";
+        editingPrefill = false;
+      }
+    }
     inspectFolder();
   }
 
@@ -550,6 +590,30 @@
       }
     }
     wasOpen = isOpen;
+  });
+
+  $effect(() => {
+    if (open) {
+      spawnDraft.current = {
+        machineId,
+        harness,
+        source,
+        cwd,
+        repo,
+        prompt,
+        permissionMode,
+        model,
+        effort,
+        sideQuest,
+        worktree,
+        saveAsProject,
+        projectName,
+        projectId,
+        projectQuery,
+        editingPrefill,
+        prefillKey: JSON.stringify(prefill ?? {}),
+      };
+    }
   });
 
   function close() {
@@ -584,8 +648,6 @@
     invalid = null;
     submitting = true;
     try {
-      rememberSpawn({ model, permissionMode, effort });
-
       let toAttach = projectId ?? undefined;
       if (saveAsProject && !toAttach) {
         const project = await createProject({
@@ -611,6 +673,8 @@
             : undefined,
         projectId: toAttach,
       });
+      rememberSpawn({ harness, model, permissionMode, effort });
+      spawnDraft.current = null;
       onclose();
       await goto(`/session/${instanceId}`);
     } catch (err) {
@@ -955,7 +1019,7 @@
         >
         <Select.Root
           onValueChange={(value) => {
-            harness = value as HarnessKind;
+            chooseHarness(value as HarnessKind);
           }}
           type="single"
           value={harness}
@@ -981,6 +1045,7 @@
         <span class="text-micro text-muted-foreground">Model</span>
         <ModelCombobox
           class="w-full text-foreground"
+          {harness}
           onchoose={(chosen) => {
             model = chosen;
           }}
@@ -1035,7 +1100,7 @@
     {#if showEffort}
       <div transition:slide={{ duration: 160 }}>
         <EffortSlider
-          modelName={modelLabel(model)}
+          modelName={modelLabel(model, harness)}
           onchange={(level) => {
             effort = level;
           }}
@@ -1139,7 +1204,7 @@
     >
       <Sheet.Title class="text-title px-5 pt-5 pb-1">New session</Sheet.Title>
       <Sheet.Description class="sr-only"
-        >Start a Claude Code session on a machine</Sheet.Description
+        >Start an agent session on a machine</Sheet.Description
       >
       <div class="flex-1 overflow-y-auto px-5 pt-2 pb-6">
         {@render formBody()}

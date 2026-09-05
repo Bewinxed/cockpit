@@ -60,39 +60,17 @@ export interface VersionCheck {
  * machine must never fail to report its state because a version string was
  * shaped oddly.
  */
-const LEADING_V_RE = /^v/;
-const VERSION_SEPARATOR_RE = /[.\-+]/;
-const DIGITS_ONLY_RE = /^\d+$/;
-
 export const isNewer = (candidate: string, current: string): boolean => {
-  const parts = (value: string): number[] =>
-    value
-      .replace(LEADING_V_RE, "")
-      .split(VERSION_SEPARATOR_RE)
-      .map((piece) =>
-        DIGITS_ONLY_RE.test(piece) ? Number(piece) : Number.NaN
-      );
-  const a = parts(candidate);
-  const b = parts(current);
-  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
-    const left = a[i] ?? 0;
-    const right = b[i] ?? 0;
-    if (Number.isNaN(left) || Number.isNaN(right)) {
-      // A prerelease segment against a release: fewer segments is the release,
-      // and a release is newer than the prerelease that led to it.
-      if (Number.isNaN(left) && !Number.isNaN(right)) {
-        return false;
-      }
-      if (!Number.isNaN(left) && Number.isNaN(right)) {
-        return true;
-      }
-      continue;
-    }
-    if (left !== right) {
-      return left > right;
-    }
+  try {
+    Bun.semver.order(candidate, candidate);
+  } catch {
+    return false;
   }
-  return false;
+  try {
+    return Bun.semver.order(candidate, current) > 0;
+  } catch {
+    return true;
+  }
 };
 
 /** What the registry says the newest published version is. */

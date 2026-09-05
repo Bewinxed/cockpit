@@ -44,7 +44,7 @@ export type OnStructuredResult = (
  */
 const delegateTypeLine = (types: HandoffDeps["delegateTypes"]): string =>
   types?.length
-    ? ` Available types: ${types.map((type) => `'${type.name}' (${type.description}${type.canDelegate ? "; may delegate by default" : ""})`).join("; ")}.`
+    ? ` Available types: ${types.map((type) => `'${type.name}' (${type.description} Harness: ${type.harness}; model: ${type.model}; effort: ${type.effort ?? "harness default"}${type.skills?.length ? `; skills: ${type.skills.join(", ")}` : ""}${type.denyTools?.length ? `; denied tools: ${type.denyTools.join(", ")}` : ""}${type.canDelegate ? "; may delegate by default" : "; leaf by default"})`).join("; ")}.`
     : "";
 
 /** The tools themselves, separated from the server so they can be exercised directly. */
@@ -373,6 +373,25 @@ export function handoffTools(
     : all;
 }
 
+export function handoffInstructions(deps: HandoffDeps): string {
+  if (deps.canDelegate === false) {
+    return "This session is a leaf delegate. Do the assigned work yourself; delegate and start_session are unavailable. Use mcp__whiffle__handoff to reach your parent or a session that already owns related work.";
+  }
+  let catalog = deps.delegateTypes?.length
+    ? delegateTypeLine(deps.delegateTypes).trim()
+    : "No delegate types are configured. Report the missing route rather than guessing a model.";
+  if (deps.delegateTypesError) {
+    catalog = `${deps.delegateTypesError}. The catalog is unavailable, not empty. A delegate call naming a known type retries the fetch; if no type is known, report the catalog blocker rather than guessing a model.`;
+  }
+  return [
+    "Whiffle delegation policy: native Agent and Task tools are disabled. Use mcp__whiffle__delegate for subagents in this repository or another repository.",
+    'Before repository exploration, bulk file reads, search sweeps, or log triage, load the delegation tool with ToolSearch(query="select:mcp__whiffle__delegate") if deferred, then delegate a bounded read-only brief to the appropriate configured type. The parent may read task instructions and narrowly inspect evidence needed for decisions or acceptance; keep bulk discovery out of the parent context.',
+    "Prefer the configured type and omit model/harness overrides unless the user requested them. Give each delegate a concrete deliverable and bounded file ownership. Keep independent parent work moving; reports arrive automatically. Use mcp__whiffle__handoff to continue an existing delegate or work a session already owns. Use start_session only for a separate persistent session.",
+    "The catalog below is a session-start snapshot of configured routes, not confirmation of the model that will serve a request. If delegation fails or no suitable route is available, report the blocker; do not silently move bulk exploration onto the parent model.",
+    catalog,
+  ].join("\n\n");
+}
+
 export function handoffServer(
   deps: HandoffDeps,
   onStructured?: OnStructuredResult
@@ -380,17 +399,7 @@ export function handoffServer(
   return createSdkMcpServer({
     name: MCP_SERVER_NAME,
     version: "1.0.0",
-    instructions:
-      deps.canDelegate === false
-        ? "This session is a delegate spawned without permission to delegate further, so it has " +
-          "no delegate or start_session tools: do the work yourself rather than looking for a " +
-          "way to fan it out. handoff still reaches your parent session, or a session that " +
-          "already owns related work, and the user sees your transcript as it happens."
-        : "A repository may have several sessions; the listing shows where each works, not what it " +
-          "is doing. Hand work to an existing session only to continue work it already owns. For new " +
-          "standalone work in another repository, spawn a delegate with cwd set there instead. " +
-          "An idle handoff target wakes and works immediately; a busy one finishes its current " +
-          "turn, then reads everything queued in one wake turn.",
+    instructions: handoffInstructions(deps),
     tools: handoffTools(deps, onStructured),
   });
 }

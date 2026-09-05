@@ -12,6 +12,7 @@
   import { Textarea } from "$lib/components/ui/textarea";
   import { IconArrowRight, IconTrash } from "$lib/icons";
   import { confirm } from "$lib/whiffle/confirm.svelte";
+  import ModelCombobox from "$lib/whiffle/ModelCombobox.svelte";
   import type { DelegateType } from "$lib/whiffle/delegate-types";
   import {
     blankDelegateType,
@@ -239,21 +240,19 @@
           </NativeSelect>
         </label>
 
-        <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child; Biome can't see through the component boundary -->
-        <label class="flex flex-col gap-1.5 text-caption">
-          Model
-          <Input
-            aria-invalid={shown('model') && problem?.includes('model') ? 'true' : undefined}
-            autocomplete="off"
-            class="font-mono text-sm md:text-sm"
-            onblur={() => {
+        <div class="flex min-w-0 flex-col gap-1.5 text-caption">
+          <span>Model</span>
+          <ModelCombobox
+            class="w-full min-w-0 text-foreground"
+            harness={draft.harness}
+            onchoose={(model) => {
+              draft.model = model;
               touched.model = true;
             }}
-            placeholder="sonnet"
-            spellcheck="false"
-            bind:value={draft.model}
+            size="default"
+            value={draft.model}
           />
-        </label>
+        </div>
 
         <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <NativeSelect> component renders a native select as its only child; Biome can't see through the component boundary -->
         <label class="flex flex-col gap-1.5 text-caption">

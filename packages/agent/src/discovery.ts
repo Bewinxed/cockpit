@@ -1,7 +1,4 @@
 import { existsSync } from "node:fs";
-import { chmod } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import {
   readEnv,
   WHIFFLE_ENV,
@@ -9,6 +6,7 @@ import {
   WHIFFLE_MDNS_TYPE,
 } from "@whiffle/core";
 import { Bonjour, type Service } from "bonjour-service";
+import { readConfig, writeConfig } from "./config";
 
 /**
  * The network rungs of hub discovery, shared between `whiffle up`
@@ -174,50 +172,6 @@ export const tailscaleCandidates = async (
     }));
 };
 
-/**
- * Where the CLI keeps `hubUrl` — mirrors `CONFIG_PATH` in
- * `packages/cli/src/config.ts` exactly, so a re-pin written from here and a
- * `whiffle up` run on the same machine agree on one file. Duplicated rather
- * than imported for the same reason the rungs above are not re-exported from
- * cli: the dependency only runs cli → agent.
- */
-const CONFIG_PATH = join(
-  process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
-  "whiffle",
-  "config.json"
-);
-const CONFIG_MODE = 0o600;
-
-const readCachedHubUrl = async (): Promise<string | undefined> => {
-  const file = Bun.file(CONFIG_PATH);
-  if (!(await file.exists())) {
-    return undefined;
-  }
-  const config = await file.json().catch(() => undefined);
-  return typeof config?.hubUrl === "string" && config.hubUrl.length > 0
-    ? config.hubUrl
-    : undefined;
-};
-
-/**
- * Repins the winner the same way `discoverHub`'s `settle` does: merged over
- * whatever is already in the file, so a re-pin from the daemon never drops the
- * CLI's `claudeToken`.
- */
-const repinHubUrl = async (httpUrl: string): Promise<void> => {
-  const file = Bun.file(CONFIG_PATH);
-  const existing = (await file.exists())
-    ? await file.json().catch(() => undefined)
-    : undefined;
-  const config = {
-    ...existing,
-    hubUrl: httpUrl,
-    updatedAt: new Date().toISOString(),
-  };
-  await Bun.write(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`);
-  await chmod(CONFIG_PATH, CONFIG_MODE);
-};
-
 /** Everything {@link rediscoverHub} calls out to, injectable so a test never touches the real network or `CONFIG_PATH`. */
 export interface RediscoverProbes {
   readonly browseMdns?: () => Promise<string[]>;
@@ -261,11 +215,17 @@ export const rediscoverHub = async (
 
   const settle = async (httpUrl: string, rung: string): Promise<string> => {
     note(`[rediscover/${rung}] ${httpUrl} answered — repinning`);
-    await (probes.repin ?? repinHubUrl)(httpUrl);
+    if (probes.repin) {
+      await probes.repin(httpUrl);
+    } else {
+      await writeConfig({ hubUrl: httpUrl });
+    }
     return httpUrl;
   };
 
-  const cached = await (probes.readCachedHubUrl ?? readCachedHubUrl)();
+  const cached = probes.readCachedHubUrl
+    ? await probes.readCachedHubUrl()
+    : (await readConfig())?.hubUrl;
   if (cached) {
     note(`[rediscover/cached] ${cached}: probing`);
     if (await probe(cached)) {

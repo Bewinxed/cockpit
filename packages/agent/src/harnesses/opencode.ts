@@ -1018,6 +1018,8 @@ const parseCommand = (
 /** A message's final content, keyed by part id in arrival order, for its closing frame. */
 interface PendingMessage {
   parts: Map<string, { kind: "text" | "thinking"; text: string }>;
+  published?: Map<string, number>;
+  publishedBlocks?: number;
 }
 
 /**
@@ -1082,7 +1084,7 @@ export class OpencodeSession implements HarnessSession {
     model?: { providerID?: string; modelID?: string };
   }[] = [];
   #permissionMode: string | undefined;
-  #providersCache: Promise<{ providers?: Provider[] } | undefined> | undefined;
+  #providersCache: Promise<Pick<Provider, "id" | "models">[]> | undefined;
   #commandNames: Promise<Set<string>> | null = null;
   readonly #questions = new Set<string>();
   readonly #questionData = new Map<string, UserQuestion[]>();
@@ -1450,6 +1452,7 @@ export class OpencodeSession implements HarnessSession {
           !emitted &&
           (status === "running" || status === "completed" || status === "error")
         ) {
+          this.#flushMessages(this.#pending, this.#roles);
           this.#ctx.frame({
             type: "assistant",
             message: {
@@ -1595,6 +1598,7 @@ export class OpencodeSession implements HarnessSession {
         const props = event.properties as unknown as {
           field?: string;
           messageID?: string;
+          partID?: string;
           delta?: string;
         };
         if (props.field !== "text") {
@@ -1605,6 +1609,15 @@ export class OpencodeSession implements HarnessSession {
         }
         if (!props.delta) {
           break;
+        }
+        if (props.partID) {
+          const pending = this.#pendingChild(state, props.messageID ?? "");
+          const existing = pending.parts.get(props.partID);
+          pending.parts.set(props.partID, {
+            kind: "text",
+            text:
+              (existing?.kind === "text" ? existing.text : "") + props.delta,
+          });
         }
         this.#ctx.frame({
           type: "stream_event",
@@ -1673,9 +1686,13 @@ export class OpencodeSession implements HarnessSession {
             },
           });
         }
-        this.#pendingChild(state, part.messageID).parts.set(part.id, {
+        const pending = this.#pendingChild(state, part.messageID);
+        const existing = pending.parts.get(part.id);
+        const accumulated = existing?.kind === "text" ? existing.text : "";
+        pending.parts.set(part.id, {
           kind: "text",
-          text: part.text,
+          text:
+            accumulated.length >= part.text.length ? accumulated : part.text,
         });
         break;
       }
@@ -1695,6 +1712,7 @@ export class OpencodeSession implements HarnessSession {
           !emitted &&
           (status === "running" || status === "completed" || status === "error")
         ) {
+          this.#flushMessages(state.pending, state.roles, callID);
           this.#ctx.frame({
             type: "assistant",
             parent_tool_use_id: callID,
@@ -1743,17 +1761,35 @@ export class OpencodeSession implements HarnessSession {
   }
 
   #flushChild(state: ChildState, callID: string): void {
-    for (const [messageID, pending] of state.pending) {
-      if (state.roles.get(messageID) !== "assistant") {
+    this.#flushMessages(state.pending, state.roles, callID);
+    state.pending.clear();
+  }
+
+  /** Publish buffered prose before a tool frame clears the dashboard's live text. */
+  #flushMessages(
+    messages: Map<string, PendingMessage>,
+    roles: Map<string, "user" | "assistant">,
+    parentToolUseId?: string
+  ): void {
+    for (const [messageID, pending] of messages) {
+      if (roles.get(messageID) !== "assistant") {
         continue;
       }
+      pending.published ??= new Map();
+      const { published } = pending;
       const blocks: NeutralAssistantBlock[] = [];
-      for (const part of pending.parts.values()) {
-        if (part.kind === "text") {
-          blocks.push({ type: "text", text: part.text });
-        } else {
-          blocks.push({ type: "thinking", thinking: part.text });
+      for (const [partID, part] of pending.parts) {
+        const offset = published.get(partID) ?? 0;
+        const text = part.text.slice(offset);
+        if (!text) {
+          continue;
         }
+        if (part.kind === "text") {
+          blocks.push({ type: "text", text });
+        } else {
+          blocks.push({ type: "thinking", thinking: text });
+        }
+        published.set(partID, part.text.length);
       }
       if (blocks.length === 0) {
         continue;
@@ -1761,11 +1797,14 @@ export class OpencodeSession implements HarnessSession {
       this.#ctx.frame({
         type: "assistant",
         uuid: messageID,
-        parent_tool_use_id: callID,
+        ...(pending.publishedBlocks
+          ? { contentOffset: pending.publishedBlocks }
+          : {}),
+        ...(parentToolUseId ? { parent_tool_use_id: parentToolUseId } : {}),
         message: { content: blocks },
       });
+      pending.publishedBlocks = (pending.publishedBlocks ?? 0) + blocks.length;
     }
-    state.pending.clear();
   }
 
   /**
@@ -1780,27 +1819,7 @@ export class OpencodeSession implements HarnessSession {
   }): void {
     // The live trace ends before the settled blocks replace it.
     this.#closeThinking();
-    for (const [messageID, pending] of this.#pending) {
-      if (this.#roles.get(messageID) !== "assistant") {
-        continue;
-      }
-      const blocks: NeutralAssistantBlock[] = [];
-      for (const part of pending.parts.values()) {
-        if (part.kind === "text") {
-          blocks.push({ type: "text", text: part.text });
-        } else {
-          blocks.push({ type: "thinking", thinking: part.text });
-        }
-      }
-      if (blocks.length === 0) {
-        continue;
-      }
-      this.#ctx.frame({
-        type: "assistant",
-        uuid: messageID,
-        message: { content: blocks },
-      });
-    }
+    this.#flushMessages(this.#pending, this.#roles);
     const flushed = [...this.#pending.keys()];
     this.#pending.clear();
     // A ghost idle (e.g. the idle that trails an abort) has no open turn and must
@@ -2144,18 +2163,29 @@ export class OpencodeSession implements HarnessSession {
       });
   }
 
+  /** Providers the current OpenCode account can actually use, including OAuth. */
+  async #connectedProviders(): Promise<Pick<Provider, "id" | "models">[]> {
+    const result = await this.#client.provider.list({
+      query: { directory: this.#directory },
+    });
+    if (result.error) {
+      throw new Error(errorText(result.error));
+    }
+    const data = result.data as unknown as {
+      all?: Pick<Provider, "id" | "models">[];
+      connected?: string[];
+    };
+    const connected = new Set(data.connected ?? []);
+    return (data.all ?? []).filter((provider) => connected.has(provider.id));
+  }
+
   /** The current model's context window, from a lazily-cached provider list. */
   async #contextLimit(): Promise<number> {
     if (!this.#model) {
       return 200_000;
     }
-    this.#providersCache ??= this.#client.config
-      .providers({ query: { directory: this.#directory } })
-      .then((result) =>
-        result.error ? undefined : (result.data as { providers?: Provider[] })
-      );
-    const data = await this.#providersCache;
-    const providers = data?.providers ?? [];
+    this.#providersCache ??= this.#connectedProviders();
+    const providers = await this.#providersCache;
     const ref = splitModel(this.#model);
     for (const provider of providers) {
       if (ref.providerID && provider.id !== ref.providerID) {
@@ -2217,14 +2247,7 @@ export class OpencodeSession implements HarnessSession {
         };
       }
       case CONTROL_SUPPORTED_MODELS: {
-        const result = await this.#client.config.providers({
-          query: { directory: this.#directory },
-        });
-        if (result.error) {
-          return [];
-        }
-        const providers =
-          (result.data as { providers?: Provider[] }).providers ?? [];
+        const providers = await this.#connectedProviders();
         const models: ModelInfo[] = [];
         for (const provider of providers) {
           for (const [modelID, model] of Object.entries(

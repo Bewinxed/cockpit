@@ -1,11 +1,14 @@
 import {
   browseMdns,
+  CONFIG_PATH,
   firstToAnswer,
   MDNS_BROWSE_MS,
   probeHub,
+  readConfig,
   tailscaleCandidates,
   toHttpBase,
   toWsUrl,
+  writeConfig,
 } from "@whiffle/agent";
 import {
   readEnv,
@@ -13,7 +16,6 @@ import {
   WHIFFLE_HUB_PORT,
   WHIFFLE_MDNS_TYPE,
 } from "@whiffle/core";
-import { CONFIG_PATH, readConfig, writeConfig } from "./config";
 
 /** Which rung of the ladder answered. */
 export type HubSource =

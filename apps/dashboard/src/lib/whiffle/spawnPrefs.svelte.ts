@@ -1,5 +1,5 @@
 // biome-ignore lint/style/useFilenamingConvention: renaming would break the "./spawnPrefs.svelte" import path used by routes/project/[id]/+page.svelte, a file this batch does not own
-import type { EffortLevel, PermissionMode } from "@whiffle/core";
+import type { EffortLevel, HarnessKind, PermissionMode } from "@whiffle/core";
 import { MODEL_DEFAULT } from "./models.svelte";
 
 /**
@@ -18,11 +18,13 @@ interface SpawnPrefs {
    * before it has anything to assert it against.
    */
   effort: EffortLevel | null;
+  harness: HarnessKind;
   model: string;
   permissionMode: PermissionMode;
 }
 
 const FALLBACK: SpawnPrefs = {
+  harness: "claude",
   model: MODEL_DEFAULT,
   permissionMode: "default",
   effort: null,
@@ -38,14 +40,21 @@ const load = (): SpawnPrefs => {
       return FALLBACK;
     }
     const parsed = JSON.parse(stored) as Partial<SpawnPrefs>;
+    const harness = ["claude", "opencode", "pi"].includes(parsed.harness ?? "")
+      ? parsed.harness
+      : undefined;
     return {
-      model: typeof parsed.model === "string" ? parsed.model : FALLBACK.model,
+      harness: harness ?? FALLBACK.harness,
+      model:
+        harness && typeof parsed.model === "string"
+          ? parsed.model
+          : FALLBACK.model,
       permissionMode:
         typeof parsed.permissionMode === "string"
           ? (parsed.permissionMode as PermissionMode)
           : FALLBACK.permissionMode,
       effort:
-        typeof parsed.effort === "string"
+        harness && typeof parsed.effort === "string"
           ? (parsed.effort as EffortLevel)
           : FALLBACK.effort,
     };
@@ -57,6 +66,9 @@ const load = (): SpawnPrefs => {
 const store = $state<SpawnPrefs>(load());
 
 export const spawnPrefs = {
+  get harness(): HarnessKind {
+    return store.harness;
+  },
   get model(): string {
     return store.model;
   },
@@ -70,6 +82,7 @@ export const spawnPrefs = {
 
 /** Called when a spawn actually goes out, so a form the user abandoned teaches nothing. */
 export function rememberSpawn(prefs: SpawnPrefs): void {
+  store.harness = prefs.harness;
   store.model = prefs.model;
   store.permissionMode = prefs.permissionMode;
   store.effort = prefs.effort;

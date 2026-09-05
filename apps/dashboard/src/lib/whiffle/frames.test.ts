@@ -1182,3 +1182,19 @@ test("an equal `at` takes the incoming snapshot rather than discarding it", () =
   );
   expect(next.i1.activity).toBe("blocked");
 });
+test("incrementally settled assistant blocks keep distinct row ids and the real rewind anchor", () => {
+  const before = mapFrame("i1", {
+    type: "assistant",
+    uuid: "msg_1",
+    message: { content: [{ type: "text", text: "Before tool" }] },
+  });
+  const after = mapFrame("i1", {
+    type: "assistant",
+    uuid: "msg_1",
+    contentOffset: 1,
+    message: { content: [{ type: "text", text: "After tool" }] },
+  });
+  expect(before.messages[0].id).toBe("msg_1:0");
+  expect(after.messages[0].id).toBe("msg_1:1");
+  expect(after.messages[0].sdkUuid).toBe("msg_1");
+});
